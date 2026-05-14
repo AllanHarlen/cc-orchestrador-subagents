@@ -31,21 +31,56 @@ Inicia o **Orquestrador Multiagêntico de Desenvolvimento** para a demanda descr
 
 ## Comportamento
 
-Quando este comando for invocado:
+Quando este comando for invocado, siga **rigorosamente** esta ordem:
 
-1. **Carregue a skill `orchestrator-multi-agent-development`** via `Skill(skill="orchestrator-multi-agent-development")`. Ela contém o workflow operacional completo. **Não duplique a lógica aqui** — o SKILL.md é a fonte da verdade.
+### Passo 1 — Preflight (obrigatório, antes de tudo)
 
-2. **Antes de seguir**, valide rapidamente:
-   - se a demanda é trivial (typo, padding, rename), avise o usuário que o orquestrador é overkill e ofereça executar direto;
-   - se o repositório atual **não** tem `openspec/`, ofereça `/openspec-onboard` antes de continuar;
-   - se os plugins `openai-codex` e `cc-gemini-plugin` não estão disponíveis, avise e descreva o fallback (resolvido em `references/agent-stack.md`).
+Execute o script de verificação:
 
-3. **Conduza o workflow** seguindo `SKILL.md` + `references/*.md`. Use templates de `assets/*.md` para criar artefatos no `openspec/changes/<nome>/`.
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
+```
 
-4. **Reporte ao usuário** apenas updates curtos:
-   - "criando mudança OpenSpec <nome>";
-   - "lancei <N> subagentes em paralelo para a onda <N>, aviso quando completarem";
-   - no fim: caminho do `implementation-report.md` + resumo de 2-3 frases.
+Parse o JSON retornado:
+
+- **`status: "ok"`** → siga para o Passo 2.
+- **`status: "failed"`** → **CANCELE** imediatamente. Apresente ao usuário a lista de dependências ausentes lendo o campo `remediation`. Não tente fallback, não invoque subagentes, não crie mudança OpenSpec. Mensagem-padrão:
+
+  ```
+  Não posso iniciar o orquestrador. Faltam as seguintes dependências:
+
+  • <target>
+    <steps formatados em bullets>
+    Docs: <docs>
+
+  Instale/atualize as dependências acima e rode `/orchestrator` novamente.
+  ```
+
+Detalhes do preflight, remediação por dependência e troubleshooting em `references/preflight-check.md`.
+
+### Passo 2 — Carregar a skill
+
+`Skill(skill="orchestrator-multi-agent-development")`.
+
+Ela contém o workflow operacional completo (Fase 1 a 14). **Não duplique a lógica aqui** — o SKILL.md é a fonte da verdade.
+
+### Passo 3 — Validações leves antes da Fase 1
+
+- Se a demanda é trivial (typo, padding, rename) → avise que o orquestrador é overkill e ofereça executar direto.
+- Se o repositório atual **não** tem `openspec/` → ofereça `/openspec-onboard` antes de continuar.
+
+### Passo 4 — Conduzir o workflow
+
+Siga `SKILL.md` + `references/*.md`. Use templates de `assets/*.md` para criar artefatos no `openspec/changes/<nome>/`.
+
+### Passo 5 — Reportar updates
+
+Mantenha o usuário informado com mensagens curtas:
+
+- "preflight OK";
+- "criando mudança OpenSpec <nome>";
+- "lancei <N> subagentes em paralelo para a onda <N>, aviso quando completarem";
+- no fim: caminho do `implementation-report.md` + resumo de 2-3 frases.
 
 ## Quando o usuário invocar sem argumento
 

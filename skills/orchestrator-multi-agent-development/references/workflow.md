@@ -1,9 +1,10 @@
 # Workflow Detalhado por Fase
 
-Este arquivo expande as 14 fases do `SKILL.md`. Leia a fase específica quando precisar do detalhe operacional. Não precisa ler tudo de uma vez.
+Este arquivo expande as fases do `SKILL.md`. Leia a fase específica quando precisar do detalhe operacional. Não precisa ler tudo de uma vez.
 
 ## Índice
 
+- [Fase 0 — Preflight Check](#fase-0--preflight-check)
 - [Fase 1 — Entendimento da Demanda](#fase-1--entendimento-da-demanda)
 - [Fase 2 — Criação OpenSpec](#fase-2--criação-openspec)
 - [Fase 3 — Elaboração do Plano](#fase-3--elaboração-do-plano)
@@ -18,6 +19,35 @@ Este arquivo expande as 14 fases do `SKILL.md`. Leia a fase específica quando p
 - [Fase 12 — Review Pós-Implementação](#fase-12--review-pós-implementação)
 - [Fase 13 — Verificação OpenSpec](#fase-13--verificação-openspec)
 - [Fase 14 — Relatório Final](#fase-14--relatório-final)
+
+---
+
+## Fase 0 — Preflight Check
+
+**Obrigatória. Bloqueante. Roda antes de qualquer outra coisa.**
+
+Execute:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
+```
+
+Saída: JSON com `status: "ok"` ou `status: "failed"`. Em caso de falha, **cancele a operação** e apresente os passos de remediação do campo `remediation`.
+
+Dependências verificadas:
+
+| Dependência | Tipo | Comando manual |
+|---|---|---|
+| `gemini` CLI | binário | `gemini --version` |
+| `codex` CLI | binário | `codex --version` |
+| `openspec` CLI | binário | `openspec --version` |
+| Plugin `cc-gemini-plugin` | Claude Code plugin | `ls ~/.claude/plugins/cache/cc-gemini-plugin/` |
+| Plugin `openai-codex` | Claude Code plugin | `ls ~/.claude/plugins/cache/openai-codex/codex/` |
+| Skills `openspec-*` | filesystem | `ls ~/.claude/skills | grep openspec` |
+
+Quando o preflight retorna falha, **não tente fallback automático**. A política é: cancele com a mensagem padrão (formato em `references/preflight-check.md`) e oriente o usuário a instalar/atualizar/configurar o que falta antes de invocar novamente.
+
+> Detalhes completos de cada dependência, remediação e troubleshooting cross-platform: `references/preflight-check.md`.
 
 ---
 

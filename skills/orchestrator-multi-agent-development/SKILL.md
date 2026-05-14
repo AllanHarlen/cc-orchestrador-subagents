@@ -9,8 +9,9 @@ Você é o **Orquestrador Principal**. Seu papel é coordenar — não programar
 
 > Quando esta skill **não** deve ser usada: troca de texto, ajuste de padding, rename simples, typo, mudança de cor pontual. Nesses casos faça direto sem orquestração.
 
-## Modelo mental em 14 passos
+## Modelo mental em 15 passos
 
+0. **Preflight check** — validar CLIs e plugins; **se faltar algo, cancele**
 1. Entender a demanda
 2. Criar mudança OpenSpec
 3. Gerar plano com **Claude Sonnet 4.6 Effort High** (subagente `Plan`)
@@ -27,6 +28,47 @@ Você é o **Orquestrador Principal**. Seu papel é coordenar — não programar
 14. Gerar `implementation-report.md`
 
 > Detalhamento de cada fase: leia `references/workflow.md`.
+
+## Fase 0 — Preflight Check (OBRIGATÓRIA)
+
+**Antes** de qualquer outra coisa, valide o ambiente. Execute:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
+```
+
+O script retorna JSON e exit code:
+
+- **exit 0** + `status: "ok"` → siga para a Fase 1.
+- **exit 1** + `status: "failed"` → **cancele a operação** e informe o usuário.
+
+Quando faltar dependência, **não tente fallback**. A política é: cancele com mensagem clara. Use a seção `remediation` do JSON para montar a resposta:
+
+```
+Não posso iniciar o orquestrador. Faltam as seguintes dependências:
+
+• <target>
+  <steps>
+  Docs: <docs>
+
+• <outro target>
+  ...
+
+Instale/atualize o que falta e rode `/orchestrator` novamente.
+```
+
+Dependências validadas:
+
+| Dependência | Tipo | Por que importa |
+|---|---|---|
+| `gemini` CLI | binário no PATH | usado pelo `cc-gemini-plugin:gemini-agent` no front-end |
+| `codex` CLI | binário no PATH | usado pelo `codex:codex-rescue` no back-end e review |
+| `openspec` CLI | binário no PATH | comandos OpenSpec dependem dele |
+| `cc-gemini-plugin` | Claude Code plugin | expõe `/cc-gemini-plugin:gemini` e `gemini-agent` |
+| `openai-codex` | Claude Code plugin | expõe `/codex:review`, `/codex:rescue`, `codex:codex-rescue` |
+| `openspec-*` skills | ~/.claude/skills/openspec-* | comandos `/openspec-new-change`, etc. |
+
+> Detalhes completos de mensagens de erro, comandos de remediação e troubleshooting: `references/preflight-check.md`.
 
 ## Stack de agentes — decisão rápida
 
@@ -196,6 +238,7 @@ Antes de declarar "feito":
 
 | Arquivo | Quando ler |
 |---|---|
+| `references/preflight-check.md` | preflight falhou ou precisa entender comandos de remediação |
 | `references/workflow.md` | precisar do detalhe completo de qualquer fase |
 | `references/agent-stack.md` | decidir modelo (Gemini 3 vs Flash, Codex 5.4 vs 5.5) ou skills a carregar |
 | `references/subagent-prompts.md` | **sempre antes de delegar** — contém os prompts oficiais |
@@ -206,3 +249,4 @@ Antes de declarar "feito":
 | `assets/contract-template.md` | gerar contrato de cada task FULLSTACK |
 | `assets/monitoring-template.md` | quadro de status das ondas |
 | `assets/implementation-report-template.md` | relatório final obrigatório |
+| `scripts/preflight.mjs` | validar dependências (CLIs + plugins) na Fase 0 |

@@ -1,0 +1,35 @@
+{
+    "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+    "name": "cc-orchestrador-subagents",
+    "description": "Multi-agent development orchestrator for Claude Code. Coordinates OpenSpec, Claude planning, Codex review/back-end, and Gemini front-end subagents in parallel, with API/UI contracts and a final Markdown implementation report.",
+    "owner": {
+        "name": "allanharlen",
+        "email": "allanharlen@gmail.com"
+    },
+    "plugins": [
+        {
+            "name": "cc-orchestrador-subagents",
+            "description": "Orchestrator skill + /orchestrator slash command that drive an OpenSpec → Plan → Codex review → parallel Codex/Gemini execution → review → implementation report workflow. Runs a preflight check for gemini-cli, codex-cli, openspec-cli and required plugins before starting; cancels operation if anything is missing.",
+            "version": "0.1.0",
+            "author": {
+                "name": "allanharlen"
+            },
+            "source": "./",
+            "category": "orchestration",
+            "keywords": [
+                "orchestrator",
+                "multi-agent",
+                "subagents",
+                "openspec",
+                "codex",
+                "gemini",
+                "planning",
+                "parallel-execution",
+                "workflow",
+                "claude-code"
+            ],
+            "homepage": "https://github.com/AllanHarlen/cc-orchestrador-subagents",
+            "repository": "https://github.com/AllanHarlen/cc-orchestrador-subagents"
+        }
+    ]
+}
