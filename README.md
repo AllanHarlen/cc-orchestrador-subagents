@@ -2,6 +2,7 @@
 
 Plugin de Claude Code que disponibiliza a skill **`orchestrator-multi-agent-development`** e o comando **`/orchestrator`** para conduzir um fluxo de desenvolvimento multiagêntico ponta a ponta:
 
+0. **Preflight check** — valida CLIs (`gemini`, `codex`, `openspec`) e plugins Claude Code (`cc-gemini-plugin`, `openai-codex`); cancela a operação se algo faltar
 1. Entendimento da demanda
 2. Criação de mudança no **OpenSpec**
 3. Elaboração do plano com **Claude Sonnet 4.6 Effort High** (via subagente `Plan`)
@@ -16,18 +17,22 @@ Plugin de Claude Code que disponibiliza a skill **`orchestrator-multi-agent-deve
 10. Verificação OpenSpec (`/openspec-verify-change`, `/openspec-sync-specs`, `/openspec-archive-change`)
 11. Relatório final em Markdown (`implementation-report.md`)
 
-## Pré-requisitos
+## Pré-requisitos validados pelo preflight
 
-Este plugin assume que os seguintes plugins/skills também estão instalados no Claude Code:
+Quando o usuário invoca `/orchestrator`, o plugin roda `scripts/preflight.mjs` **antes de qualquer outra ação**. Se qualquer item abaixo estiver ausente ou indisponível, a operação é cancelada com mensagem clara e o usuário recebe os passos de remediação.
 
-| Dependência | Origem | Como obter |
+| Dependência | Tipo | Como obter |
 |---|---|---|
-| `openai-codex` | https://github.com/openai/codex-plugin-cc | Marketplace `openai-codex` |
-| `cc-gemini-plugin` | https://github.com/thepushkarp/cc-gemini-plugin | Marketplace `cc-gemini-plugin` |
-| Skills OpenSpec | Já presentes em ambientes com OpenSpec (`openspec-new-change`, `openspec-ff-change`, `openspec-verify-change`, `openspec-sync-specs`, `openspec-archive-change`) | Marketplace OpenSpec |
-| Skills `frontend-developer`, `ui-ux-designer`, `dotnet-architect`, `dotnet-backend-patterns`, `csharp-pro`, `postgresql` | Marketplace de skills | `npx skills add ...` |
+| `gemini` CLI | binário no PATH global | `npm install -g @google/gemini-cli` (+ `gemini auth`) |
+| `codex` CLI | binário no PATH global | `npm install -g @openai/codex` (+ `codex login`) |
+| `openspec` CLI | binário no PATH global | `npm install -g @fission-ai/openspec` (+ `openspec init`) |
+| Plugin `cc-gemini-plugin` | Claude Code plugin | `/plugin marketplace add thepushkarp/cc-gemini-plugin` → `/plugin install cc-gemini-plugin@cc-gemini-plugin` |
+| Plugin `openai-codex` (codex-plugin-cc) | Claude Code plugin | `/plugin marketplace add openai/codex-plugin-cc` → `/plugin install codex@openai-codex` |
+| Skills `openspec-*` (`new-change`, `ff-change`, `apply-change`, `verify-change`, `archive-change`, `sync-specs`) | em `~/.claude/skills/` | reinstaladas automaticamente quando `openspec` CLI roda |
 
-Sem essas dependências o orquestrador continua funcionando, mas algumas fases pedirão fallback (por exemplo, planejamento direto em vez de subagente).
+Detalhes completos em `skills/orchestrator-multi-agent-development/references/preflight-check.md`.
+
+> O preflight **não** tenta fallback. Faltou algo, cancela. A justificativa: a skill perde valor sem os agentes especializados — melhor parar e instalar do que rodar degradado.
 
 ## Quando usar
 
@@ -56,14 +61,18 @@ Forma implícita: descreva a tarefa que a skill irá auto-triggerar pela descri�
 ```
 cc-orchestrador-subagents/
 ├── .claude-plugin/
-│   └── plugin.json
+│   ├── plugin.json
+│   └── marketplace.json
 ├── README.md
+├── scripts/
+│   └── preflight.mjs
 ├── commands/
 │   └── orchestrator.md
 └── skills/
     └── orchestrator-multi-agent-development/
         ├── SKILL.md
         ├── references/
+        │   ├── preflight-check.md
         │   ├── workflow.md
         │   ├── agent-stack.md
         │   ├── subagent-prompts.md
@@ -80,11 +89,84 @@ cc-orchestrador-subagents/
 ## Princípios de design
 
 - **O orquestrador não programa direto.** Ele planeja, revisa, divide, delega, monitora e consolida.
+- **Preflight cancela ao invés de degradar.** Sem agentes especializados, a skill perde valor.
 - **Progressive disclosure.** `SKILL.md` é o guia operacional; detalhes pesados ficam em `references/`.
 - **Templates externos.** Tudo que é "copia e preenche" mora em `assets/` para evitar reescrever o mesmo Markdown em cada execução.
 - **Sem agentes desnecessários.** Task só back-end = 1 agente. Task só front-end = 1 agente. Task full-stack = dupla.
 - **Contrato antes do paralelismo.** Toda task full-stack passa por um contrato API/UI antes dos agentes saírem em paralelo, para evitar divergência de campos (ex.: `description` vs `descricao`).
 - **Relatório obrigatório.** Toda execução fecha com `implementation-report.md`.
+
+## Instalação local (antes de publicar)
+
+Enquanto o plugin não está publicado, você pode usá-lo apontando o Claude Code para o diretório local:
+
+```text
+/plugin marketplace add <caminho-absoluto-deste-repo>
+/plugin install cc-orchestrador-subagents@cc-orchestrador-subagents
+```
+
+Em ambientes Windows, use o caminho com barras invertidas escapadas ou aspas duplas.
+
+## Publicação na loja de plugins do Claude Code
+
+A loja do Claude Code funciona com **marketplaces** (diretórios indexados via `.claude-plugin/marketplace.json` em um repositório Git). Este repo já contém o `marketplace.json` necessário para ser instalado como marketplace de plugin único.
+
+### Passo 1 — Publicar o repositório no GitHub
+
+```bash
+git init
+git add .
+git commit -m "feat: initial release of cc-orchestrador-subagents v0.1.0"
+git branch -M main
+git remote add origin https://github.com/AllanHarlen/cc-orchestrador-subagents.git
+git push -u origin main
+```
+
+**Importante:** o repo precisa ser **público** para outros usuários instalarem.
+
+Antes de publicar, atualize `marketplace.json` e `plugin.json` para conter o usuário/email corretos. Os campos a revisar:
+
+- `.claude-plugin/plugin.json` → `author.name`
+- `.claude-plugin/marketplace.json` → `owner.name`, `owner.email`, `plugins[0].author.name`, `plugins[0].homepage`, `plugins[0].repository`
+
+### Passo 2 — Testar a instalação a partir do GitHub
+
+No Claude Code:
+
+```text
+/plugin marketplace add AllanHarlen/cc-orchestrador-subagents
+/plugin install cc-orchestrador-subagents@cc-orchestrador-subagents
+```
+
+Verifique:
+
+- `/orchestrator` aparece na lista de comandos;
+- A skill `orchestrator-multi-agent-development` aparece em `<system-reminder>` de skills disponíveis;
+- Rodar `/orchestrator` faz o preflight executar.
+
+### Passo 3 — Submeter ao marketplace oficial (opcional)
+
+A Anthropic mantém o marketplace oficial em [`anthropics/claude-plugins-official`](https://github.com/anthropics/claude-plugins-official). Para listar seu plugin lá:
+
+1. Faça fork do repo `anthropics/claude-plugins-official`.
+2. No fork, adicione uma entrada em `.claude-plugin/marketplace.json` apontando para o repo deste plugin via `source: "git-subdir"` ou `source: { source: "github", repo: "..." }`. Pegue exemplos do próprio `marketplace.json` oficial.
+3. Abra um Pull Request descrevendo:
+   - o que o plugin faz;
+   - quem é o autor;
+   - dependências necessárias (CLIs e plugins);
+   - status de manutenção.
+4. Aguarde revisão da Anthropic.
+
+Sem PR aprovado, o plugin continua instalável diretamente via `/plugin marketplace add <seu-usuario>/<repo>`, apenas não aparece no diretório oficial.
+
+### Passo 4 — Versionamento
+
+Quando lançar atualizações:
+
+1. Atualize `version` em `.claude-plugin/plugin.json` e em `.claude-plugin/marketplace.json` (`plugins[0].version`).
+2. Mantenha um `CHANGELOG.md` no repo.
+3. Crie uma tag git: `git tag v0.2.0 && git push origin v0.2.0`.
+4. Usuários atualizam via `/plugin update cc-orchestrador-subagents@cc-orchestrador-subagents`.
 
 ## Licença
 
