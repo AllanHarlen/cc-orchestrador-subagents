@@ -19,7 +19,7 @@ Inicia o **Orquestrador Multiagêntico de Desenvolvimento** para a demanda descr
 9. Delegação paralela em background:
    - Back-end → `codex:codex-rescue` (Codex gpt-5.4 Effort Medium)
    - Front-end → `cc-gemini-plugin:gemini-agent` (Gemini 3 ou Gemini 3 Flash)
-10. Monitoramento (notificações ao concluir, sem polling)
+10. Monitoramento (notificações ao concluir + check-in leve para tasks lentas)
 11. Integração e resolução de divergências
 12. Review pós-implementação (Codex gpt-5.5 high)
 13. Verificação OpenSpec (`/openspec-verify-change` → `/openspec-sync-specs` → `/openspec-archive-change`)

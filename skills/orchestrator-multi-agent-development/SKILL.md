@@ -177,7 +177,11 @@ Agent(cc-gemini-plugin:gemini-agent, task-C front-end, run_in_background=true)
 Prompts em `references/subagent-prompts.md`.
 
 ### Fase 10 — Monitoramento
-Mantenha o quadro de status em `openspec/changes/<nome>/monitoring.md` (cópia de `assets/monitoring-template.md`). Status válidos: PENDING / RUNNING / BLOCKED / NEEDS_SYNC / DONE / FAILED / REVIEWED. Atualize conforme as notificações de conclusão dos agentes chegam — **não faça polling**.
+Mantenha o quadro de status em `openspec/changes/<nome>/monitoring.md` (cópia de `assets/monitoring-template.md`). Status válidos: PENDING / RUNNING / BLOCKED / NEEDS_SYNC / DONE / FAILED / QUOTA_EXHAUSTED / REVIEWED.
+
+Atualize conforme as notificações de conclusão dos agentes chegam. **Não faça polling contínuo**, mas faça um check-in leve (`SLOW_CHECKIN`) quando uma task parecer estagnada: bloqueando a onda, sem atualização útil, ou muito fora do esperado para sua complexidade. O check-in deve pedir progresso real, arquivos tocados, bloqueios, riscos, ETA e se há falha de cota/tool/escrita.
+
+Se Gemini ou Codex reportarem cota/rate limit/capacidade (`quota exceeded`, `rate limit`, `billing`, `resource exhausted`, `model capacity`, `daily limit` ou similar), marque `QUOTA_EXHAUSTED`. Para Gemini, revise o estado parcial e prefira redelegar a continuação para `codex:codex-rescue`. Para Codex, tente outro Codex/modelo apenas se houver caminho viável; senão marque `BLOCKED` e peça decisão do usuário.
 
 ### Fase 11 — Integração
 Compare entregas com `tasks.md`. Valide o contrato. Resolva divergências (ex.: campo em PT vs EN) explicitando a decisão. Se precisar ajuste pontual, delegue de novo, não programe você mesmo.
@@ -207,8 +211,11 @@ Você **não** deve permitir que subagentes:
 - removam testes existentes sem justificativa;
 - ignorem erros de build;
 - façam refatorações amplas não solicitadas.
+- insistam em retries longos ou loops para contornar cota/rate limit/capacidade.
 
 Se algum subagente reportar uma dessas situações, **pause a onda** e converse com o usuário antes de continuar.
+
+Para o Gemini, seja mais restritivo: evite comandos de terminal, limite a execução aos arquivos/diretórios delegados e, em falhas de escrita/criação de arquivos ou tools instáveis, interrompa o uso do Gemini e faça handoff para o orquestrador/Codex revisar o estado parcial.
 
 ## Comunicação com o usuário
 

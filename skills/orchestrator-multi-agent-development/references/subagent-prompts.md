@@ -11,6 +11,15 @@ Cada prompt já contém:
 5. regras de escopo;
 6. formato de retorno (resumo + arquivos + decisões + testes + pendências + riscos).
 
+## Protocolo operacional comum
+
+Ao copiar qualquer prompt de execução para Codex ou Gemini, preserve estas regras:
+
+- se aparecer cota/rate limit/capacidade (`quota exceeded`, `rate limit`, `billing`, `resource exhausted`, `model capacity`, `daily limit` ou similar), pare e retorne `Status: QUOTA_EXHAUSTED`;
+- não tente contornar cota com loops, retries longos, mudança de modelo não solicitada ou ampliação de escopo;
+- se o orquestrador fizer um check-in `SLOW_CHECKIN`, responda com progresso concreto, arquivos tocados, bloqueios, riscos, ETA e falhas operacionais; não responda apenas "ainda trabalhando";
+- reporte arquivos parciais quando interromper a execução, para permitir handoff seguro.
+
 ---
 
 ## 1. Subagente de Planejamento (Plan → Claude Sonnet 4.6 High)
@@ -139,6 +148,8 @@ Regras de execução:
 - documente decisões técnicas relevantes;
 - reporte arquivos alterados de forma exaustiva;
 - reporte qualquer risco ou pendência detectados.
+- se encontrar cota/rate limit/capacidade, pare e retorne `Status: QUOTA_EXHAUSTED` com evidência curta e arquivos parciais;
+- se receber `SLOW_CHECKIN`, responda com progresso real, arquivos tocados, bloqueios, riscos, ETA e estado de cota/tools.
 
 Restrições de segurança:
 - não altere autenticação/autorização sem destacar no retorno;
@@ -147,12 +158,14 @@ Restrições de segurança:
 
 Ao finalizar, retorne em Markdown:
 
+0. **Status:** DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED
 1. **Resumo do que foi implementado**
 2. **Arquivos alterados** (caminho relativo)
 3. **Decisões técnicas** (escolhas de design, padrões aplicados)
 4. **Testes executados** (nome, resultado)
 5. **Pendências** (o que ficou para depois)
 6. **Riscos** (o que pode quebrar ou exigir atenção)
+7. **Evidência operacional** (se `QUOTA_EXHAUSTED`/`FAILED`/`BLOCKED`: mensagem curta, arquivos parciais, próxima ação recomendada)
 ```
 
 ---
@@ -192,6 +205,8 @@ Skills obrigatórias para esta task:
 
 Regras de execução:
 - implemente apenas o escopo desta task;
+- evite comandos de terminal; só execute comandos se a task exigir explicitamente ou se forem validações simples e seguras;
+- não rode build, testes pesados, codegen, migrations ou instalação de dependências sem autorização explícita no prompt;
 - preserve padrões visuais existentes (design system, tokens, espaçamento);
 - use componentes já existentes quando possível (não duplique);
 - siga o padrão de React + TypeScript do projeto;
@@ -202,6 +217,9 @@ Regras de execução:
 - evite criar abstrações desnecessárias (sem HOCs prematuros);
 - reporte arquivos alterados;
 - reporte pendências e dúvidas de UX.
+- se encontrar cota/rate limit/capacidade, pare e retorne `Status: QUOTA_EXHAUSTED` com evidência curta e arquivos parciais;
+- se houver falha de escrita/criação de arquivos ou tools instáveis, pare e devolva ao orquestrador; não crie arquivos alternativos nem tente remendos fora do escopo;
+- se receber `SLOW_CHECKIN`, responda com progresso real, arquivos tocados, bloqueios, riscos, ETA e estado de cota/tools/escrita.
 
 Restrições:
 - não altere contrato (campos, tipos, endpoints) sem destacar no retorno;
@@ -210,6 +228,7 @@ Restrições:
 
 Ao finalizar, retorne em Markdown:
 
+0. **Status:** DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED
 1. **Resumo do que foi implementado**
 2. **Arquivos alterados** (caminho relativo)
 3. **Decisões de UI/UX** (escolhas de layout, microinterações, acessibilidade)
@@ -217,6 +236,7 @@ Ao finalizar, retorne em Markdown:
 5. **Testes ou validações feitas** (snapshot, e2e, manual)
 6. **Pendências**
 7. **Riscos**
+8. **Evidência operacional** (se `QUOTA_EXHAUSTED`/`FAILED`/`BLOCKED`: mensagem curta, arquivos parciais, próxima ação recomendada)
 ```
 
 **Prompt (UI simples — Gemini 3 Flash):**
@@ -231,7 +251,32 @@ e simplificando a lista de skills para apenas `frontend-developer`.
 
 ---
 
-## 5. Review Pós-Implementação (codex:codex-rescue → Codex gpt-5.5 High)
+## 5. Check-in leve de task lenta (`SLOW_CHECKIN`)
+
+Use quando uma task em background parecer estagnada. Este evento não muda o status final por si só; registre-o no `monitoring.md`.
+
+**Prompt para Codex ou Gemini:**
+
+```text
+SLOW_CHECKIN — preciso de uma atualização operacional curta da task <TASK ID>.
+
+Responda sem implementar trabalho novo nesta mensagem:
+
+1. Progresso concreto concluído até agora
+2. Arquivos criados/alterados até agora
+3. Bloqueios ou riscos
+4. ETA honesto para concluir
+5. Existe falha de cota/rate limit/capacidade?
+6. Existe falha de tool, terminal, escrita ou criação de arquivos?
+
+Se houver cota/rate limit/capacidade, responda com `Status: QUOTA_EXHAUSTED`.
+Se houver falha operacional que impede continuação segura, responda com `Status: BLOCKED` ou `Status: FAILED` e explique a evidência.
+Não responda apenas "ainda trabalhando"; informe progresso verificável.
+```
+
+---
+
+## 6. Review Pós-Implementação (codex:codex-rescue → Codex gpt-5.5 High)
 
 **Subagent type:** `codex:codex-rescue`
 
@@ -274,7 +319,7 @@ Retorne, em Markdown:
 
 ---
 
-## 6. Subagente de ajustes pontuais
+## 7. Subagente de ajustes pontuais
 
 Se a fase 11 detectar um ajuste pequeno (<= 10 linhas, sem decisão arquitetural) e você (orquestrador) preferir delegar em vez de mexer direto:
 

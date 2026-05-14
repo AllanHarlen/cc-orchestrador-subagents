@@ -28,7 +28,7 @@ O `cc-orchestrador-subagents` transforma o Claude Code em um **gerente técnico 
 3. revisão crítica do plano por outro modelo;
 4. decomposição em tasks com contratos API/UI antes do paralelismo;
 5. execução paralela de duplas back-end/front-end (Codex + Gemini) em background;
-6. monitoramento sem polling, integração e revisão pós-implementação;
+6. monitoramento sem polling contínuo, com check-ins leves para tasks lentas, integração e revisão pós-implementação;
 7. relatório final em Markdown.
 
 O orquestrador (Claude Sonnet 4.6 Medium) coordena cinco papéis:
@@ -196,7 +196,7 @@ O Claude vai propor invocar a skill — basta confirmar.
 | 6-7. Classificação e ondas | classifica tasks e monta waves paralelas | revisar `tasks-classification.md` e `waves.md` |
 | 8. Contratos API/UI | gera `contracts/<task>.md` para cada FULLSTACK | aprovar contratos antes do paralelismo |
 | 9. Delegação paralela | lança 1-6 subagentes em background | nada (aguardar notificações) |
-| 10. Monitoramento | atualiza `monitoring.md` conforme agentes concluem | nada |
+| 10. Monitoramento | atualiza `monitoring.md` conforme agentes concluem; faz check-in leve se task parecer estagnada | nada, salvo se houver bloqueio/cota |
 | 11. Integração | resolve divergências entre agentes | decidir em divergências de design |
 | 12. Review final | delega ao Codex gpt-5.5 high para revisar tudo | revisar `review-final.md` |
 | 13. Verificação OpenSpec | roda `/openspec-verify-change` → `/openspec-sync-specs` → `/openspec-archive-change` | nada |
@@ -206,7 +206,7 @@ O Claude vai propor invocar a skill — basta confirmar.
 
 - **Preflight falhou:** instale o que falta e rode `/orchestrator` de novo.
 - **Plano reprovado pelo Codex:** o orquestrador re-elabora (ou pede sua decisão) e re-revisa.
-- **Subagente falhou:** redelegação automática com prompt ajustado, ou bloqueio para sua decisão.
+- **Subagente falhou ou esgotou cota:** Gemini faz handoff para o orquestrador/Codex; Codex tenta alternativa viável ou bloqueia para sua decisão.
 - **Você quer abortar:** diga "cancela" no chat — o orquestrador para e mantém os artefatos OpenSpec para retomada futura.
 
 ---
@@ -334,6 +334,7 @@ Aviso quando completarem. Estimativa: 5-8 minutos.
 [notificação] T1 back-end DONE — 12 arquivos alterados.
 [notificação] T2 back-end DONE — 9 arquivos alterados.
 [notificação] T1 front-end DONE — 6 arquivos alterados.
+[monitoramento] T2 front-end SLOW_CHECKIN — pedindo progresso, arquivos tocados, bloqueios, riscos, ETA e falhas de cota/tools.
 [notificação] T2 front-end NEEDS_SYNC — front-end espera campo `status` na response, contrato não cobre.
 
 Pausando T2. Decisão: incluir `status: PENDING | CONFIRMED | CANCELLED` no contrato.
@@ -455,7 +456,7 @@ cc-orchestrador-subagents/
 - **Templates externos.** Tudo que é "copia e preenche" mora em `assets/` para evitar reescrever o mesmo Markdown em cada execução.
 - **Sem agentes desnecessários.** Task só back-end = 1 agente. Task só front-end = 1 agente. Task full-stack = dupla.
 - **Contrato antes do paralelismo.** Toda task full-stack passa por um contrato API/UI antes dos agentes saírem em paralelo — evita divergência de campos (`description` vs `descricao`).
-- **Sem polling.** Subagentes em background notificam ao concluir; o orquestrador atualiza `monitoring.md` sob demanda.
+- **Sem polling contínuo.** Subagentes em background notificam ao concluir; o orquestrador atualiza `monitoring.md` sob demanda e faz `SLOW_CHECKIN` quando uma task parece estagnada.
 - **Relatório obrigatório.** Toda execução fecha com `implementation-report.md`.
 
 ---

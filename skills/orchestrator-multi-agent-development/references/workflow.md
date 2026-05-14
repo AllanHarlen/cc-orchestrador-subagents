@@ -335,7 +335,7 @@ Atualize `monitoring.md` para `RUNNING` em cada task envolvida.
 
 ## Fase 10 — Monitoramento
 
-Não faça polling. Os agentes em background notificam ao concluir.
+Não faça polling contínuo. Os agentes em background notificam ao concluir, mas o orquestrador deve fazer check-in leve quando uma task parecer estagnada.
 
 Mantenha `openspec/changes/<nome>/monitoring.md` (cópia de `assets/monitoring-template.md`). Status válidos:
 
@@ -345,9 +345,32 @@ Mantenha `openspec/changes/<nome>/monitoring.md` (cópia de `assets/monitoring-t
 - `NEEDS_SYNC` — contrato divergiu, precisa alinhar entre dupla
 - `DONE` — agente concluiu, aguardando integração
 - `FAILED` — agente falhou (pode precisar redelegar)
+- `QUOTA_EXHAUSTED` — agente não consegue continuar por cota/rate limit/capacidade
 - `REVIEWED` — passou pela fase 12
 
-Quando todas as tasks da onda chegarem em `DONE` ou `FAILED`, prossiga para a fase 11.
+Use o evento `SLOW_CHECKIN` no log quando uma task em `RUNNING` estiver bloqueando a onda, sem atualização útil, ou muito fora do esperado para sua complexidade. Não há timeout fixo global: use julgamento contextual. O check-in deve pedir, de forma curta:
+
+1. progresso concreto já concluído;
+2. arquivos criados/alterados até agora;
+3. bloqueios ou riscos;
+4. ETA honesto;
+5. se há falha de cota, tool, escrita/criação de arquivos ou terminal.
+
+Interprete o check-in assim:
+
+- resposta com progresso útil → mantenha `RUNNING` e registre `SLOW_CHECKIN` no log;
+- resposta com cota/rate limit/capacidade (`quota exceeded`, `rate limit`, `billing`, `resource exhausted`, `model capacity`, `daily limit` ou similar) → marque `QUOTA_EXHAUSTED`;
+- resposta com falha operacional do Gemini em tool/escrita/criação → pare de insistir no Gemini e faça handoff para orquestrador/Codex;
+- resposta genérica ou sem progresso útil → marque `BLOCKED` ou redelegue para Codex quando for seguro.
+
+Política de recuperação:
+
+- `QUOTA_EXHAUSTED` no Gemini: revise arquivos parciais reportados e redelegue a continuação para `codex:codex-rescue`;
+- falha operacional do Gemini em tools/escrita/criação: orquestrador/Codex revisa o estado parcial antes de continuar;
+- `QUOTA_EXHAUSTED` no Codex: tente outro Codex/modelo apenas se houver caminho viável; caso contrário marque `BLOCKED` e peça decisão ao usuário;
+- falha não relacionada a cota continua como `FAILED`, `BLOCKED` ou `NEEDS_SYNC`, conforme o caso.
+
+Quando todas as tasks da onda chegarem em `DONE`, `FAILED`, `QUOTA_EXHAUSTED` ou `BLOCKED`, prossiga para a fase 11 apenas se houver ação clara de integração, redelegação ou decisão do usuário.
 
 ---
 
@@ -362,7 +385,9 @@ Para cada task concluída:
 5. resolva divergências:
    - **campo divergente** (ex.: `description` vs `descricao`): decida com base no padrão do projeto, registre no relatório;
    - **conflito de arquivo**: se duas duplas tocaram o mesmo arquivo, faça merge mental e redelegue ajuste pontual;
-   - **falha de agente**: redelegue com prompt ajustado.
+   - **falha de agente**: redelegue com prompt ajustado;
+   - **cota esgotada**: aplique a política de recuperação da fase 10 antes de integrar;
+   - **falha operacional do Gemini**: revise arquivos parciais e prefira handoff para Codex.
 
 Se houver ajuste pontual (até ~10 linhas e sem decisão arquitetural), você pode resolver direto. Se for maior, redelegue.
 
