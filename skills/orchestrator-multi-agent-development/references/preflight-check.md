@@ -33,12 +33,19 @@ A saída é sempre JSON. O exit code é:
     },
     "skills": {
       "openspec": { "ok": true|false, "found": [...], "missing": [...] }
+    },
+    "optional": {
+      "mcp": {
+        "context7": { "ok": true|false, "optional": true, "evidence": [...], "error": "...", "install": [...] }
+      }
     }
   },
   "failed": [ ... ],
   "remediation": [ ... ]  // null se status=ok
 }
 ```
+
+`checks.optional.mcp.context7` não entra em `failed` e nunca muda o exit code. Quando `ok=true`, use esse sinal para orientar Codex/Gemini a consultar Context7 em tasks que envolvam bibliotecas, frameworks, SDKs, APIs, CLIs ou cloud services. Quando `ok=false`, siga normalmente.
 
 ## Política de cancelamento
 
@@ -151,6 +158,21 @@ Instale/atualize/configure as dependências acima e rode `/orchestrator` novamen
   ```
 - **Documentação:** https://github.com/Fission-AI/OpenSpec
 
+### Context7 MCP (opcional)
+
+- **O que é:** MCP que fornece documentação atual de bibliotecas, frameworks, SDKs, APIs, CLIs e cloud services para reduzir decisões baseadas em memória desatualizada.
+- **Como verificar manualmente:** confira se existe uma entrada `context7` em `.mcp.json`, `~/.claude.json`, `~/.claude/mcp.json`, `~/.codex/config.toml`, `~/.gemini/settings.json` ou skill `~/.claude/skills/context7*/SKILL.md`.
+- **Como instalar/configurar:**
+
+  ```bash
+  npx ctx7 setup --claude
+
+  # alternativa via MCP remoto:
+  claude mcp add --scope user --header "CONTEXT7_API_KEY: YOUR_API_KEY" --transport http context7 https://mcp.context7.com/mcp
+  ```
+- **Política:** opcional. A ausência de Context7 não cancela o orquestrador; apenas remova a exigência dos prompts dos subagentes.
+- **Documentação:** https://github.com/upstash/context7
+
 ## Falsos negativos comuns
 
 | Sintoma | Causa provável | Correção |
@@ -158,6 +180,7 @@ Instale/atualize/configure as dependências acima e rode `/orchestrator` novamen
 | `gemini` ou `codex` "não encontrado" mas funciona no terminal | PATH do shell não está exposto à sessão do Claude Code | Adicione o diretório do binário ao PATH **global** (variáveis de ambiente do sistema), não só ao `.zshrc`/`.bashrc` |
 | Plugin instalado mas check falha | Versão antiga sem o diretório esperado | Rode `/plugin update <plugin>` no Claude Code |
 | OpenSpec skills em local não-padrão | Instalação custom em outro path | Crie symlinks em `~/.claude/skills/` ou reinstale com `openspec init` |
+| Context7 instalado mas `ok=false` | Configuração em arquivo fora dos caminhos conhecidos | Adicione `context7` a `.mcp.json`, `~/.claude.json`, `~/.claude/mcp.json`, `~/.codex/config.toml` ou `~/.gemini/settings.json`, ou trate como opcional no prompt |
 | Funciona no macOS, falha no Windows | PATH global ainda não recarregado após install | Feche e reabra o Claude Code |
 
 ## Variantes de plataforma

@@ -14,6 +14,8 @@
 
 > **Skills disponíveis no ambiente** dependem do que o usuário tem instalado. Antes de delegar, leia a lista de skills disponíveis na seção `<system-reminder>` do início da conversa. Se uma skill esperada não estiver lá, ajuste o prompt (não invente a skill).
 
+> **Context7 MCP é opcional.** Use o resultado `checks.optional.mcp.context7` do preflight. Se `ok=true`, instrua Codex/Gemini a consultar Context7 antes de mexer em APIs, bibliotecas, frameworks, SDKs, CLIs ou cloud services. Se `ok=false`, não bloqueie a execução; registre apenas a limitação quando a task depender de documentação externa atual.
+
 ## Heurística — Gemini 3 vs Gemini 3 Flash
 
 ### Use **Gemini 3** (pro / completo) para:

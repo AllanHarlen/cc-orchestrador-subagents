@@ -78,6 +78,7 @@ Siga `SKILL.md` + `references/*.md`. Use templates de `assets/*.md` para criar a
 Mantenha o usuário informado com mensagens curtas:
 
 - "preflight OK";
+- "Context7 MCP detectado; vou exigir docs atuais nos prompts dos subagentes" ou "Context7 MCP não detectado; seguindo sem bloquear";
 - "criando mudança OpenSpec <nome>";
 - "lancei <N> subagentes em paralelo para a onda <N>, aviso quando completarem";
 - no fim: caminho do `implementation-report.md` + resumo de 2-3 frases.

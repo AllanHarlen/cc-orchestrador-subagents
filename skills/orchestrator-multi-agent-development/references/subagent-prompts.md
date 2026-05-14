@@ -19,6 +19,8 @@ Ao copiar qualquer prompt de execução para Codex ou Gemini, preserve estas reg
 - não tente contornar cota com loops, retries longos, mudança de modelo não solicitada ou ampliação de escopo;
 - se o orquestrador fizer um check-in `SLOW_CHECKIN`, responda com progresso concreto, arquivos tocados, bloqueios, riscos, ETA e falhas operacionais; não responda apenas "ainda trabalhando";
 - reporte arquivos parciais quando interromper a execução, para permitir handoff seguro.
+- se o preflight indicar `checks.optional.mcp.context7.ok: true`, mantenha o bloco "Context7 MCP" do prompt e use Context7 antes de tomar decisões sobre APIs, bibliotecas, frameworks, SDKs, CLIs ou cloud services;
+- se Context7 não estiver disponível, não bloqueie a task por isso; declare no retorno que a execução seguiu sem documentação MCP atualizada.
 
 ---
 
@@ -137,6 +139,14 @@ Stack do projeto:
 Skills relevantes (cite-as nas decisões):
 <LISTAR SKILLS BACK-END DISPONÍVEIS, EX.: csharp-pro, dotnet-backend-patterns, postgresql>
 
+Context7 MCP (opcional):
+<SE checks.optional.mcp.context7.ok=true, MANTER:
+- Context7 MCP foi detectado no preflight.
+- Antes de implementar ou alterar uso de bibliotecas/frameworks/SDKs/APIs/CLIs/cloud services, consulte Context7 para confirmar documentação atual.
+- Use a sequência resolve-library-id -> query-docs quando precisar de referência externa.
+- No retorno, mencione rapidamente quais libs/docs foram consultadas ou diga "Context7 não foi necessário" se a task não envolver APIs externas.
+SE false, REMOVER este bloco ou substituir por: "Context7 MCP não detectado; siga pelos padrões locais e registre essa limitação se houver dúvida de API externa.">
+
 Regras de execução:
 - implemente apenas o escopo desta task;
 - não altere arquivos fora do necessário;
@@ -197,6 +207,14 @@ Arquivos e módulos relevantes:
 
 Stack do projeto:
 <STACK FRONT-END — EX.: React 18 + TypeScript + Ant Design 5 + Tailwind>
+
+Context7 MCP (opcional):
+<SE checks.optional.mcp.context7.ok=true, MANTER:
+- Context7 MCP foi detectado no preflight.
+- Antes de implementar ou alterar uso de bibliotecas/frameworks/SDKs/APIs/CLIs/cloud services, consulte Context7 para confirmar documentação atual.
+- Use a sequência resolve-library-id -> query-docs quando precisar de referência externa.
+- No retorno, mencione rapidamente quais libs/docs foram consultadas ou diga "Context7 não foi necessário" se a task não envolver APIs externas.
+SE false, REMOVER este bloco ou substituir por: "Context7 MCP não detectado; siga pelos padrões locais e registre essa limitação se houver dúvida de API externa.">
 
 Skills obrigatórias para esta task:
 - frontend-developer

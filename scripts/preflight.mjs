@@ -6,6 +6,7 @@
  *  - CLIs on PATH: gemini, codex, openspec
  *  - Claude Code plugins: cc-gemini-plugin, openai-codex
  *  - OpenSpec skills under ~/.claude/skills/openspec-*
+ *  - Optional Context7 MCP configuration (reported, never blocking)
  *
  * Outputs a JSON report to stdout and exits with code 0 if every required
  * dependency is OK; exits with code 1 otherwise. The orchestrator parses the
@@ -20,7 +21,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -100,6 +101,74 @@ function checkOpenSpecSkills() {
   };
 }
 
+/**
+ * Optional Context7 MCP detection.
+ *
+ * Context7 improves agent accuracy for library/framework/API work, but it is
+ * not required for the orchestrator to run. We look for common Claude Code,
+ * Codex, Gemini and project MCP configuration files, plus the Context7 skill
+ * installed by `npx ctx7 setup --claude`.
+ */
+function checkContext7Mcp() {
+  const evidence = [];
+
+  const skillCandidates = [
+    join(SKILLS_DIR, "context7", "SKILL.md"),
+    join(SKILLS_DIR, "context7-mcp", "SKILL.md"),
+  ];
+  for (const file of skillCandidates) {
+    if (existsSync(file)) {
+      evidence.push({ type: "skill", path: file });
+    }
+  }
+
+  const configCandidates = [
+    join(process.cwd(), ".mcp.json"),
+    join(HOME, ".claude.json"),
+    join(HOME, ".claude", "mcp.json"),
+    join(HOME, ".config", "claude", "mcp.json"),
+    join(HOME, ".codex", "config.toml"),
+    join(HOME, ".gemini", "settings.json"),
+    join(HOME, ".gemini", "mcp.json"),
+  ];
+
+  for (const file of configCandidates) {
+    if (!existsSync(file)) continue;
+    try {
+      const contents = readFileSync(file, "utf8");
+      if (/\bcontext7\b|@upstash\/context7-mcp|mcp\.context7\.com|ctx7/i.test(contents)) {
+        evidence.push({ type: "mcp-config", path: file });
+      }
+    } catch (err) {
+      evidence.push({
+        type: "mcp-config-unreadable",
+        path: file,
+        error: err.message?.split(/\r?\n/)[0] ?? "cannot read file",
+      });
+    }
+  }
+
+  if (evidence.some((item) => item.type !== "mcp-config-unreadable")) {
+    return {
+      ok: true,
+      optional: true,
+      evidence,
+      usage:
+        "When delegating Codex/Gemini work involving libraries, frameworks, SDKs, APIs or cloud services, instruct the agent to use Context7 MCP before relying on memory.",
+    };
+  }
+
+  return {
+    ok: false,
+    optional: true,
+    error: "Context7 MCP not detected in known Claude/Codex/Gemini/project config locations.",
+    install: [
+      "npx ctx7 setup --claude",
+      'or: claude mcp add --scope user --header "CONTEXT7_API_KEY: YOUR_API_KEY" --transport http context7 https://mcp.context7.com/mcp',
+    ],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Run all checks
 // ---------------------------------------------------------------------------
@@ -116,6 +185,11 @@ const checks = {
   },
   skills: {
     openspec: checkOpenSpecSkills(),
+  },
+  optional: {
+    mcp: {
+      context7: checkContext7Mcp(),
+    },
   },
 };
 

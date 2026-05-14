@@ -68,6 +68,12 @@ Dependências validadas:
 | `openai-codex` | Claude Code plugin | expõe `/codex:review`, `/codex:rescue`, `codex:codex-rescue` |
 | `openspec-*` skills | ~/.claude/skills/openspec-* | comandos `/openspec-new-change`, etc. |
 
+Dependência opcional:
+
+| Dependência | Tipo | Como usar |
+|---|---|---|
+| `context7` | MCP opcional | se `checks.optional.mcp.context7.ok` vier `true`, inclua nos prompts de Codex/Gemini a instrução para consultar Context7 antes de implementar APIs/libs/frameworks; se vier `false`, não cancele |
+
 > Detalhes completos de mensagens de erro, comandos de remediação e troubleshooting: `references/preflight-check.md`.
 
 ## Stack de agentes — decisão rápida
@@ -175,6 +181,11 @@ Agent(cc-gemini-plugin:gemini-agent, task-C front-end, run_in_background=true)
 ```
 
 Prompts em `references/subagent-prompts.md`.
+
+Antes de delegar para Codex ou Gemini, confira o resultado opcional do preflight:
+
+- se `checks.optional.mcp.context7.ok` for `true`, preserve o bloco "Context7 MCP" dos prompts e informe as bibliotecas/frameworks relevantes da task;
+- se for `false`, remova ou ajuste o bloco para não exigir Context7. A ausência de Context7 nunca bloqueia a execução.
 
 ### Fase 10 — Monitoramento
 Mantenha o quadro de status em `openspec/changes/<nome>/monitoring.md` (cópia de `assets/monitoring-template.md`). Status válidos: PENDING / RUNNING / BLOCKED / NEEDS_SYNC / DONE / FAILED / QUOTA_EXHAUSTED / REVIEWED.

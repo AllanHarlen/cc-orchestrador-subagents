@@ -104,6 +104,19 @@ Em `~/.claude/skills/`, as seguintes skills são esperadas (instaladas pelo `ope
 
 Se faltarem, rode `openspec init` no projeto alvo ou reinstale o CLI.
 
+### Context7 MCP (opcional)
+
+O preflight também tenta detectar Context7 MCP em `.mcp.json`, `~/.claude.json`, `~/.claude/mcp.json`, `~/.codex/config.toml`, `~/.gemini/settings.json` e nas skills `~/.claude/skills/context7*`. Essa checagem é opcional: se faltar, o orquestrador continua; se existir, os prompts de Codex/Gemini passam a exigir consulta ao Context7 antes de implementar APIs, bibliotecas, frameworks, SDKs, CLIs ou cloud services.
+
+Instalação sugerida:
+
+```bash
+npx ctx7 setup --claude
+
+# alternativa via MCP remoto:
+claude mcp add --scope user --header "CONTEXT7_API_KEY: YOUR_API_KEY" --transport http context7 https://mcp.context7.com/mcp
+```
+
 ### Verificação manual (opcional)
 
 Antes de instalar este plugin, valide o ambiente:

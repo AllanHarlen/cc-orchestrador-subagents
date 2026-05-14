@@ -44,8 +44,11 @@ Dependências verificadas:
 | Plugin `cc-gemini-plugin` | Claude Code plugin | `ls ~/.claude/plugins/cache/cc-gemini-plugin/` |
 | Plugin `openai-codex` | Claude Code plugin | `ls ~/.claude/plugins/cache/openai-codex/codex/` |
 | Skills `openspec-*` | filesystem | `ls ~/.claude/skills | grep openspec` |
+| `context7` MCP | opcional | ver `checks.optional.mcp.context7` no JSON |
 
 Quando o preflight retorna falha, **não tente fallback automático**. A política é: cancele com a mensagem padrão (formato em `references/preflight-check.md`) e oriente o usuário a instalar/atualizar/configurar o que falta antes de invocar novamente.
+
+Context7 é exceção: ele aparece em `checks.optional.mcp.context7`, não entra em `failed` e nunca bloqueia. Se estiver disponível, use-o nos prompts de Codex/Gemini para confirmar documentação atual de bibliotecas/frameworks/APIs.
 
 > Detalhes completos de cada dependência, remediação e troubleshooting cross-platform: `references/preflight-check.md`.
 
@@ -327,7 +330,8 @@ Prompts: copie de `references/subagent-prompts.md` e preencha placeholders. Cada
 2. contrato API/UI (se FULLSTACK);
 3. arquivos/módulos relevantes;
 4. regras de escopo (não tocar fora do necessário);
-5. formato de retorno (resumo + arquivos alterados + decisões + testes + pendências + riscos).
+5. bloco Context7 MCP quando `checks.optional.mcp.context7.ok=true`.
+6. formato de retorno (resumo + arquivos alterados + decisões + testes + pendências + riscos).
 
 Atualize `monitoring.md` para `RUNNING` em cada task envolvida.
 
