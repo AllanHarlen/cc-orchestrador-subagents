@@ -1,6 +1,6 @@
 # Plano de Implementação — <NOME DA MUDANÇA>
 
-> Template para o subagente `Plan` (Claude Sonnet 4.6 Effort High) preencher. Deve refletir-se em `proposal.md`, `design.md` e `tasks.md`. Não deixe seções vazias — se algo não se aplica, escreva "N/A — <motivo>".
+> Template para o orquestrador preencher diretamente. Não delegue este plano para subagentes Claude Code. O conteúdo deve refletir-se em `proposal.md`, `design.md` e `tasks.md`. Não deixe seções vazias — se algo não se aplica, escreva "N/A — <motivo>".
 
 ## Contexto
 

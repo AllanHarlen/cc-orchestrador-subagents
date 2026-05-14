@@ -18,6 +18,7 @@
 - `openspec/changes/<nome>/specs/` (lista de specs deltas)
 - `openspec/changes/<nome>/contracts/` (lista de contratos por task FULLSTACK)
 - `openspec/changes/<nome>/monitoring.md`
+- `openspec/changes/<nome>/subagents-context.md`
 - `openspec/changes/<nome>/review-codex.md` (review do plano)
 - `openspec/changes/<nome>/review-final.md` (review pós-implementação)
 
@@ -29,10 +30,9 @@
 - **Papel:** coordenação, decisão, consolidação e relatório
 
 ### Planejamento
-- **Modelo:** Claude Sonnet 4.6
-- **Effort:** High
-- **Subagent type:** `Plan`
-- **Papel:** elaboração do plano inicial OpenSpec
+- **Responsável:** Orquestrador
+- **Subagent type:** N/A — o orquestrador não executa subagentes Claude Code
+- **Papel:** elaboração direta do plano inicial OpenSpec
 
 ### Review de Plano
 - **Modelo:** Codex gpt-5.5
@@ -113,7 +113,18 @@
 
 - <risco> — probabilidade <baixa/média/alta>, impacto <baixo/médio/alto>, mitigação proposta: <...>
 
-## 10. Testes e Validações
+## 10. Resumo de Contexto dos Subagentes
+
+> Resumo executivo do arquivo `subagents-context.md`. Liste todos os subagentes Codex/Gemini executados, status final, contribuição principal e pendências/riscos relevantes.
+
+| Task | Subagent type | Modelo | Status | Resumo | Pendências/Riscos |
+|---|---|---|---|---|---|
+| `<T1>` | `codex:codex-rescue` | `<modelo>` | `<status>` | `<resumo>` | `<nenhum | item>` |
+| `<T1>` | `cc-gemini-plugin:gemini-agent` | `<modelo>` | `<status>` | `<resumo>` | `<nenhum | item>` |
+
+Contexto completo: `openspec/changes/<nome>/subagents-context.md`.
+
+## 11. Testes e Validações
 
 | Tipo | Status | Observação |
 |---|---|---|
@@ -127,7 +138,7 @@
 | Lint / typecheck | ✅ / ❌ | <...> |
 | Security check | ✅ / ❌ | <...> |
 
-## 11. Critérios de Aceite
+## 12. Critérios de Aceite
 
 > Replicar do proposal.md e marcar status.
 
@@ -135,14 +146,38 @@
 - [x] <critério 2>
 - [ ] <critério pendente — motivo + plano>
 
-## 12. Pendências
+## 13. Instruções de Negócio para o Usuário
+
+> Conteúdo obrigatório para ser entregue também na resposta final ao usuário. Escreva para produto, operação, suporte ou dono do processo, não para outro programador.
+
+### O que mudou para o negócio
+
+<Explique a capacidade nova, processo alterado ou problema resolvido.>
+
+### Como homologar
+
+<Roteiro curto de validação pelo usuário final: dados de teste, passos principais, resultado esperado.>
+
+### Regras e limites
+
+<Regras de negócio relevantes, permissões, exceções, campos obrigatórios, limites conhecidos.>
+
+### Impactos operacionais
+
+<Impacto em suporte, comunicação, treinamento, relatórios, dados, monitoramento ou processos internos.>
+
+### Próximo passo recomendado
+
+<Merge, deploy, homologação, follow-up, owner e prazo quando aplicável.>
+
+## 14. Pendências
 
 > Pendências reais. Se nada, escreva "Nenhuma".
 
 - <pendência 1> — owner: <quem> — prazo: <quando>
 - <pendência 2> — ...
 
-## 13. Conclusão
+## 15. Conclusão
 
 > Informar se a mudança está pronta para:
 > - merge na main;
@@ -168,7 +203,6 @@
 
 | Fase | Subagent type | Modelo | Prompt resumido |
 |---|---|---|---|
-| 3 | `Plan` | Claude Sonnet 4.6 High | gerar plano OpenSpec |
 | 4 | `codex:codex-rescue` | Codex gpt-5.5 high | revisão do plano |
 | 9 | `codex:codex-rescue` × N | Codex gpt-5.4 medium | implementações back-end |
 | 9 | `cc-gemini-plugin:gemini-agent` × N | Gemini 3 / 3 Flash | implementações front-end |

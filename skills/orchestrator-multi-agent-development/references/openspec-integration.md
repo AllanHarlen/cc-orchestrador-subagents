@@ -58,6 +58,7 @@ openspec/
         ├── contracts/                      # contratos API/UI por task FULLSTACK
         │   └── <task-id>.md
         ├── monitoring.md                   # status das tasks (fase 10)
+        ├── subagents-context.md            # contexto consolidado dos subagentes (fase 14)
         ├── review-codex.md                 # output do review do plano (fase 4)
         ├── review-final.md                 # output do review pós-implementação (fase 12)
         ├── specs/                          # deltas de spec gerados nesta mudança
@@ -68,7 +69,7 @@ openspec/
 ## Boas práticas
 
 - **Não pule `/openspec-verify-change`.** Mesmo que tudo pareça pronto, o verify pega referências quebradas em spec.
-- **`/openspec-archive-change` é destrutivo no sentido de mover pastas.** Só rode depois de garantir o `implementation-report.md` salvo e o usuário ciente.
+- **`/openspec-archive-change` é destrutivo no sentido de mover pastas.** Só rode depois de garantir `implementation-report.md` e `subagents-context.md` salvos e o usuário ciente.
 - **Pode haver várias mudanças em paralelo no repo.** Não misture artefatos de mudanças diferentes — cada uma em seu diretório.
 
 ## Fallback se OpenSpec não estiver disponível
@@ -83,7 +84,7 @@ mkdir -p openspec/changes/<nome>/specs
 mkdir -p openspec/changes/<nome>/contracts
 ```
 
-3. Preencha proposal/design/tasks "à mão" (você ou o subagente Plan).
+3. Preencha proposal/design/tasks diretamente como orquestrador.
 4. Pule os comandos `/openspec-*` e use o `implementation-report.md` como entregável.
 
 ## Mapeamento de comandos `/opsx:*` mencionados em outras referências

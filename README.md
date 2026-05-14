@@ -24,22 +24,23 @@ Plugin de Claude Code que adiciona a skill **`orchestrator-multi-agent-developme
 O `cc-orchestrador-subagents` transforma o Claude Code em um **gerente técnico de execução**, não em "mais um agente que programa". A skill assume que toda mudança relevante de software passa por:
 
 1. especificação clara (via OpenSpec);
-2. plano técnico antes de codar;
+2. plano técnico feito pelo próprio orquestrador antes de codar;
 3. revisão crítica do plano por outro modelo;
 4. decomposição em tasks com contratos API/UI antes do paralelismo;
 5. execução paralela de duplas back-end/front-end (Codex + Gemini) em background;
 6. monitoramento sem polling contínuo, com check-ins leves para tasks lentas, integração e revisão pós-implementação;
-7. relatório final em Markdown.
+7. contexto consolidado de todos os subagentes executados;
+8. relatório final em Markdown com instruções de negócio para o usuário.
 
-O orquestrador (Claude Sonnet 4.6 Medium) coordena cinco papéis:
+O orquestrador (Claude Sonnet 4.6 Medium) coordena o fluxo, mas **não executa subagentes Claude Code**. As únicas delegações do workflow são para Codex e Gemini via plugins:
 
 | Papel | Modelo | Subagente |
 |---|---|---|
-| Orquestrador (você) | Claude Sonnet 4.6 Medium | — |
-| Planejador | Claude Sonnet 4.6 High | `Plan` |
+| Orquestrador/planejador/finalizador | Claude Sonnet 4.6 Medium | — |
 | Revisor de plano | Codex gpt-5.5 High | `codex:codex-rescue` |
 | Executor back-end | Codex gpt-5.4 Medium | `codex:codex-rescue` |
 | Executor front-end | Gemini 3 ou Gemini 3 Flash | `cc-gemini-plugin:gemini-agent` |
+| Review pós-implementação | Codex gpt-5.5 High | `codex:codex-rescue` |
 
 O fluxo completo está descrito em `skills/orchestrator-multi-agent-development/SKILL.md`.
 
@@ -203,7 +204,7 @@ O Claude vai propor invocar a skill — basta confirmar.
 | 0. Preflight | roda `scripts/preflight.mjs`, valida CLIs e plugins | nada, ou instalar o que faltar |
 | 1. Entendimento | extrai objetivo, escopo, stack, riscos | responder a perguntas com `AskUserQuestion` se algo for ambíguo |
 | 2. OpenSpec | cria `openspec/changes/<nome>/` com `/openspec-new-change` + `/openspec-ff-change` | confirmar o nome da mudança |
-| 3. Plano | delega ao subagente `Plan` (Claude Sonnet 4.6 High) | revisar o plano gerado |
+| 3. Plano | preenche o plano diretamente usando `assets/plan-template.md` | revisar o plano gerado |
 | 4. Review do plano | delega ao Codex gpt-5.5 high para revisar | nada (aguardar) |
 | 5. Consolidação | aplica sugestões válidas, rejeita o resto com justificativa | aprovar a consolidação |
 | 6-7. Classificação e ondas | classifica tasks e monta waves paralelas | revisar `tasks-classification.md` e `waves.md` |
@@ -213,7 +214,8 @@ O Claude vai propor invocar a skill — basta confirmar.
 | 11. Integração | resolve divergências entre agentes | decidir em divergências de design |
 | 12. Review final | delega ao Codex gpt-5.5 high para revisar tudo | revisar `review-final.md` |
 | 13. Verificação OpenSpec | roda `/openspec-verify-change` → `/openspec-sync-specs` → `/openspec-archive-change` | nada |
-| 14. Relatório | gera `implementation-report.md` | revisar e seguir para merge |
+| 14. Relatório | gera `subagents-context.md` e `implementation-report.md` | revisar e seguir para merge |
+| 15. Instruções de negócio | explica a feature em termos de homologação/operação/produto | validar próximos passos |
 
 ### Cancelamento e retomada
 
@@ -262,9 +264,9 @@ openspec/changes/fluxo-reservas/
 └── specs/
 ```
 
-### Fase 3 — Plano (subagente Plan, ~3 min)
+### Fase 3 — Plano (orquestrador, ~1 turno)
 
-Subagente `Plan` (Claude Sonnet 4.6 High) preenche os artefatos com base no `assets/plan-template.md`. Resumo no chat:
+O orquestrador preenche os artefatos com base no `assets/plan-template.md`. Nenhum subagente Claude Code é chamado nesta fase. Resumo no chat:
 
 ```
 Plano gerado. 3 tasks identificadas:
@@ -391,18 +393,24 @@ Recomendações:
 /openspec-archive-change fluxo-reservas → arquivado
 ```
 
-### Fase 14 — Relatório (1 turno)
+### Fase 14 — Contexto e relatório (1 turno)
 
 ```
+Contexto dos subagentes criado: openspec/changes/fluxo-reservas/subagents-context.md
 Relatório criado: openspec/changes/fluxo-reservas/implementation-report.md
 
 Resumo:
 - 3 tasks FULLSTACK entregues em 2 waves
-- 5 subagentes utilizados (4 na Wave 1, 1 dupla na Wave 2)
+- 6 subagentes utilizados (4 na Wave 1, 1 dupla na Wave 2)
 - 1 sincronização de contrato durante execução
 - 1 pendência não bloqueante: teste de concorrência
 
-Pronto para merge. Próximo passo: revisar o relatório e abrir PR.
+Instruções de negócio:
+- Produto deve homologar listagem, criação e cancelamento de reservas com datas reais e conflito de disponibilidade.
+- Suporte deve saber que reservas canceladas ficam ocultas do fluxo principal, mas continuam preservadas para auditoria.
+- Operação deve monitorar erros de conflito no POST /api/reservas após o deploy para identificar disputa de horários.
+
+Pronto para merge. Próximo passo: revisar relatório/contexto consolidado e abrir PR.
 ```
 
 ### Artefatos gerados no projeto
@@ -419,10 +427,11 @@ openspec/changes/fluxo-reservas/
 │   ├── T2.md
 │   └── T3.md
 ├── monitoring.md
+├── subagents-context.md          (resumo consolidado dos subagentes)
 ├── review-codex.md            (review do plano)
 ├── review-final.md            (review pós-implementação)
 ├── specs/                     (deltas sincronizados na fase 13)
-└── implementation-report.md   (entregável final)
+└── implementation-report.md   (entregável final + instruções de negócio)
 ```
 
 **Tempo total estimado:** 25-35 minutos de relógio, dos quais ~80% é tempo dos subagentes em background. Sem orquestrador, a mesma mudança levaria horas de tab switching.
@@ -456,6 +465,7 @@ cc-orchestrador-subagents/
             ├── plan-template.md
             ├── contract-template.md
             ├── monitoring-template.md
+            ├── subagents-context-template.md
             └── implementation-report-template.md
 ```
 
@@ -470,6 +480,8 @@ cc-orchestrador-subagents/
 - **Sem agentes desnecessários.** Task só back-end = 1 agente. Task só front-end = 1 agente. Task full-stack = dupla.
 - **Contrato antes do paralelismo.** Toda task full-stack passa por um contrato API/UI antes dos agentes saírem em paralelo — evita divergência de campos (`description` vs `descricao`).
 - **Sem polling contínuo.** Subagentes em background notificam ao concluir; o orquestrador atualiza `monitoring.md` sob demanda e faz `SLOW_CHECKIN` quando uma task parece estagnada.
-- **Relatório obrigatório.** Toda execução fecha com `implementation-report.md`.
+- **Sem subagente Claude para planejar.** O orquestrador mantém o conhecimento geral e só delega para Codex/Gemini via plugins.
+- **Contexto consolidado obrigatório.** Toda execução registra `subagents-context.md` com o resumo de todos os subagentes executados.
+- **Relatório obrigatório com instruções de negócio.** Toda execução fecha com `implementation-report.md` e orientações para homologar/operar a feature.
 
 ---

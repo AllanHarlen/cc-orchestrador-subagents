@@ -1,6 +1,8 @@
 # Prompts oficiais para subagentes
 
-Sempre leia este arquivo **antes** de delegar. Copie o prompt da seção correta e preencha os placeholders (`<...>`) antes de chamar `Agent(...)`.
+Sempre leia este arquivo **antes** de delegar para Codex ou Gemini. Copie o prompt da seção correta e preencha os placeholders (`<...>`) antes de chamar `Agent(...)`.
+
+O orquestrador não delega planejamento para subagentes Claude Code. Não use `Plan`, `general-purpose` ou outro subagente Claude neste fluxo; o planejamento OpenSpec é feito diretamente pelo orquestrador com `assets/plan-template.md`.
 
 Cada prompt já contém:
 
@@ -24,52 +26,7 @@ Ao copiar qualquer prompt de execução para Codex ou Gemini, preserve estas reg
 
 ---
 
-## 1. Subagente de Planejamento (Plan → Claude Sonnet 4.6 High)
-
-**Subagent type:** `Plan`
-
-**Prompt:**
-
-```text
-Você é o agente de planejamento técnico de uma mudança OpenSpec.
-
-Contexto da demanda:
-<COLAR PARÁGRAFO DE CONTEXTO DA FASE 1>
-
-Repositório alvo:
-- working directory: <PATH>
-- stack: <STACK>
-- módulos envolvidos: <LISTA DE MÓDULOS>
-- restrições: <LISTA DE RESTRIÇÕES>
-
-Sua tarefa:
-Preencha integralmente os artefatos OpenSpec:
-- openspec/changes/<nome>/proposal.md
-- openspec/changes/<nome>/design.md
-- openspec/changes/<nome>/tasks.md
-
-Use o template abaixo como esqueleto do plano completo:
-
-<COLAR CONTEÚDO DE assets/plan-template.md>
-
-Restrições e qualidade esperada:
-- O plano deve ser executável em paralelo sempre que possível;
-- Cada task deve ter contrato claro, entrada e saída definidas;
-- Riscos arquiteturais devem ser explícitos, com mitigação proposta;
-- A estratégia de testes deve cobrir back-end e front-end;
-- Critérios de aceite devem ser mensuráveis (não "deve funcionar bem");
-- Toda dependência entre tasks deve estar registrada.
-
-Ao finalizar, retorne:
-1. confirmação de quais arquivos OpenSpec foram criados/atualizados;
-2. lista de tasks identificadas, com classificação preliminar (BACKEND_ONLY, FRONTEND_ONLY, FULLSTACK, DATABASE_ONLY, REVIEW_ONLY, DOCS_ONLY, TEST_ONLY);
-3. riscos top-3 que o usuário deve conhecer;
-4. dúvidas ou ambiguidades que ficaram em aberto.
-```
-
----
-
-## 2. Subagente Revisor de Plano (codex:codex-rescue → Codex gpt-5.5 High)
+## 1. Subagente Revisor de Plano (codex:codex-rescue → Codex gpt-5.5 High)
 
 **Subagent type:** `codex:codex-rescue`
 
@@ -108,7 +65,7 @@ NÃO modifique arquivos. NÃO implemente nada. Apenas revise e devolva o relató
 
 ---
 
-## 3. Subagente Back-end (codex:codex-rescue → Codex gpt-5.4 Medium)
+## 2. Subagente Back-end (codex:codex-rescue → Codex gpt-5.4 Medium)
 
 **Subagent type:** `codex:codex-rescue`
 
@@ -180,7 +137,7 @@ Ao finalizar, retorne em Markdown:
 
 ---
 
-## 4. Subagente Front-end (cc-gemini-plugin:gemini-agent → Gemini 3 ou Flash)
+## 3. Subagente Front-end (cc-gemini-plugin:gemini-agent → Gemini 3 ou Flash)
 
 **Subagent type:** `cc-gemini-plugin:gemini-agent`
 
@@ -269,7 +226,7 @@ e simplificando a lista de skills para apenas `frontend-developer`.
 
 ---
 
-## 5. Check-in leve de task lenta (`SLOW_CHECKIN`)
+## 4. Check-in leve de task lenta (`SLOW_CHECKIN`)
 
 Use quando uma task em background parecer estagnada. Este evento não muda o status final por si só; registre-o no `monitoring.md`.
 
@@ -294,7 +251,7 @@ Não responda apenas "ainda trabalhando"; informe progresso verificável.
 
 ---
 
-## 6. Review Pós-Implementação (codex:codex-rescue → Codex gpt-5.5 High)
+## 5. Review Pós-Implementação (codex:codex-rescue → Codex gpt-5.5 High)
 
 **Subagent type:** `codex:codex-rescue`
 
@@ -337,7 +294,7 @@ Retorne, em Markdown:
 
 ---
 
-## 7. Subagente de ajustes pontuais
+## 6. Subagente de ajustes pontuais
 
 Se a fase 11 detectar um ajuste pequeno (<= 10 linhas, sem decisão arquitetural) e você (orquestrador) preferir delegar em vez de mexer direto:
 

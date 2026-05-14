@@ -18,7 +18,8 @@ Este arquivo expande as fases do `SKILL.md`. Leia a fase específica quando prec
 - [Fase 11 — Integração dos Resultados](#fase-11--integração-dos-resultados)
 - [Fase 12 — Review Pós-Implementação](#fase-12--review-pós-implementação)
 - [Fase 13 — Verificação OpenSpec](#fase-13--verificação-openspec)
-- [Fase 14 — Relatório Final](#fase-14--relatório-final)
+- [Fase 14 — Contexto Consolidado e Relatório Final](#fase-14--contexto-consolidado-e-relatório-final)
+- [Fase 15 — Instruções de Negócio](#fase-15--instruções-de-negócio)
 
 ---
 
@@ -112,9 +113,9 @@ openspec/changes/<nome-da-mudanca>/
 
 ## Fase 3 — Elaboração do Plano
 
-**Modelo:** Claude Sonnet 4.6 Effort High (subagente `Plan`).
+**Responsável:** orquestrador principal.
 
-Antes de invocar, confirme com o usuário se está em `/effort high`. Se não estiver, peça para ajustar (o subagente herda o effort da sessão).
+Não invoque `Agent(subagent_type="Plan")`, `general-purpose` ou qualquer outro subagente Claude Code. O orquestrador não executa subagentes Claude; ele apenas mantém o conhecimento geral para estruturar o plano, finalizar o fluxo e consolidar os resultados. Subagentes permitidos no workflow: Codex e Gemini via plugins.
 
 Use o template `assets/plan-template.md` como esqueleto. Estrutura mínima:
 
@@ -138,40 +139,15 @@ Use o template `assets/plan-template.md` como esqueleto. Estrutura mínima:
 ## Critérios de aceite
 ```
 
-**Invocação:**
+Preencha diretamente os artefatos OpenSpec:
 
-```text
-Agent(
-  subagent_type="Plan",
-  description="Plano técnico da mudança <nome>",
-  prompt="""
-Você é o agente de planejamento técnico de uma mudança OpenSpec.
+- `openspec/changes/<nome>/proposal.md`;
+- `openspec/changes/<nome>/design.md`;
+- `openspec/changes/<nome>/tasks.md`.
 
-Contexto da demanda:
-<COPIAR PARÁGRAFO DA FASE 1>
+Use `assets/plan-template.md` como esqueleto e divida o conteúdo conforme apropriado entre os três arquivos. O plano deve ser executável em paralelo sempre que possível, cada task deve ter entrada/saída definida, riscos arquiteturais devem estar explícitos, a estratégia de testes deve cobrir as camadas afetadas e os critérios de aceite devem ser mensuráveis.
 
-Repositório alvo:
-- working dir: <PATH>
-- stack: <STACK>
-- módulos envolvidos: <LISTA>
-
-Template do plano (preencha todas as seções):
-<COLAR plan-template.md>
-
-Restrições:
-- O plano deve ser executável em paralelo sempre que possível;
-- Cada task deve ter contrato claro, entrada e saída definida;
-- Riscos arquiteturais devem ser explícitos;
-- A estratégia de testes deve cobrir back-end e front-end;
-- Critérios de aceite devem ser mensuráveis.
-
-Salve o resultado em openspec/changes/<nome>/proposal.md, design.md e tasks.md
-(divida o conteúdo conforme apropriado).
-"""
-)
-```
-
-Saída: artefatos OpenSpec preenchidos pelo subagente Plan.
+Saída: artefatos OpenSpec preenchidos pelo orquestrador.
 
 ---
 
@@ -462,7 +438,21 @@ Por último:
 
 ---
 
-## Fase 14 — Relatório Final
+## Fase 14 — Contexto Consolidado e Relatório Final
+
+Primeiro copie `assets/subagents-context-template.md` para `openspec/changes/<nome>/subagents-context.md` e preencha com o resumo de contexto de todos os subagentes Codex/Gemini executados.
+
+Esse arquivo deve preservar o que o orquestrador precisa lembrar para finalizar, auditar e retomar a mudança:
+
+- agente/subagent type e modelo usado;
+- task/onda;
+- status final;
+- resumo do que foi feito;
+- arquivos criados/alterados;
+- decisões técnicas ou de UI/UX;
+- testes/validações executadas;
+- pendências e riscos;
+- handoffs, falhas de cota/tool/escrita e próxima ação tomada.
 
 Copie `assets/implementation-report-template.md` para `openspec/changes/<nome>/implementation-report.md` e preencha todas as seções:
 
@@ -475,13 +465,31 @@ Copie `assets/implementation-report-template.md` para `openspec/changes/<nome>/i
 7. Decisões Técnicas
 8. Ajustes Realizados Após Review
 9. Riscos Identificados
-10. Testes e Validações
-11. Critérios de Aceite (checklist)
-12. Pendências
-13. Conclusão
+10. Resumo de Contexto dos Subagentes
+11. Testes e Validações
+12. Critérios de Aceite (checklist)
+13. Instruções de Negócio para o Usuário
+14. Pendências
+15. Conclusão
 
 Encerre informando ao usuário:
 
 - caminho do relatório;
+- caminho do contexto consolidado dos subagentes;
 - resumo em 2-3 frases;
+- instruções de negócio sobre a feature implementada;
 - próximo passo recomendado (merge, homologação, follow-up).
+
+## Fase 15 — Instruções de Negócio
+
+Após a finalização das tasks, entregue instruções em nível de negócio para o usuário. Não limite o fechamento ao resumo técnico. Traduza a feature implementada para quem precisa validar, operar, explicar ou colocar a mudança em produção.
+
+Formato recomendado:
+
+1. **O que mudou para o negócio:** capacidade nova, processo alterado ou problema resolvido.
+2. **Como homologar:** roteiro curto de validação pelo usuário final ou equipe de produto.
+3. **Regras e limites:** regras de negócio relevantes, permissões, exceções, dados obrigatórios, limites conhecidos.
+4. **Impactos operacionais:** suporte, dados, relatórios, comunicação com clientes, treinamento, monitoramento.
+5. **Próximo passo:** merge/deploy/homologação/follow-up com owner quando houver pendência.
+
+Registre essa mesma orientação em `implementation-report.md` na seção "Instruções de Negócio para o Usuário".

@@ -1,6 +1,6 @@
 # Monitoramento da Execução — <NOME DA MUDANÇA>
 
-> Atualize este arquivo conforme os subagentes em background notificam conclusão. Não faça polling contínuo; use `SLOW_CHECKIN` apenas quando uma task parecer estagnada.
+> Atualize este arquivo conforme os subagentes em background notificam conclusão. Não faça polling contínuo; use `SLOW_CHECKIN` apenas quando uma task parecer estagnada. Ao final, consolide os dados relevantes em `subagents-context.md`.
 
 ## Legenda de status
 
@@ -86,3 +86,11 @@
 - Em FAILED: `<N>`
 - Em QUOTA_EXHAUSTED: `<N>`
 - Em BLOCKED / NEEDS_SYNC: `<N>`
+
+## Dados para `subagents-context.md`
+
+> Antes de encerrar a mudança, transfira para `subagents-context.md` um resumo de cada subagente executado.
+
+| Task | Subagent type | Modelo | Status final | Resumo entregue | Arquivos alterados | Testes | Pendências/Riscos |
+|---|---|---|---|---|---|---|---|
+| `<task>` | `<codex/gemini>` | `<modelo>` | `<status>` | `<2 linhas>` | `<lista>` | `<lista>` | `<lista>` |

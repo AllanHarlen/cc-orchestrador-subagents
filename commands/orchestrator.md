@@ -1,5 +1,5 @@
 ---
-description: Conduzir um workflow de desenvolvimento multiagêntico (OpenSpec + Claude planejamento + Codex review + Codex/Gemini execução paralela + relatório final)
+description: Conduzir um workflow de desenvolvimento multiagêntico (OpenSpec + planejamento do orquestrador + Codex review + Codex/Gemini execução paralela + relatório final + instruções de negócio)
 argument-hint: "<descrição da demanda — ex.: 'implemente o fluxo de reservas com listagem, criação e cancelamento'>"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
@@ -10,7 +10,7 @@ Inicia o **Orquestrador Multiagêntico de Desenvolvimento** para a demanda descr
 
 1. Entendimento da demanda
 2. Criação de mudança OpenSpec
-3. Plano técnico (subagente `Plan` — Claude Sonnet 4.6 Effort High)
+3. Plano técnico (feito diretamente pelo orquestrador)
 4. Review do plano (`codex:codex-rescue` — Codex gpt-5.5 Effort High)
 5. Consolidação do plano (orquestrador, Claude Sonnet 4.6 Effort Medium)
 6. Classificação das tasks
@@ -23,7 +23,8 @@ Inicia o **Orquestrador Multiagêntico de Desenvolvimento** para a demanda descr
 11. Integração e resolução de divergências
 12. Review pós-implementação (Codex gpt-5.5 high)
 13. Verificação OpenSpec (`/openspec-verify-change` → `/openspec-sync-specs` → `/openspec-archive-change`)
-14. `implementation-report.md` final
+14. `subagents-context.md` + `implementation-report.md` finais
+15. Instruções de negócio para o usuário sobre a feature implementada
 
 ## Argumento
 
@@ -81,7 +82,7 @@ Mantenha o usuário informado com mensagens curtas:
 - "Context7 MCP detectado; vou exigir docs atuais nos prompts dos subagentes" ou "Context7 MCP não detectado; seguindo sem bloquear";
 - "criando mudança OpenSpec <nome>";
 - "lancei <N> subagentes em paralelo para a onda <N>, aviso quando completarem";
-- no fim: caminho do `implementation-report.md` + resumo de 2-3 frases.
+- no fim: caminhos do `implementation-report.md` e `subagents-context.md` + resumo de 2-3 frases + instruções de negócio para homologar/operar a feature.
 
 ## Quando o usuário invocar sem argumento
 

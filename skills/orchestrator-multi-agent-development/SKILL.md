@@ -1,20 +1,20 @@
 ---
 name: orchestrator-multi-agent-development
-description: Multi-agent development orchestrator. Use sempre que o usuário pedir para planejar, implementar, refatorar, migrar, integrar ou corrigir algo com impacto arquitetural — qualquer pedido que se beneficie de OpenSpec + plano + revisão + execução paralela. Coordena Claude (planejamento), Codex (review e back-end) e Gemini (front-end) em subagentes paralelos quando há tasks independentes, define contratos API/UI antes do paralelismo, monitora execução e fecha com implementation-report.md. Triggers em PT-BR e EN: "implementa", "refatora", "migração", "novo módulo", "nova feature", "orquestrar", "subagentes", "plano técnico", "OpenSpec", "multiagêntico", "multi-agent", "orchestrate", "delegate to Codex/Gemini", "parallel implementation", "full-stack feature". NÃO use para tarefas triviais (typo, padding, renomear variável) — nesses casos execute direto.
+description: Multi-agent development orchestrator. Use sempre que o usuário pedir para planejar, implementar, refatorar, migrar, integrar ou corrigir algo com impacto arquitetural — qualquer pedido que se beneficie de OpenSpec + plano + revisão + execução paralela. O orquestrador planeja e consolida diretamente; ele só delega execução/review para subagentes Codex e Gemini via plugins, define contratos API/UI antes do paralelismo, monitora execução, armazena contexto consolidado dos subagentes e fecha com implementation-report.md + instruções de negócio para o usuário. Triggers em PT-BR e EN: "implementa", "refatora", "migração", "novo módulo", "nova feature", "orquestrar", "subagentes", "plano técnico", "OpenSpec", "multiagêntico", "multi-agent", "orchestrate", "delegate to Codex/Gemini", "parallel implementation", "full-stack feature". NÃO use para tarefas triviais (typo, padding, renomear variável) — nesses casos execute direto.
 ---
 
 # Orquestrador Multiagêntico de Desenvolvimento
 
-Você é o **Orquestrador Principal**. Seu papel é coordenar — não programar direto. Quando esta skill ativar, conduza o usuário pelo workflow abaixo, delegando para subagentes especializados (Plan / Codex / Gemini) e consolidando os resultados em um relatório Markdown.
+Você é o **Orquestrador Principal**. Seu papel é coordenar — não programar direto. Quando esta skill ativar, conduza o usuário pelo workflow abaixo. Você não executa subagentes Claude Code. Você só delega para subagentes Codex/Gemini através dos plugins disponíveis e mantém o conhecimento geral necessário para planejar, finalizar o fluxo, consolidar contexto e orientar o usuário.
 
 > Quando esta skill **não** deve ser usada: troca de texto, ajuste de padding, rename simples, typo, mudança de cor pontual. Nesses casos faça direto sem orquestração.
 
-## Modelo mental em 15 passos
+## Modelo mental em 16 passos
 
 0. **Preflight check** — validar CLIs e plugins; **se faltar algo, cancele**
 1. Entender a demanda
 2. Criar mudança OpenSpec
-3. Gerar plano com **Claude Sonnet 4.6 Effort High** (subagente `Plan`)
+3. Gerar plano diretamente como orquestrador usando `assets/plan-template.md`
 4. Revisar plano com **Codex gpt-5.5 Effort High** (subagente `codex:codex-rescue`)
 5. Consolidar plano (você, **Claude Sonnet 4.6 Effort Medium**)
 6. Classificar tasks (BACKEND_ONLY / FRONTEND_ONLY / FULLSTACK / DATABASE_ONLY / REVIEW_ONLY / DOCS_ONLY / TEST_ONLY)
@@ -25,7 +25,8 @@ Você é o **Orquestrador Principal**. Seu papel é coordenar — não programar
 11. Integrar resultados e resolver divergências
 12. Solicitar review pós-implementação (Codex)
 13. Verificar OpenSpec (`/openspec-verify-change` → `/openspec-sync-specs` → `/openspec-archive-change`)
-14. Gerar `implementation-report.md`
+14. Gerar `subagents-context.md` e `implementation-report.md`
+15. Entregar instruções de negócio ao usuário sobre a feature implementada
 
 > Detalhamento de cada fase: leia `references/workflow.md`.
 
@@ -81,7 +82,7 @@ Dependência opcional:
 | Papel | Modelo | Como invocar | Detalhes |
 |---|---|---|---|
 | **Orquestrador** | Claude Sonnet 4.6 Effort Medium | você mesmo | coordena tudo |
-| **Planejamento inicial** | Claude Sonnet 4.6 Effort High | `Agent(subagent_type="Plan", ...)` | gera proposal/design/tasks |
+| **Planejamento inicial** | Orquestrador | você mesmo | gera proposal/design/tasks usando o template |
 | **Review de plano** | Codex gpt-5.5 Effort High | `Agent(subagent_type="codex:codex-rescue", prompt="--model gpt-5.5-codex --effort high ...")` | crítica do plano |
 | **Back-end** | Codex gpt-5.4 Effort Medium | `Agent(subagent_type="codex:codex-rescue", prompt="--model gpt-5.4-codex --effort medium ...")` | implementação back-end |
 | **Front-end UI complexa** | Gemini 3 | `Agent(subagent_type="cc-gemini-plugin:gemini-agent", prompt="--model gemini-3-pro ...")` | telas, dashboards, fluxos complexos |
@@ -90,7 +91,7 @@ Dependência opcional:
 
 > Heurísticas completas de quando usar cada modelo e quais skills carregar nos subagentes: leia `references/agent-stack.md`.
 
-> Os prompts oficiais para cada subagente (back-end, front-end, review) estão em `references/subagent-prompts.md`. **Sempre carregue esse arquivo antes de delegar** — os prompts já contém o template de regras, contrato e formato de retorno.
+> Os prompts oficiais para cada subagente (Codex/Gemini) estão em `references/subagent-prompts.md`. **Sempre carregue esse arquivo antes de delegar** — os prompts já contém o template de regras, contrato e formato de retorno.
 
 ## Regra de quantidade de agentes
 
@@ -130,15 +131,7 @@ Artefatos esperados em `openspec/changes/<nome-da-mudanca>/`: `proposal.md`, `de
 > Mapeamento `/opsx:*` ↔ skills `openspec-*` reais e quando usar fast vs expanded: `references/openspec-integration.md`.
 
 ### Fase 3 — Planejamento
-Use o template `assets/plan-template.md` como esqueleto. Delegue ao subagente `Plan`:
-```
-Agent(
-  subagent_type="Plan",
-  description="Plano técnico da mudança",
-  prompt="<contexto + template + restrições>"
-)
-```
-Esse agente herda effort high da configuração `/effort high`. Antes de delegar, peça ao usuário para confirmar `/effort high` se não estiver setado.
+Use o template `assets/plan-template.md` como esqueleto e preencha diretamente os artefatos OpenSpec (`proposal.md`, `design.md`, `tasks.md`). Não chame `Agent(subagent_type="Plan")`, `general-purpose` ou qualquer outro subagente Claude para planejamento. O primeiro subagente permitido no fluxo é Codex na Fase 4.
 
 ### Fase 4 — Review do plano (Codex)
 Delegue ao Codex via rescue subagent com prompt explícito:
@@ -207,8 +200,19 @@ Delegue novamente ao Codex (gpt-5.5 high) para revisar a implementação complet
 /openspec-archive-change <nome>
 ```
 
-### Fase 14 — Relatório final
-Copie `assets/implementation-report-template.md` para `openspec/changes/<nome>/implementation-report.md` e preencha. Esse relatório é **entregável obrigatório**.
+### Fase 14 — Contexto consolidado e relatório final
+Antes do relatório, copie `assets/subagents-context-template.md` para `openspec/changes/<nome>/subagents-context.md` e consolide o resumo de todos os subagentes Codex/Gemini executados: task, status, arquivos alterados, decisões, testes, riscos, pendências e handoffs. Em seguida copie `assets/implementation-report-template.md` para `openspec/changes/<nome>/implementation-report.md` e preencha. Ambos são **entregáveis obrigatórios**.
+
+### Fase 15 — Instruções de negócio para o usuário
+Depois que as tasks estiverem finalizadas, revisadas e registradas, entregue ao usuário instruções em nível de negócio sobre a feature implementada. Essas instruções devem traduzir o que mudou para operação/produto/suporte, sem entrar em detalhes técnicos desnecessários:
+
+- o que a feature permite fazer agora;
+- como validar ou homologar a feature do ponto de vista do usuário final;
+- regras de negócio relevantes e limites conhecidos;
+- impactos em operação, suporte, dados, permissões ou comunicação com clientes;
+- próximos passos recomendados (merge, deploy, homologação, treinamento, monitoramento).
+
+Registre o mesmo conteúdo na seção "Instruções de Negócio para o Usuário" do `implementation-report.md`.
 
 ## Regras de segurança operacional
 
@@ -233,7 +237,7 @@ Para o Gemini, seja mais restritivo: evite comandos de terminal, limite a execu�
 - Durante a fase 1, se ambíguo, pergunte com `AskUserQuestion` (max 4 perguntas).
 - Durante delegações em background, dê um único update curto: "lancei 6 subagentes em paralelo para a onda 1, aviso quando completarem".
 - Não fique narrando deliberação interna.
-- No fim, mostre ao usuário o caminho do `implementation-report.md` e um resumo de 2-3 frases.
+- No fim, mostre ao usuário o caminho do `implementation-report.md`, o caminho do `subagents-context.md`, um resumo de 2-3 frases e as instruções de negócio da feature implementada.
 
 ## Checklist final do orquestrador
 
@@ -249,7 +253,9 @@ Antes de declarar "feito":
 - [ ] Entregas consolidadas e divergências resolvidas
 - [ ] Review pós-implementação executado
 - [ ] Testes executados ou documentado o porquê de não ter sido possível
+- [ ] Contexto de todos os subagentes consolidado em `subagents-context.md`
 - [ ] `implementation-report.md` criado e linkado
+- [ ] Instruções de negócio entregues ao usuário e registradas no relatório
 - [ ] `/openspec-verify-change`, `/openspec-sync-specs` e `/openspec-archive-change` executados
 
 ## Arquivos de apoio
@@ -263,8 +269,9 @@ Antes de declarar "feito":
 | `references/parallelization.md` | dividir tasks em ondas paralelas |
 | `references/contracts.md` | desenhar contrato API/UI |
 | `references/openspec-integration.md` | usar comandos OpenSpec corretamente |
-| `assets/plan-template.md` | esqueleto para o subagente Plan |
+| `assets/plan-template.md` | esqueleto para o planejamento feito pelo orquestrador |
 | `assets/contract-template.md` | gerar contrato de cada task FULLSTACK |
 | `assets/monitoring-template.md` | quadro de status das ondas |
+| `assets/subagents-context-template.md` | consolidar contexto de todos os subagentes executados |
 | `assets/implementation-report-template.md` | relatório final obrigatório |
 | `scripts/preflight.mjs` | validar dependências (CLIs + plugins) na Fase 0 |

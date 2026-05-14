@@ -5,7 +5,6 @@
 | Papel | Modelo | Subagent type | Effort | Skills que carrega |
 |---|---|---|---|---|
 | Orquestrador | Claude Sonnet 4.6 | (você mesmo) | Medium | — |
-| Planejador | Claude Sonnet 4.6 | `Plan` | High | — |
 | Revisor de plano | Codex gpt-5.5 | `codex:codex-rescue` | High | (nenhuma — é review) |
 | Back-end | Codex gpt-5.4 | `codex:codex-rescue` | Medium | back-end relevantes ao projeto |
 | Front-end UI complexa | Gemini 3 | `cc-gemini-plugin:gemini-agent` | — | `frontend-developer`, `ui-ux-designer` |
@@ -15,6 +14,8 @@
 > **Skills disponíveis no ambiente** dependem do que o usuário tem instalado. Antes de delegar, leia a lista de skills disponíveis na seção `<system-reminder>` do início da conversa. Se uma skill esperada não estiver lá, ajuste o prompt (não invente a skill).
 
 > **Context7 MCP é opcional.** Use o resultado `checks.optional.mcp.context7` do preflight. Se `ok=true`, instrua Codex/Gemini a consultar Context7 antes de mexer em APIs, bibliotecas, frameworks, SDKs, CLIs ou cloud services. Se `ok=false`, não bloqueie a execução; registre apenas a limitação quando a task depender de documentação externa atual.
+
+> **Importante:** o orquestrador não executa subagentes Claude Code. Planejamento, consolidação, relatório final, contexto consolidado e instruções de negócio são responsabilidade do próprio orquestrador. Delegações permitidas neste fluxo: `codex:codex-rescue` e `cc-gemini-plugin:gemini-agent`.
 
 ## Heurística — Gemini 3 vs Gemini 3 Flash
 
@@ -145,6 +146,8 @@ Skills relevantes neste repositório:
 
 ## Quando NÃO invocar um subagente
 
+- Planejamento OpenSpec: faça diretamente como orquestrador usando `assets/plan-template.md`.
+- Consolidação/finalização: faça diretamente como orquestrador, usando os retornos de Codex/Gemini.
 - Task de **renomear arquivo**: faça você mesmo.
 - Task de **escrever 1 linha de doc**: faça você mesmo.
 - Task de **commit message**: faça você mesmo.
@@ -158,7 +161,7 @@ Se `codex:codex-rescue` ou `cc-gemini-plugin:gemini-agent` não estiverem no amb
 
 - Avise o usuário no início da fase 2;
 - Sugira instalar via marketplace;
-- Fallback: use `general-purpose` para back-end e `Plan`/`general-purpose` para review;
-- Front-end sem Gemini: você mesmo (Claude) com as skills `frontend-developer` e `ui-ux-designer`.
+- Não use `general-purpose`, `Plan` ou outro subagente Claude como fallback;
+- Cancele o fluxo orquestrado conforme preflight e oriente o usuário a instalar/configurar o plugin faltante.
 
-> Se o usuário não puder/quiser instalar os plugins, o orquestrador continua funcionando — mas perde a especialização e paralelização real (Claude central não roda em paralelo consigo mesmo de forma trivial).
+> Se o usuário não puder/quiser instalar os plugins, use Claude direto fora deste orquestrador. O fluxo multiagente só é válido com Codex/Gemini disponíveis via plugins.
