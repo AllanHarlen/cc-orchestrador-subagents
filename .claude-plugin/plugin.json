@@ -1,0 +1,19 @@
+{
+  "name": "cc-orchestrador-subagents",
+  "version": "0.1.0",
+  "description": "Multi-agent development orchestrator for Claude Code. Coordinates OpenSpec, Claude planning, Codex review/back-end and Gemini front-end subagents in parallel, then produces an implementation report in Markdown.",
+  "author": {
+    "name": "allanharlen"
+  },
+  "keywords": [
+    "orchestrator",
+    "multi-agent",
+    "openspec",
+    "codex",
+    "gemini",
+    "subagents",
+    "planning",
+    "parallel-execution",
+    "workflow"
+  ]
+}
