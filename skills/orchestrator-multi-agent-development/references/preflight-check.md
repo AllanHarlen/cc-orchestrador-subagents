@@ -5,10 +5,10 @@ Este arquivo documenta o que o `scripts/preflight.mjs` verifica, como interpreta
 ## Como rodar
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
 ```
 
-`CLAUDE_PLUGIN_ROOT` é injetado pelo Claude Code quando o plugin está ativo. Em desenvolvimento local, troque pelo caminho absoluto do plugin.
+`CLAUDE_SKILL_DIR` é injetado pelo Claude Code quando a skill está ativa e aponta para a pasta que contém `SKILL.md`. Em desenvolvimento local, rode `node skills/orchestrator-multi-agent-development/scripts/preflight.mjs`.
 
 A saída é sempre JSON. O exit code é:
 

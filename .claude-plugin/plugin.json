@@ -5,6 +5,16 @@
   "author": {
     "name": "allanharlen"
   },
+  "dependencies": [
+    {
+      "name": "cc-gemini-plugin",
+      "marketplace": "cc-gemini-plugin"
+    },
+    {
+      "name": "codex",
+      "marketplace": "openai-codex"
+    }
+  ],
   "keywords": [
     "orchestrator",
     "multi-agent",

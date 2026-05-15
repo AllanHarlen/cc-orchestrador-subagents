@@ -6,6 +6,10 @@
         "name": "allanharlen",
         "email": "allanharlen@gmail.com"
     },
+    "allowCrossMarketplaceDependenciesOn": [
+        "cc-gemini-plugin",
+        "openai-codex"
+    ],
     "plugins": [
         {
             "name": "cc-orchestrador-subagents",

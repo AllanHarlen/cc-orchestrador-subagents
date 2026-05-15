@@ -1,7 +1,7 @@
 ---
-description: Conduzir um workflow de desenvolvimento multiagêntico, com suporte a execucao autonoma via /goal (OpenSpec + planejamento do orquestrador + Codex review + Codex/Gemini execução paralela + relatório final + instruções de negócio)
+description: Conduzir manualmente um workflow de desenvolvimento multiagêntico, com suporte a execucao autonoma via /goal (OpenSpec + planejamento do orquestrador + Codex review + Codex/Gemini execução paralela + relatório final + instruções de negócio)
 argument-hint: "<descrição da demanda — ex.: 'implemente o fluxo de reservas com listagem, criação e cancelamento'>"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
 
 # /orchestrator
@@ -43,7 +43,7 @@ Para trabalho independente entre turnos, o modo recomendado e envolver a demanda
 Use este formato quando o usuario pedir autonomia, modo independente, "continue ate terminar" ou equivalente:
 
 ```text
-/goal Execute a skill orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
 ```
 
 Se o workflow ja estiver rodando sob `/goal`, nao peca confirmacao a cada etapa operacional. Ao final de cada turno, exponha evidencias que o avaliador consegue ler: fase atual, arquivos criados, subagentes pendentes/concluidos, comandos/testes executados com resultado e criterios restantes.
@@ -91,9 +91,9 @@ Detalhes do preflight, remediação por dependência e troubleshooting em `refer
 
 ### Passo 2 — Carregar a skill
 
-`Skill(skill="orchestrator-multi-agent-development")`.
+`Skill(skill="cc-orchestrador-subagents:orchestrator-multi-agent-development")`.
 
-Ela contém o workflow operacional completo (Fase 1 a 14). **Não duplique a lógica aqui** — o SKILL.md é a fonte da verdade.
+Ela contém o workflow operacional completo (Fase 1 a 14). **Não duplique a lógica aqui** — o SKILL.md é a fonte da verdade. Se o Skill tool recusar a chamada porque a skill é manual-only (`disable-model-invocation: true`), leia `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/SKILL.md` e siga o conteúdo diretamente.
 
 ### Passo 3 — Validações leves antes da Fase 1
 

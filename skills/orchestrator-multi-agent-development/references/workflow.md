@@ -30,7 +30,7 @@ Use `/goal` quando o workflow precisa continuar entre turnos sem o usuario dar o
 Condicao padrao para o orquestrador:
 
 ```text
-/goal Execute a skill orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
 ```
 
 Durante cada turno sob `/goal`, mantenha o trabalho andando ate a proxima acao real. Antes de encerrar o turno, escreva um bloco curto de evidencias:
@@ -52,7 +52,7 @@ Se a condicao ainda nao estiver satisfeita, o avaliador dara continuidade. Se ho
 Execute:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
 ```
 
 Saída: JSON com `status: "ok"` ou `status: "failed"`. Em caso de falha, **cancele a operação** e apresente os passos de remediação do campo `remediation`.

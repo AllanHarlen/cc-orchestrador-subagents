@@ -90,7 +90,7 @@ Node é necessário porque o preflight, o `codex-companion.mjs` (codex-plugin-cc
 | `cc-gemini-plugin` | https://github.com/thepushkarp/cc-gemini-plugin | `/plugin marketplace add thepushkarp/cc-gemini-plugin` → `/plugin install cc-gemini-plugin@cc-gemini-plugin` |
 | `openai-codex` (codex-plugin-cc) | https://github.com/openai/codex-plugin-cc | `/plugin marketplace add openai/codex-plugin-cc` → `/plugin install codex@openai-codex` |
 
-Estes plugins expõem os subagentes `cc-gemini-plugin:gemini-agent` e `codex:codex-rescue` que o orquestrador delega.
+Estes plugins expõem os subagentes `cc-gemini-plugin:gemini-agent` e `codex:codex-rescue` que o orquestrador delega. O plugin também declara essas dependências em `.claude-plugin/plugin.json`, então versões recentes do Claude Code tentam resolvê-las automaticamente quando os marketplaces correspondentes já estão configurados.
 
 ### Permissao Bash para Codex
 
@@ -108,9 +108,9 @@ Crie ou mantenha no projeto alvo:
 }
 ```
 
-Esse bloco e o baseline minimo. O arquivo distribuido neste repositorio pode conter um perfil bem mais amplo em `.claude/settings.json` para dar autonomia operacional aos agentes, mas o preflight continua exigindo ao menos uma regra compativel para a execucao do Codex companion.
+Esse bloco e o baseline minimo. O preflight exige ao menos uma regra compativel para a execucao do Codex companion.
 
-Este repositorio ja inclui `.claude/settings.json` com um perfil amplo de permissoes para o orquestrador e agentes orquestrados, incluindo a regra minima `Bash(node:*)`. O preflight tambem valida esse item e cancela cedo se a permissao compativel estiver ausente, evitando que o Codex fique bloqueado pedindo aprovacao de Bash no meio da execucao.
+Este repositorio inclui uma `.claude/settings.json` minima, sem dados de projeto externo, com `Bash(node:*)` e denies basicos. O preflight valida esse item e cancela cedo se a permissao compativel estiver ausente, evitando que o Codex fique bloqueado pedindo aprovacao de Bash no meio da execucao.
 
 ### Modo autonomo com `/goal`
 
@@ -119,7 +119,7 @@ Para o orquestrador trabalhar independente entre turnos, use `/goal`. O `/goal` 
 Este repositorio tambem define `permissions.defaultMode: "auto"` em `.claude/settings.json`, para reduzir prompts de permissao durante execucoes longas. Em ambientes mais restritivos, rode explicitamente:
 
 ```bash
-claude --permission-mode auto -p "/goal Execute a skill orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado."
+claude --permission-mode auto -p "/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado."
 ```
 
 ### Skills do OpenSpec
@@ -190,7 +190,7 @@ Para usar o plugin a partir do próprio diretório de trabalho:
 ### Validar a instalação
 
 1. Liste os comandos disponíveis (`/help`) e confirme que `/orchestrator` aparece.
-2. Liste as skills disponíveis (qualquer `<system-reminder>` no início de uma conversa) e confirme que `orchestrator-multi-agent-development` aparece.
+2. Liste as skills disponíveis e confirme que `cc-orchestrador-subagents:orchestrator-multi-agent-development` aparece como skill do plugin.
 3. Em qualquer projeto, rode:
 
    ```text
@@ -224,7 +224,7 @@ Exemplos:
 Para deixar o Claude continuar entre turnos ate o fim verificavel:
 
 ```text
-/goal Execute a skill orchestrator-multi-agent-development para: implemente o CRUD de reservas com listagem, criacao e cancelamento. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: implemente o CRUD de reservas com listagem, criacao e cancelamento. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
 ```
 
 O avaliador do `/goal` nao le arquivos nem roda comandos por conta propria. Por isso o orquestrador sempre publica no chat os caminhos criados, resultados de testes/validacoes e criterios restantes antes de encerrar cada turno.
@@ -232,16 +232,16 @@ O avaliador do `/goal` nao le arquivos nem roda comandos por conta propria. Por 
 Modo headless:
 
 ```bash
-claude --permission-mode auto -p "/goal Execute a skill orchestrator-multi-agent-development para: implemente o CRUD de reservas com listagem, criacao e cancelamento. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado."
+claude --permission-mode auto -p "/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: implemente o CRUD de reservas com listagem, criacao e cancelamento. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado."
 ```
 
-### Forma implícita
+### Invocacao direta da skill
 
-A skill `orchestrator-multi-agent-development` tem descrição "pushy" e ativa sozinha quando você descreve uma demanda que se encaixa no perfil (planejamento + revisão + execução coordenada). Exemplo:
+A skill é manual-only (`disable-model-invocation: true`) para evitar que Claude inicie um workflow com efeitos colaterais apenas por reconhecer palavras como "implemente" ou "refatore". Prefira `/orchestrator`; se quiser chamar a skill diretamente, use o nome com namespace:
 
-> "Preciso planejar e implementar a integração com o gateway de pagamento PIX, com fila assíncrona, retry e nova tela de acompanhamento."
-
-O Claude vai propor invocar a skill — basta confirmar.
+```text
+/cc-orchestrador-subagents:orchestrator-multi-agent-development <demanda>
+```
 
 ### O que esperar em cada fase
 
@@ -508,6 +508,8 @@ cc-orchestrador-subagents/
         │   ├── parallelization.md
         │   ├── contracts.md
         │   └── openspec-integration.md
+        ├── scripts/
+        │   └── preflight.mjs
         └── assets/
             ├── plan-template.md
             ├── contract-template.md

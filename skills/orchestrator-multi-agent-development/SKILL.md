@@ -1,6 +1,8 @@
 ---
 name: orchestrator-multi-agent-development
-description: Multi-agent development orchestrator. Use sempre que o usuário pedir para planejar, implementar, refatorar, migrar, integrar ou corrigir algo com impacto arquitetural — qualquer pedido que se beneficie de OpenSpec + plano + revisão + execução paralela. O orquestrador planeja e consolida diretamente; ele só delega execução/review para subagentes Codex e Gemini via plugins, define contratos API/UI antes do paralelismo, monitora execução, armazena contexto consolidado dos subagentes e fecha com implementation-report.md + instruções de negócio para o usuário. Triggers em PT-BR e EN: "implementa", "refatora", "migração", "novo módulo", "nova feature", "orquestrar", "subagentes", "plano técnico", "OpenSpec", "multiagêntico", "multi-agent", "orchestrate", "delegate to Codex/Gemini", "parallel implementation", "full-stack feature". NÃO use para tarefas triviais (typo, padding, renomear variável) — nesses casos execute direto.
+description: Manual multi-agent development orchestrator for architectural work. Invoke through /orchestrator or the namespaced plugin skill when a task needs OpenSpec, planning, Codex review, Codex/Gemini delegation, monitoring, final review, subagent context, and an implementation report. Do not use for trivial edits.
+disable-model-invocation: true
+argument-hint: "<demanda de desenvolvimento com impacto arquitetural>"
 ---
 
 # Orquestrador Multiagêntico de Desenvolvimento
@@ -16,7 +18,7 @@ O modo preferencial para o orquestrador trabalhar de forma independente e rodar 
 Quando o usuario pedir autonomia, "continue ate terminar", "trabalhe independente" ou equivalente, oriente ou retome com uma condicao neste formato:
 
 ```text
-/goal Execute a skill orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
 ```
 
 Regras enquanto `/goal` estiver ativo:
@@ -83,7 +85,7 @@ Quando o gate disparar:
 **Antes** de qualquer outra coisa, valide o ambiente. Execute:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
 ```
 
 O script retorna JSON e exit code:
