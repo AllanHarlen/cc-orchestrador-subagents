@@ -92,6 +92,36 @@ Node é necessário porque o preflight, o `codex-companion.mjs` (codex-plugin-cc
 
 Estes plugins expõem os subagentes `cc-gemini-plugin:gemini-agent` e `codex:codex-rescue` que o orquestrador delega.
 
+### Permissao Bash para Codex
+
+O subagente `codex:codex-rescue` e um wrapper fino: ele chama `node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs" task ...` via `Bash` para acionar o Codex CLI. Como esse subagente roda em background, ele precisa que o projeto libere essa chamada antes do `/orchestrator` comecar.
+
+Crie ou mantenha no projeto alvo:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)"
+    ]
+  }
+}
+```
+
+Esse bloco e o baseline minimo. O arquivo distribuido neste repositorio pode conter um perfil bem mais amplo em `.claude/settings.json` para dar autonomia operacional aos agentes, mas o preflight continua exigindo ao menos uma regra compativel para a execucao do Codex companion.
+
+Este repositorio ja inclui `.claude/settings.json` com um perfil amplo de permissoes para o orquestrador e agentes orquestrados, incluindo a regra minima `Bash(node:*)`. O preflight tambem valida esse item e cancela cedo se a permissao compativel estiver ausente, evitando que o Codex fique bloqueado pedindo aprovacao de Bash no meio da execucao.
+
+### Modo autonomo com `/goal`
+
+Para o orquestrador trabalhar independente entre turnos, use `/goal`. O `/goal` depende de hooks do Claude Code e de workspace trusted. O preflight verifica configuracoes locais conhecidas que quebram hooks (`disableAllHooks` e `allowManagedHooksOnly`); se houver uma politica managed externa, o proprio Claude Code avisara quando `/goal` for usado.
+
+Este repositorio tambem define `permissions.defaultMode: "auto"` em `.claude/settings.json`, para reduzir prompts de permissao durante execucoes longas. Em ambientes mais restritivos, rode explicitamente:
+
+```bash
+claude --permission-mode auto -p "/goal Execute a skill orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado."
+```
+
 ### Skills do OpenSpec
 
 Em `~/.claude/skills/`, as seguintes skills são esperadas (instaladas pelo `openspec` CLI):
@@ -189,6 +219,22 @@ Exemplos:
 /orchestrator migre o storage de avatares do disco local para S3 com fallback durante o cutover
 ```
 
+### Forma autonoma com `/goal`
+
+Para deixar o Claude continuar entre turnos ate o fim verificavel:
+
+```text
+/goal Execute a skill orchestrator-multi-agent-development para: implemente o CRUD de reservas com listagem, criacao e cancelamento. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+```
+
+O avaliador do `/goal` nao le arquivos nem roda comandos por conta propria. Por isso o orquestrador sempre publica no chat os caminhos criados, resultados de testes/validacoes e criterios restantes antes de encerrar cada turno.
+
+Modo headless:
+
+```bash
+claude --permission-mode auto -p "/goal Execute a skill orchestrator-multi-agent-development para: implemente o CRUD de reservas com listagem, criacao e cancelamento. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado."
+```
+
 ### Forma implícita
 
 A skill `orchestrator-multi-agent-development` tem descrição "pushy" e ativa sozinha quando você descreve uma demanda que se encaixa no perfil (planejamento + revisão + execução coordenada). Exemplo:
@@ -201,6 +247,7 @@ O Claude vai propor invocar a skill — basta confirmar.
 
 | Fase | O que o orquestrador faz | O que você precisa fazer |
 |---|---|---|
+| -1. Goal | quando usado com `/goal`, publica evidencias e continua entre turnos ate a condicao ser cumprida | nada, salvo bloqueios reais |
 | 0. Preflight | roda `scripts/preflight.mjs`, valida CLIs e plugins | nada, ou instalar o que faltar |
 | 1. Entendimento | extrai objetivo, escopo, stack, riscos | responder a perguntas com `AskUserQuestion` se algo for ambíguo |
 | 2. OpenSpec | cria `openspec/changes/<nome>/` com `/openspec-new-change` + `/openspec-ff-change` | confirmar o nome da mudança |
@@ -221,8 +268,8 @@ O Claude vai propor invocar a skill — basta confirmar.
 
 - **Preflight falhou:** instale o que falta e rode `/orchestrator` de novo.
 - **Plano reprovado pelo Codex:** o orquestrador re-elabora (ou pede sua decisão) e re-revisa.
-- **Subagente falhou ou esgotou cota:** Gemini faz handoff para o orquestrador/Codex; Codex tenta alternativa viável ou bloqueia para sua decisão.
-- **Você quer abortar:** diga "cancela" no chat — o orquestrador para e mantém os artefatos OpenSpec para retomada futura.
+- **Subagente falhou ou esgotou cota:** o orquestrador registra a evidência, atualiza `monitoring.md` e só redelega para subagente permitido (normalmente Codex gpt-5.4 medium) se não houver pausa/cancelamento do usuário; caso contrário bloqueia para sua decisão.
+- **Você quer abortar:** diga "cancela" no chat — o orquestrador marca `CANCELLED`, não lança novos subagentes, não faz handoff automático e mantém os artefatos OpenSpec para retomada futura.
 
 ---
 
@@ -474,6 +521,8 @@ cc-orchestrador-subagents/
 ## Princípios de design
 
 - **O orquestrador não programa direto.** Ele planeja, revisa, divide, delega, monitora e consolida.
+- **Cancelamento é gate operacional.** Se o usuário pedir pausa/cancelamento ou apontar problema bloqueante, o fluxo para antes de qualquer nova delegação.
+- **Sem remendos manuais durante o workflow.** Ajustes pontuais, recuperação de falha e handoffs são delegados a Codex gpt-5.4 medium; Claude mantém contexto e artefatos.
 - **Preflight cancela ao invés de degradar.** Sem agentes especializados, a skill perde valor.
 - **Progressive disclosure.** `SKILL.md` é o guia operacional; detalhes pesados ficam em `references/`.
 - **Templates externos.** Tudo que é "copia e preenche" mora em `assets/` para evitar reescrever o mesmo Markdown em cada execução.

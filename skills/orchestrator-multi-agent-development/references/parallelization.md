@@ -90,7 +90,7 @@ Task A — adicionar rota /reservas em App.tsx
 Task B — adicionar rota /pagamentos em App.tsx
 ```
 
-**Não paralelizar.** Ambas tocam o mesmo arquivo. Faça as duas em sequência (uma onda com Task A, próxima onda com Task B), ou pré-aloque o arquivo: você (orquestrador) adiciona ambas as rotas, e cada subagente trata só do componente correspondente.
+**Não paralelizar.** Ambas tocam o mesmo arquivo. Faça as duas em sequência (uma onda com Task A, próxima onda com Task B), ou crie uma task preparatória delegada ao Codex gpt-5.4 medium para ajustar o arquivo central antes dos demais subagentes tratarem apenas dos componentes correspondentes.
 
 ## Detecção de conflito antes da execução
 

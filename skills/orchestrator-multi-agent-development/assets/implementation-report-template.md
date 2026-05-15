@@ -28,6 +28,7 @@
 - **Modelo:** Claude Sonnet 4.6
 - **Effort:** Medium
 - **Papel:** coordenação, decisão, consolidação e relatório
+- **Limite:** não executou implementação direta; código/testes/migrations/componentes foram alterados apenas por subagentes
 
 ### Planejamento
 - **Responsável:** Orquestrador
@@ -176,6 +177,16 @@ Contexto completo: `openspec/changes/<nome>/subagents-context.md`.
 
 - <pendência 1> — owner: <quem> — prazo: <quando>
 - <pendência 2> — ...
+
+## 14.1. Pausa ou Cancelamento
+
+> Preencha quando o workflow tiver sido interrompido por gate do usuário. Se não ocorreu, escreva "N/A".
+
+- **Status:** `<N/A | PAUSED | CANCELLED>`
+- **Motivo:** `<texto curto>`
+- **Fase interrompida:** `<fase>`
+- **Artefatos preservados:** `<lista>`
+- **Condição para retomada:** `<instrução explícita do usuário | plano/contrato revisado | outra>`
 
 ## 15. Conclusão
 

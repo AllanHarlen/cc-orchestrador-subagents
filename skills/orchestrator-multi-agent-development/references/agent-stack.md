@@ -17,6 +17,8 @@
 
 > **Importante:** o orquestrador não executa subagentes Claude Code. Planejamento, consolidação, relatório final, contexto consolidado e instruções de negócio são responsabilidade do próprio orquestrador. Delegações permitidas neste fluxo: `codex:codex-rescue` e `cc-gemini-plugin:gemini-agent`.
 
+> **Limite de execução:** dentro do workflow orquestrado, o orquestrador não edita código produtivo, testes, migrations ou componentes. Correções, ajustes pontuais, handoffs e recuperação de falha operacional devem ir para Codex gpt-5.4 medium, exceto reviews formais em Codex gpt-5.5 high.
+
 ## Heurística — Gemini 3 vs Gemini 3 Flash
 
 ### Use **Gemini 3** (pro / completo) para:
@@ -148,10 +150,8 @@ Skills relevantes neste repositório:
 
 - Planejamento OpenSpec: faça diretamente como orquestrador usando `assets/plan-template.md`.
 - Consolidação/finalização: faça diretamente como orquestrador, usando os retornos de Codex/Gemini.
-- Task de **renomear arquivo**: faça você mesmo.
-- Task de **escrever 1 linha de doc**: faça você mesmo.
-- Task de **commit message**: faça você mesmo.
-- Task de **revisar import order**: faça você mesmo ou peça Codex sem skills extras.
+- Artefatos de coordenação do workflow (`proposal.md`, `design.md`, `tasks.md`, `monitoring.md`, `subagents-context.md`, `implementation-report.md`): faça diretamente como orquestrador.
+- Tarefa trivial fora do `/orchestrator` (typo, rename simples, commit message): não use esta skill; trate como execução direta fora do fluxo orquestrado.
 
 Nunca invoque um agente "porque pode". O custo é tempo + tokens + risco de escopo expandido.
 

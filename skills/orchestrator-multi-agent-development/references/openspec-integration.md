@@ -1,6 +1,6 @@
 # Integração OpenSpec
 
-O OpenSpec é o backbone de planejamento e rastreamento da mudança. Esta skill assume que o ambiente tem as skills `openspec-*` instaladas. Se não tiver, use o fallback documentado no fim.
+O OpenSpec é o backbone de planejamento e rastreamento da mudança. Esta skill assume que o ambiente tem as skills `openspec-*` instaladas. Se não tiver, o preflight cancela o workflow orquestrado.
 
 ## Skills disponíveis
 
@@ -72,20 +72,14 @@ openspec/
 - **`/openspec-archive-change` é destrutivo no sentido de mover pastas.** Só rode depois de garantir `implementation-report.md` e `subagents-context.md` salvos e o usuário ciente.
 - **Pode haver várias mudanças em paralelo no repo.** Não misture artefatos de mudanças diferentes — cada uma em seu diretório.
 
-## Fallback se OpenSpec não estiver disponível
+## Se OpenSpec não estiver disponível
 
 Se as skills `openspec-*` não estiverem no ambiente:
 
-1. Avise o usuário e ofereça instalar via `npx skills add anthropics/skills@openspec-*` (ou o canal apropriado).
-2. Se o usuário não puder instalar, crie a estrutura manualmente:
-
-```
-mkdir -p openspec/changes/<nome>/specs
-mkdir -p openspec/changes/<nome>/contracts
-```
-
-3. Preencha proposal/design/tasks diretamente como orquestrador.
-4. Pule os comandos `/openspec-*` e use o `implementation-report.md` como entregável.
+1. Cancele o workflow conforme `references/preflight-check.md`.
+2. Mostre a remediação do preflight.
+3. Não crie estrutura manual, não pule comandos `/openspec-*` e não continue como Claude direto dentro do `/orchestrator`.
+4. Se o usuário quiser trabalhar sem OpenSpec, isso deve acontecer fora deste fluxo orquestrado.
 
 ## Mapeamento de comandos `/opsx:*` mencionados em outras referências
 

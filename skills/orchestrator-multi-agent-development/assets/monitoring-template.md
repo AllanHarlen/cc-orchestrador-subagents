@@ -8,6 +8,8 @@
 |---|---|
 | `PENDING` | task identificada, ainda não delegada |
 | `RUNNING` | agente rodando em background |
+| `PAUSED` | usuário pediu pausa ou há problema bloqueante aguardando decisão |
+| `CANCELLED` | usuário cancelou/abortou a execução atual |
 | `BLOCKED` | agente reportou bloqueio, precisa de input do orquestrador ou usuário |
 | `NEEDS_SYNC` | contrato divergiu entre back-end e front-end, precisa alinhar |
 | `DONE` | agente concluiu, aguardando integração na fase 11 |
@@ -34,6 +36,7 @@
   - Arquivos parciais: `<lista | nenhum informado>`
   - Fallback escolhido: `<nenhum | codex:codex-rescue | outro modelo | decisão do usuário>`
   - Próxima ação: `<aguardar | check-in | redelegar | pedir decisão | integrar>`
+  - Gate do usuário: `<ok | PAUSED | CANCELLED>`
 - **Última atualização:**
   - `<timestamp>` — back-end criou entidade + repository
   - `<timestamp>` — front-end iniciou tela de listagem
@@ -71,6 +74,8 @@
 | `<ts>` | T2 | delegado (back-end only) |
 | `<ts>` | T2 | DONE — relatório curto: <link> |
 | `<ts>` | T1 | SLOW_CHECKIN — pedido status: progresso, arquivos, bloqueios, riscos, ETA, cota/tools/escrita |
+| `<ts>` | T1 | PAUSED — usuário pediu pausa/problema bloqueante; nenhuma nova delegação será feita |
+| `<ts>` | T1 | CANCELLED — usuário cancelou; artefatos preservados para retomada futura |
 | `<ts>` | T1 | QUOTA_EXHAUSTED — agente: `<gemini/codex>`; motivo: `<rate limit>`; arquivos parciais: `<lista>`; fallback: `<ação>` |
 | `<ts>` | T1 | NEEDS_SYNC — campo `status` divergente |
 | `<ts>` | T1 | contrato atualizado, ambos redelegados |
@@ -81,6 +86,8 @@
 - Tasks totais: `<N>`
 - Em PENDING: `<N>`
 - Em RUNNING: `<N>`
+- Em PAUSED: `<N>`
+- Em CANCELLED: `<N>`
 - Em DONE: `<N>`
 - Em REVIEWED: `<N>`
 - Em FAILED: `<N>`

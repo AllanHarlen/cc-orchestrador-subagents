@@ -23,6 +23,28 @@ Este arquivo expande as fases do `SKILL.md`. Leia a fase específica quando prec
 
 ---
 
+## Modo Goal Autonomo
+
+Use `/goal` quando o workflow precisa continuar entre turnos sem o usuario dar o proximo empurrao. A condicao precisa ser mensuravel e demonstravel na conversa, porque o avaliador do `/goal` nao executa comandos nem le arquivos por conta propria.
+
+Condicao padrao para o orquestrador:
+
+```text
+/goal Execute a skill orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+```
+
+Durante cada turno sob `/goal`, mantenha o trabalho andando ate a proxima acao real. Antes de encerrar o turno, escreva um bloco curto de evidencias:
+
+- fase atual;
+- artefatos criados/atualizados;
+- subagentes em execucao, concluidos, bloqueados ou com cota esgotada;
+- comandos/testes/validacoes executados e resultado;
+- criterios restantes da condicao.
+
+Se a condicao ainda nao estiver satisfeita, o avaliador dara continuidade. Se houver bloqueio sem recuperacao segura, registre `BLOCKED`/`PAUSED`, explique a pendencia e preserve os artefatos.
+
+---
+
 ## Fase 0 — Preflight Check
 
 **Obrigatória. Bloqueante. Roda antes de qualquer outra coisa.**
@@ -45,6 +67,7 @@ Dependências verificadas:
 | Plugin `cc-gemini-plugin` | Claude Code plugin | `ls ~/.claude/plugins/cache/cc-gemini-plugin/` |
 | Plugin `openai-codex` | Claude Code plugin | `ls ~/.claude/plugins/cache/openai-codex/codex/` |
 | Skills `openspec-*` | filesystem | `ls ~/.claude/skills | grep openspec` |
+| `/goal` hooks | Claude Code settings | `disableAllHooks` nao pode estar `true`; workspace precisa estar trusted |
 | `context7` MCP | opcional | ver `checks.optional.mcp.context7` no JSON |
 
 Quando o preflight retorna falha, **não tente fallback automático**. A política é: cancele com a mensagem padrão (formato em `references/preflight-check.md`) e oriente o usuário a instalar/atualizar/configurar o que falta antes de invocar novamente.
@@ -52,6 +75,30 @@ Quando o preflight retorna falha, **não tente fallback automático**. A políti
 Context7 é exceção: ele aparece em `checks.optional.mcp.context7`, não entra em `failed` e nunca bloqueia. Se estiver disponível, use-o nos prompts de Codex/Gemini para confirmar documentação atual de bibliotecas/frameworks/APIs.
 
 > Detalhes completos de cada dependência, remediação e troubleshooting cross-platform: `references/preflight-check.md`.
+
+---
+
+## Gate operacional entre fases
+
+Antes de iniciar qualquer fase, lançar subagentes, fazer check-in ou redelegar trabalho, confirme a mensagem mais recente do usuário e o estado registrado em `monitoring.md`.
+
+Pare imediatamente quando houver:
+
+- cancelamento explícito: "cancela", "aborta", "para", "não continue";
+- pausa: "pausa", "aguarde", "espera";
+- reprovação ou problema bloqueante: "não é isso", "reprovado", "tem problema", mudança de escopo que invalide plano/contrato;
+- status já registrado como `CANCELLED` ou `PAUSED`.
+
+Ao parar:
+
+1. Não invoque novos subagentes.
+2. Não faça handoff automático.
+3. Não implemente código diretamente.
+4. Atualize `monitoring.md` com `CANCELLED` ou `PAUSED`, incluindo motivo e timestamp.
+5. Se já existirem retornos parciais, registre-os em `subagents-context.md` para retomada.
+6. Responda ao usuário com estado atual, artefatos preservados e condição mínima para retomar.
+
+Cancelamento é terminal para a execução atual. Retomada exige uma nova instrução explícita do usuário confirmando o plano revisado ou autorizando uma nova onda.
 
 ---
 
@@ -321,6 +368,8 @@ Mantenha `openspec/changes/<nome>/monitoring.md` (cópia de `assets/monitoring-t
 
 - `PENDING` — ainda não delegado
 - `RUNNING` — agente rodando
+- `PAUSED` — usuário pediu pausa ou há problema bloqueante aguardando decisão
+- `CANCELLED` — usuário cancelou/abortou a execução atual
 - `BLOCKED` — agente reportou bloqueio (precisa de input)
 - `NEEDS_SYNC` — contrato divergiu, precisa alinhar entre dupla
 - `DONE` — agente concluiu, aguardando integração
@@ -340,17 +389,17 @@ Interprete o check-in assim:
 
 - resposta com progresso útil → mantenha `RUNNING` e registre `SLOW_CHECKIN` no log;
 - resposta com cota/rate limit/capacidade (`quota exceeded`, `rate limit`, `billing`, `resource exhausted`, `model capacity`, `daily limit` ou similar) → marque `QUOTA_EXHAUSTED`;
-- resposta com falha operacional do Gemini em tool/escrita/criação → pare de insistir no Gemini e faça handoff para orquestrador/Codex;
+- resposta com falha operacional do Gemini em tool/escrita/criação → pare de insistir no Gemini, registre evidência e delegue revisão/continuação para Codex gpt-5.4 medium se o gate do usuário permitir;
 - resposta genérica ou sem progresso útil → marque `BLOCKED` ou redelegue para Codex quando for seguro.
 
 Política de recuperação:
 
-- `QUOTA_EXHAUSTED` no Gemini: revise arquivos parciais reportados e redelegue a continuação para `codex:codex-rescue`;
-- falha operacional do Gemini em tools/escrita/criação: orquestrador/Codex revisa o estado parcial antes de continuar;
+- `QUOTA_EXHAUSTED` no Gemini: registre arquivos parciais reportados e redelegue a continuação para `codex:codex-rescue` (`--model gpt-5.4-codex --effort medium`) se não houver cancelamento/pausa;
+- falha operacional do Gemini em tools/escrita/criação: orquestrador registra o estado parcial e delega revisão/continuação para Codex gpt-5.4 medium antes de continuar;
 - `QUOTA_EXHAUSTED` no Codex: tente outro Codex/modelo apenas se houver caminho viável; caso contrário marque `BLOCKED` e peça decisão ao usuário;
 - falha não relacionada a cota continua como `FAILED`, `BLOCKED` ou `NEEDS_SYNC`, conforme o caso.
 
-Quando todas as tasks da onda chegarem em `DONE`, `FAILED`, `QUOTA_EXHAUSTED` ou `BLOCKED`, prossiga para a fase 11 apenas se houver ação clara de integração, redelegação ou decisão do usuário.
+Quando todas as tasks da onda chegarem em `DONE`, `FAILED`, `QUOTA_EXHAUSTED` ou `BLOCKED`, prossiga para a fase 11 apenas se houver ação clara de integração, redelegação ou decisão do usuário. Se qualquer item estiver `PAUSED` ou `CANCELLED`, não avance.
 
 ---
 
@@ -364,12 +413,12 @@ Para cada task concluída:
 4. cheque se algum agente removeu testes ou ignorou erro de build;
 5. resolva divergências:
    - **campo divergente** (ex.: `description` vs `descricao`): decida com base no padrão do projeto, registre no relatório;
-   - **conflito de arquivo**: se duas duplas tocaram o mesmo arquivo, faça merge mental e redelegue ajuste pontual;
+   - **conflito de arquivo**: se duas duplas tocaram o mesmo arquivo, decida a estratégia e redelegue ajuste pontual para Codex gpt-5.4 medium;
    - **falha de agente**: redelegue com prompt ajustado;
    - **cota esgotada**: aplique a política de recuperação da fase 10 antes de integrar;
-   - **falha operacional do Gemini**: revise arquivos parciais e prefira handoff para Codex.
+   - **falha operacional do Gemini**: registre arquivos parciais e faça handoff para Codex.
 
-Se houver ajuste pontual (até ~10 linhas e sem decisão arquitetural), você pode resolver direto. Se for maior, redelegue.
+Se houver ajuste pontual, delegue para `codex:codex-rescue` com `--model gpt-5.4-codex --effort medium` e prompt restrito ao arquivo/trecho. O orquestrador não edita código produtivo, testes, migrations ou componentes diretamente durante o workflow.
 
 ---
 

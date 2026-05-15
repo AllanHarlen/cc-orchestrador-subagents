@@ -6,13 +6,14 @@
 ## Resumo Geral
 
 - **Mudança:** `<nome>`
-- **Status final:** `<concluída | concluída com pendências | bloqueada>`
+- **Status final:** `<concluída | concluída com pendências | bloqueada | pausada | cancelada>`
 - **Ondas executadas:** `<N>`
 - **Subagentes executados:** `<N total>`
 - **Subagentes por tipo:**
   - `codex:codex-rescue`: `<N>`
   - `cc-gemini-plugin:gemini-agent`: `<N>`
 - **Fallbacks/handoffs realizados:** `<nenhum | resumo>`
+- **Gate do usuário:** `<ok | pausado | cancelado>`
 - **Pendências globais:** `<nenhuma | lista curta>`
 
 ## Linha do Tempo
@@ -29,7 +30,7 @@
 - **Task:** `<ID e título>`
 - **Subagent type:** `<codex:codex-rescue | cc-gemini-plugin:gemini-agent>`
 - **Modelo:** `<gpt-5.4-codex | gpt-5.5-codex | gemini-3-pro | gemini-3-flash>`
-- **Status final:** `<DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED | NEEDS_SYNC>`
+- **Status final:** `<DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED | NEEDS_SYNC | PAUSED | CANCELLED>`
 - **Resumo entregue:** `<2-5 linhas>`
 - **Arquivos criados/alterados:**
   - `<caminho>`
@@ -61,3 +62,15 @@
 ## Contexto para Retomada
 
 <Explique em 5-10 linhas o estado atual da mudança para alguém retomar sem reler todos os retornos dos subagentes. Inclua o que já foi integrado, o que foi validado, o que ainda exige decisão e quais arquivos/contratos são fonte da verdade.>
+
+## Cancelamento ou Pausa pelo Usuário
+
+> Preencha apenas quando o gate de interrupção disparar.
+
+- **Status:** `<PAUSED | CANCELLED>`
+- **Motivo informado pelo usuário:** `<texto curto>`
+- **Fase interrompida:** `<fase>`
+- **Subagentes em execução no momento:** `<lista | nenhum>`
+- **Subagentes concluídos antes da interrupção:** `<lista | nenhum>`
+- **Artefatos preservados:** `<proposal/design/tasks/contracts/monitoring/etc.>`
+- **Condição para retomada:** `<nova aprovação do plano | contrato revisto | nova instrução explícita | outra>`

@@ -9,8 +9,56 @@ Você é o **Orquestrador Principal**. Seu papel é coordenar — não programar
 
 > Quando esta skill **não** deve ser usada: troca de texto, ajuste de padding, rename simples, typo, mudança de cor pontual. Nesses casos faça direto sem orquestração.
 
-## Modelo mental em 16 passos
+## Modo Goal Autonomo
 
+O modo preferencial para o orquestrador trabalhar de forma independente e rodar sob `/goal`. O `/goal` mantem a sessao ativa entre turnos ate que um avaliador confirme que a condicao foi demonstrada na conversa.
+
+Quando o usuario pedir autonomia, "continue ate terminar", "trabalhe independente" ou equivalente, oriente ou retome com uma condicao neste formato:
+
+```text
+/goal Execute a skill orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+```
+
+Regras enquanto `/goal` estiver ativo:
+
+1. Nao devolva controle ao usuario apenas porque uma fase terminou; avance para a proxima fase clara.
+2. Nao peca confirmacao para cada etapa operacional ja coberta pelo plano/contrato; pergunte somente quando houver ambiguidade bloqueante, decisao de produto, risco de seguranca, cota/falha sem recuperacao segura ou gate de interrupcao do usuario.
+3. Ao final de cada turno, publique evidencias legiveis pelo avaliador: fase atual, artefatos criados, subagentes pendentes/concluidos, comandos/testes com resultado e criterios restantes.
+4. Se precisar parar antes da conclusao, registre `PAUSED`, `BLOCKED` ou `CANCELLED` nos artefatos e explique a condicao minima para retomar.
+
+Nao tente simular `/goal` manualmente. Se a sessao nao estiver sob `/goal`, execute o workflow normal no turno atual e, se ainda houver trabalho, entregue ao usuario o comando `/goal` preenchido para continuar autonomamente.
+
+## Regra de autoridade do orquestrador
+
+Durante um workflow desta skill, o Claude é apenas o centro de coordenação. Ele pode ler, planejar, criar/atualizar artefatos OpenSpec, contratos, monitoring, contexto consolidado e relatório final. Ele **não coloca a mão na implementação** até o workflow estar finalizado: nada de editar código produtivo, testes, migrations, componentes, handlers ou "ajustes pontuais" diretamente.
+
+Toda atividade de implementação, correção, teste produtivo, handoff ou recuperação de falha operacional deve ser delegada para subagentes. O padrão para atividades paralelas, ajustes pontuais e continuação de trabalho é:
+
+```text
+codex:codex-rescue
+--model gpt-5.4-codex --effort medium
+```
+
+Exceções: review de plano e review pós-implementação usam Codex gpt-5.5 high; front-end pode usar Gemini conforme `references/agent-stack.md`.
+
+## Gate de interrupção do usuário
+
+Antes de iniciar qualquer fase, antes de lançar subagentes e antes de redelegar trabalho, verifique a mensagem mais recente do usuário. Se houver sinal de cancelamento, pausa, reprovação ou problema bloqueante, **pare o workflow imediatamente**.
+
+Sinais incluem: "cancela", "aborta", "para", "não continue", "pausa", "aguarde", "espera", "reprovado", "não é isso", "problema", "bloqueia", ou uma correção de escopo que invalide o plano/contrato atual.
+
+Quando o gate disparar:
+
+1. Não invoque novos subagentes.
+2. Não avance de fase.
+3. Não implemente nada diretamente.
+4. Marque o estado como `CANCELLED` ou `PAUSED` nos artefatos já existentes (`monitoring.md` e, se aplicável, `subagents-context.md`).
+5. Preserve os artefatos OpenSpec para retomada.
+6. Responda ao usuário com: fase atual, subagentes em execução/concluídos, artefatos preservados, pendências e instrução objetiva para retomar.
+
+## Modelo mental em 17 passos
+
+-1. **Goal autonomy** — se o usuario pediu trabalho independente, rode ou retome sob `/goal` com condicao mensuravel
 0. **Preflight check** — validar CLIs e plugins; **se faltar algo, cancele**
 1. Entender a demanda
 2. Criar mudança OpenSpec
@@ -99,7 +147,7 @@ Dependência opcional:
 - 1 task FRONTEND_ONLY → **1 agente Gemini** (3 ou 3 Flash conforme complexidade)
 - 1 task FULLSTACK → **dupla (Codex + Gemini)**
 - 3 tasks FULLSTACK independentes → até **6 agentes em paralelo** (3 duplas)
-- Task DOCS_ONLY / REVIEW_ONLY → orquestrador ou Codex sozinho
+- Task DOCS_ONLY / REVIEW_ONLY → orquestrador somente para artefatos do workflow; se exigir alteração em código, testes ou docs do produto, delegue para Codex
 
 Nunca invoque um agente que não tem trabalho real para fazer. A regra é: **menor número de agentes que entrega a task com contrato respeitado**.
 
@@ -181,11 +229,11 @@ Antes de delegar para Codex ou Gemini, confira o resultado opcional do preflight
 - se for `false`, remova ou ajuste o bloco para não exigir Context7. A ausência de Context7 nunca bloqueia a execução.
 
 ### Fase 10 — Monitoramento
-Mantenha o quadro de status em `openspec/changes/<nome>/monitoring.md` (cópia de `assets/monitoring-template.md`). Status válidos: PENDING / RUNNING / BLOCKED / NEEDS_SYNC / DONE / FAILED / QUOTA_EXHAUSTED / REVIEWED.
+Mantenha o quadro de status em `openspec/changes/<nome>/monitoring.md` (cópia de `assets/monitoring-template.md`). Status válidos: PENDING / RUNNING / PAUSED / CANCELLED / BLOCKED / NEEDS_SYNC / DONE / FAILED / QUOTA_EXHAUSTED / REVIEWED.
 
 Atualize conforme as notificações de conclusão dos agentes chegam. **Não faça polling contínuo**, mas faça um check-in leve (`SLOW_CHECKIN`) quando uma task parecer estagnada: bloqueando a onda, sem atualização útil, ou muito fora do esperado para sua complexidade. O check-in deve pedir progresso real, arquivos tocados, bloqueios, riscos, ETA e se há falha de cota/tool/escrita.
 
-Se Gemini ou Codex reportarem cota/rate limit/capacidade (`quota exceeded`, `rate limit`, `billing`, `resource exhausted`, `model capacity`, `daily limit` ou similar), marque `QUOTA_EXHAUSTED`. Para Gemini, revise o estado parcial e prefira redelegar a continuação para `codex:codex-rescue`. Para Codex, tente outro Codex/modelo apenas se houver caminho viável; senão marque `BLOCKED` e peça decisão do usuário.
+Se Gemini ou Codex reportarem cota/rate limit/capacidade (`quota exceeded`, `rate limit`, `billing`, `resource exhausted`, `model capacity`, `daily limit` ou similar), marque `QUOTA_EXHAUSTED`. Para Gemini, registre o estado parcial e redelegue a continuação para `codex:codex-rescue` (`--model gpt-5.4-codex --effort medium`) apenas se o gate do usuário permitir. Para Codex, tente outro Codex/modelo apenas se houver caminho viável; senão marque `BLOCKED` e peça decisão do usuário.
 
 ### Fase 11 — Integração
 Compare entregas com `tasks.md`. Valide o contrato. Resolva divergências (ex.: campo em PT vs EN) explicitando a decisão. Se precisar ajuste pontual, delegue de novo, não programe você mesmo.
@@ -230,7 +278,9 @@ Você **não** deve permitir que subagentes:
 
 Se algum subagente reportar uma dessas situações, **pause a onda** e converse com o usuário antes de continuar.
 
-Para o Gemini, seja mais restritivo: evite comandos de terminal, limite a execução aos arquivos/diretórios delegados e, em falhas de escrita/criação de arquivos ou tools instáveis, interrompa o uso do Gemini e faça handoff para o orquestrador/Codex revisar o estado parcial.
+Para o Gemini, seja mais restritivo: evite comandos de terminal, limite a execução aos arquivos/diretórios delegados e, em falhas de escrita/criação de arquivos ou tools instáveis, interrompa o uso do Gemini. O orquestrador registra o estado parcial e delega revisão/continuação para Codex gpt-5.4 medium quando for seguro continuar.
+
+Se o handoff exigir editar código, o orquestrador apenas prepara o contexto e delega para Codex. O Claude não faz a edição direta durante o workflow.
 
 ## Comunicação com o usuário
 
@@ -254,6 +304,7 @@ Antes de declarar "feito":
 - [ ] Review pós-implementação executado
 - [ ] Testes executados ou documentado o porquê de não ter sido possível
 - [ ] Contexto de todos os subagentes consolidado em `subagents-context.md`
+- [ ] Evidencias de conclusao publicadas na conversa para o avaliador do `/goal`
 - [ ] `implementation-report.md` criado e linkado
 - [ ] Instruções de negócio entregues ao usuário e registradas no relatório
 - [ ] `/openspec-verify-change`, `/openspec-sync-specs` e `/openspec-archive-change` executados

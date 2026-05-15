@@ -34,6 +34,27 @@ A saída é sempre JSON. O exit code é:
     "skills": {
       "openspec": { "ok": true|false, "found": [...], "missing": [...] }
     },
+    "permissions": {
+      "codex-companion-bash": {
+        "ok": true|false,
+        "path": "...",
+        "rules": [...],
+        "profile": {
+          "defaultMode": "auto|null",
+          "allowCount": 0,
+          "denyCount": 0,
+          "askCount": 0,
+          "hasBroadBashAccess": true|false,
+          "hasWebSearch": true|false,
+          "hasPlaywrightMcp": true|false,
+          "sampleAllow": [...],
+          "sampleDeny": [...],
+          "sampleAsk": [...]
+        },
+        "error": "..."
+      },
+      "goal-hooks-enabled": { "ok": true|false, "inspected": [...], "error": "..." }
+    },
     "optional": {
       "mcp": {
         "context7": { "ok": true|false, "optional": true, "evidence": [...], "error": "...", "install": [...] }
@@ -46,6 +67,8 @@ A saída é sempre JSON. O exit code é:
 ```
 
 `checks.optional.mcp.context7` não entra em `failed` e nunca muda o exit code. Quando `ok=true`, use esse sinal para orientar Codex/Gemini a consultar Context7 em tasks que envolvam bibliotecas, frameworks, SDKs, APIs, CLIs ou cloud services. Quando `ok=false`, siga normalmente.
+
+Quando `checks.permissions.codex-companion-bash.ok=true`, o preflight tambem tenta expor um resumo do perfil de permissoes encontrado em `profile`. Esse resumo nao e validacao de seguranca; ele existe para tornar visivel se o projeto distribui um perfil minimo ou um perfil operacional amplo para os agentes.
 
 ## Política de cancelamento
 
@@ -157,6 +180,37 @@ Instale/atualize/configure as dependências acima e rode `/orchestrator` novamen
   openspec init   # no projeto alvo
   ```
 - **Documentação:** https://github.com/Fission-AI/OpenSpec
+
+### Claude Code permission: codex-companion via Bash
+
+- **O que e:** permissao do Claude Code que deixa o subagente `codex:codex-rescue` chamar `node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs" task ...` via `Bash` sem pedir aprovacao manual.
+- **Por que importa:** subagentes em background nao podem ficar bloqueados esperando aprovacao de Bash; sem essa permissao, o fluxo de back-end/review com Codex trava.
+- **Como verificar manualmente:** confira se `.claude/settings.json`, `.claude/settings.local.json`, `~/.claude/settings.json` ou `~/.claude/settings.local.json` contem uma regra compativel em `permissions.allow`.
+- **O que o preflight aceita como compativel:** `Bash(node:*)`, `Bash(*)`, `Bash`, ou uma regra especifica que mencione `codex-companion.mjs`.
+- **Como remediar no projeto alvo:**
+
+  ```json
+  {
+    "permissions": {
+      "allow": [
+        "Bash(node:*)"
+      ]
+    }
+  }
+  ```
+
+- **Perfil ampliado:** o repositório pode distribuir um conjunto muito maior de permissoes em `.claude/settings.json` para dar autonomia aos agentes. Isso e aceitavel para o preflight desde que a regra minima compativel para o Codex companion esteja presente. Quando detectar esse perfil, o preflight passa a reportar contagens e amostras de `allow`, `deny` e `ask` no campo `profile`.
+
+- **Documentacao:** https://docs.anthropic.com/en/docs/claude-code/settings
+
+### Claude Code /goal hooks
+
+- **O que e:** `/goal` usa um Stop hook de sessao para avaliar a condicao de conclusao depois de cada turno.
+- **Por que importa:** se hooks estiverem desabilitados, o orquestrador nao consegue continuar autonomamente entre turnos.
+- **Como verificar manualmente:** confira `.claude/settings.json`, `.claude/settings.local.json`, `~/.claude/settings.json`, `~/.claude/settings.local.json` e managed settings quando acessivel.
+- **Configuracoes bloqueantes:** `disableAllHooks: true` bloqueia `/goal`; `allowManagedHooksOnly: true` pode impedir o hook de sessao usado pelo `/goal`.
+- **Como remediar:** remova essas configuracoes bloqueantes no escopo aplicavel e aceite o trust dialog do workspace no Claude Code.
+- **Documentacao:** https://code.claude.com/docs/en/goal
 
 ### Context7 MCP (opcional)
 

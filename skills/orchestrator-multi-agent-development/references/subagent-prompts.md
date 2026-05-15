@@ -296,11 +296,13 @@ Retorne, em Markdown:
 
 ## 6. Subagente de ajustes pontuais
 
-Se a fase 11 detectar um ajuste pequeno (<= 10 linhas, sem decisão arquitetural) e você (orquestrador) preferir delegar em vez de mexer direto:
+Se a fase 11 detectar um ajuste pequeno (mesmo <= 10 linhas), delegue. O orquestrador não mexe direto em código produtivo, testes, migrations ou componentes durante o workflow.
 
-**Subagent type:** `codex:codex-rescue` (back-end) ou `cc-gemini-plugin:gemini-agent` (front-end)
+**Subagent type padrão:** `codex:codex-rescue`
 
-**Prompt back-end:**
+Use Gemini apenas para ajustes visuais/front-end quando o workflow já estiver saudável e o gate do usuário permitir; em handoff, falha operacional, correção de teste ou sincronização pós-problema, use Codex gpt-5.4 medium.
+
+**Prompt padrão (Codex gpt-5.4 medium):**
 
 ```text
 --model gpt-5.4-codex --effort medium
@@ -313,7 +315,7 @@ Ajuste pontual na implementação:
 Não altere nada fora desse arquivo. Reporte o diff antes e depois.
 ```
 
-**Prompt front-end:**
+**Prompt front-end opcional (somente UI saudável, sem handoff/falha):**
 
 ```text
 --model gemini-3-flash --files "<PATH>"

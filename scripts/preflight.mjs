@@ -6,6 +6,9 @@
  *  - CLIs on PATH: gemini, codex, openspec
  *  - Claude Code plugins: cc-gemini-plugin, openai-codex
  *  - OpenSpec skills under ~/.claude/skills/openspec-*
+ *  - A compatible Bash permission for the Codex companion runtime
+ *  - A summary of the broader agent permission profile when available
+ *  - Claude Code hook settings compatible with /goal
  *  - Optional Context7 MCP configuration (reported, never blocking)
  *
  * Outputs a JSON report to stdout and exits with code 0 if every required
@@ -28,6 +31,7 @@ import { join } from "node:path";
 const HOME = homedir();
 const PLUGINS_CACHE = join(HOME, ".claude", "plugins", "cache");
 const SKILLS_DIR = join(HOME, ".claude", "skills");
+const PROJECT_CLAUDE_DIR = join(process.cwd(), ".claude");
 
 // ---------------------------------------------------------------------------
 // Check helpers
@@ -98,6 +102,177 @@ function checkOpenSpecSkills() {
     ok: false,
     error: `missing skill folders: ${missing.join(", ")}`,
     missing,
+  };
+}
+
+/**
+ * Check whether Claude Code can run the Codex companion from a background
+ * subagent without stopping for Bash approval.
+ */
+function checkCodexCompanionBashPermission() {
+  const candidates = [
+    join(PROJECT_CLAUDE_DIR, "settings.json"),
+    join(PROJECT_CLAUDE_DIR, "settings.local.json"),
+    join(HOME, ".claude", "settings.json"),
+    join(HOME, ".claude", "settings.local.json"),
+  ];
+
+  const inspected = [];
+  const parseErrors = [];
+
+  for (const file of candidates) {
+    if (!existsSync(file)) continue;
+
+    try {
+      const settings = JSON.parse(readFileSync(file, "utf8"));
+      const allow = Array.isArray(settings?.permissions?.allow)
+        ? settings.permissions.allow
+        : [];
+      const deny = Array.isArray(settings?.permissions?.deny)
+        ? settings.permissions.deny
+        : [];
+      const ask = Array.isArray(settings?.permissions?.ask)
+        ? settings.permissions.ask
+        : [];
+      const matches = allow.filter(isCodexCompanionBashRule);
+      const profile = summarizePermissionProfile(settings);
+
+      inspected.push({
+        path: file,
+        allow: allow.filter((rule) => typeof rule === "string" && rule.startsWith("Bash")),
+        deny,
+        ask,
+        defaultMode: settings?.permissions?.defaultMode ?? null,
+      });
+
+      if (matches.length > 0) {
+        return {
+          ok: true,
+          path: file,
+          rules: matches,
+          profile,
+        };
+      }
+    } catch (err) {
+      parseErrors.push({
+        path: file,
+        error: err.message?.split(/\r?\n/)[0] ?? "cannot parse settings file",
+      });
+    }
+  }
+
+  return {
+    ok: false,
+    error:
+      "Missing Claude Code permission to run the Codex companion via Bash. The codex:codex-rescue subagent needs a compatible Bash rule such as Bash(node:*) so it can invoke codex-companion.mjs without an approval prompt.",
+    expected: 'permissions.allow includes a compatible rule such as "Bash(node:*)"',
+    inspected,
+    parseErrors,
+  };
+}
+
+/**
+ * /goal is implemented as a session-scoped Stop hook. If hooks are disabled,
+ * Claude Code will reject /goal before the orchestrator can become autonomous.
+ *
+ * We can only inspect local/project settings that are readable from this
+ * process. Managed enterprise policy may still block /goal at runtime; in that
+ * case Claude Code reports the reason when the user runs /goal.
+ */
+function checkGoalHookSettings() {
+  const candidates = [
+    join(PROJECT_CLAUDE_DIR, "settings.json"),
+    join(PROJECT_CLAUDE_DIR, "settings.local.json"),
+    join(HOME, ".claude", "settings.json"),
+    join(HOME, ".claude", "settings.local.json"),
+    join(HOME, ".claude", "managed-settings.json"),
+  ];
+
+  const inspected = [];
+  const parseErrors = [];
+
+  for (const file of candidates) {
+    if (!existsSync(file)) continue;
+
+    try {
+      const settings = JSON.parse(readFileSync(file, "utf8"));
+      inspected.push({
+        path: file,
+        disableAllHooks: settings?.disableAllHooks,
+        allowManagedHooksOnly: settings?.allowManagedHooksOnly,
+      });
+
+      if (settings?.disableAllHooks === true) {
+        return {
+          ok: false,
+          path: file,
+          error:
+            "/goal is unavailable because disableAllHooks is true. /goal depends on Claude Code Stop hooks.",
+          inspected,
+        };
+      }
+
+      if (settings?.allowManagedHooksOnly === true) {
+        return {
+          ok: false,
+          path: file,
+          error:
+            "/goal may be unavailable because allowManagedHooksOnly is true. /goal depends on a session-scoped prompt Stop hook.",
+          inspected,
+        };
+      }
+    } catch (err) {
+      parseErrors.push({
+        path: file,
+        error: err.message?.split(/\r?\n/)[0] ?? "cannot parse settings file",
+      });
+    }
+  }
+
+  return {
+    ok: true,
+    inspected,
+    parseErrors,
+    note:
+      "No local/project setting was found disabling hooks. The workspace still needs to be trusted in Claude Code before /goal can run.",
+  };
+}
+
+function isCodexCompanionBashRule(rule) {
+  if (typeof rule !== "string") return false;
+  const normalized = rule.replace(/\s+/g, " ").trim();
+
+  return (
+    normalized === "Bash" ||
+    normalized === "Bash(*)" ||
+    normalized === "Bash(node:*)" ||
+    /^Bash\(node:.*codex-companion\.mjs.*\)$/.test(normalized) ||
+    /^Bash\(node .*codex-companion\.mjs.*\)$/.test(normalized)
+  );
+}
+
+function summarizePermissionProfile(settings) {
+  const permissions = settings?.permissions ?? {};
+  const allow = Array.isArray(permissions.allow) ? permissions.allow : [];
+  const deny = Array.isArray(permissions.deny) ? permissions.deny : [];
+  const ask = Array.isArray(permissions.ask) ? permissions.ask : [];
+
+  return {
+    defaultMode: permissions.defaultMode ?? null,
+    allowCount: allow.length,
+    denyCount: deny.length,
+    askCount: ask.length,
+    hasBroadBashAccess:
+      allow.includes("Bash") ||
+      allow.includes("Bash(*)") ||
+      allow.some((rule) => typeof rule === "string" && /^Bash\([^)]+:\*\)$/.test(rule)),
+    hasWebSearch: allow.includes("WebSearch"),
+    hasPlaywrightMcp: allow.some(
+      (rule) => typeof rule === "string" && rule.startsWith("mcp__playwright__"),
+    ),
+    sampleAllow: allow.slice(0, 10),
+    sampleDeny: deny.slice(0, 10),
+    sampleAsk: ask.slice(0, 10),
   };
 }
 
@@ -186,6 +361,10 @@ const checks = {
   skills: {
     openspec: checkOpenSpecSkills(),
   },
+  permissions: {
+    "codex-companion-bash": checkCodexCompanionBashPermission(),
+    "goal-hooks-enabled": checkGoalHookSettings(),
+  },
   optional: {
     mcp: {
       context7: checkContext7Mcp(),
@@ -203,6 +382,9 @@ for (const [name, result] of Object.entries(checks.plugins)) {
 }
 for (const [name, result] of Object.entries(checks.skills)) {
   if (!result.ok) failed.push({ category: "skill-bundle", name, ...result });
+}
+for (const [name, result] of Object.entries(checks.permissions)) {
+  if (!result.ok) failed.push({ category: "permission", name, ...result });
 }
 
 const status = failed.length === 0 ? "ok" : "failed";
@@ -302,6 +484,30 @@ function remediationFor(f) {
           "  npm install -g @fission-ai/openspec",
         ],
         docs: "https://github.com/Fission-AI/OpenSpec",
+      };
+    case "permission:codex-companion-bash":
+      return {
+        target: "Claude Code permission: codex-companion via Bash",
+        steps: [
+          "No projeto alvo, crie ou atualize .claude/settings.json com:",
+          '  { "permissions": { "allow": ["Bash(node:*)"] } }',
+          "Ou use um perfil mais amplo, desde que ele inclua uma regra compativel para execucao do node/codex-companion.",
+          "Reinicie ou recarregue a sessao do Claude Code antes de rodar /orchestrator novamente.",
+          "Isso permite que codex:codex-rescue invoque node \"${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs\" task ... sem pedir aprovacao em background.",
+        ],
+        docs: "https://docs.anthropic.com/en/docs/claude-code/settings",
+      };
+    case "permission:goal-hooks-enabled":
+      return {
+        target: "Claude Code /goal hooks",
+        steps: [
+          "Remova ou altere a configuracao que desabilita hooks no escopo do projeto/usuario/managed settings.",
+          "Garanta que disableAllHooks nao esteja true.",
+          "Garanta que allowManagedHooksOnly nao bloqueie hooks de sessao.",
+          "Abra o projeto no Claude Code e aceite o trust dialog do workspace.",
+          "Depois rode /goal com uma condicao mensuravel, ou use /orchestrator novamente.",
+        ],
+        docs: "https://code.claude.com/docs/en/goal",
       };
     default:
       return {

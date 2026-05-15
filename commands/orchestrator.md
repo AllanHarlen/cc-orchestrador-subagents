@@ -1,5 +1,5 @@
 ---
-description: Conduzir um workflow de desenvolvimento multiagêntico (OpenSpec + planejamento do orquestrador + Codex review + Codex/Gemini execução paralela + relatório final + instruções de negócio)
+description: Conduzir um workflow de desenvolvimento multiagêntico, com suporte a execucao autonoma via /goal (OpenSpec + planejamento do orquestrador + Codex review + Codex/Gemini execução paralela + relatório final + instruções de negócio)
 argument-hint: "<descrição da demanda — ex.: 'implemente o fluxo de reservas com listagem, criação e cancelamento'>"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
@@ -26,13 +26,43 @@ Inicia o **Orquestrador Multiagêntico de Desenvolvimento** para a demanda descr
 14. `subagents-context.md` + `implementation-report.md` finais
 15. Instruções de negócio para o usuário sobre a feature implementada
 
+## Regra central de execução
+
+Durante um workflow iniciado por `/orchestrator`, o Claude atua **somente como orquestrador principal**: mantém o contexto centralizado, decide próximos passos, atualiza artefatos de coordenação e delega implementação para subagentes. Ele **não implementa código, não faz remendos manuais e não continua executando** quando o usuário sinalizar cancelamento, pausa, reprovação ou problema bloqueante.
+
+Atividades paralelas de implementação devem usar subagentes. Para back-end, banco, testes, ajustes pontuais, handoffs e recuperação de falha operacional, use `codex:codex-rescue` com `--model gpt-5.4-codex --effort medium`, salvo reviews formais que continuam em Codex gpt-5.5 high.
+
 ## Argumento
 
 `$ARGUMENTS` — descrição da demanda em linguagem natural. Pode ser frase única ou parágrafo com contexto.
 
+## Execucao autonoma com `/goal`
+
+Para trabalho independente entre turnos, o modo recomendado e envolver a demanda em `/goal`. O `/goal` e avaliado por um Stop hook de sessao: depois de cada turno, um modelo rapido verifica se a condicao foi demonstrada na conversa; se nao foi, Claude inicia outro turno automaticamente.
+
+Use este formato quando o usuario pedir autonomia, modo independente, "continue ate terminar" ou equivalente:
+
+```text
+/goal Execute a skill orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+```
+
+Se o workflow ja estiver rodando sob `/goal`, nao peca confirmacao a cada etapa operacional. Ao final de cada turno, exponha evidencias que o avaliador consegue ler: fase atual, arquivos criados, subagentes pendentes/concluidos, comandos/testes executados com resultado e criterios restantes.
+
+Nao tente simular `/goal` manualmente. Se o usuario invocou `/orchestrator` diretamente e o trabalho nao couber em um turno, continue o maximo possivel e entregue o comando `/goal` acima preenchido para retomada autonoma.
+
 ## Comportamento
 
 Quando este comando for invocado, siga **rigorosamente** esta ordem:
+
+### Modo preflight
+
+Se `$ARGUMENTS` for exatamente `preflight`, rode apenas:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
+```
+
+Mostre o resumo do JSON ao usuário e encerre. Não carregue a skill, não crie OpenSpec e não inicie workflow.
 
 ### Passo 1 — Preflight (obrigatório, antes de tudo)
 
@@ -73,6 +103,13 @@ Ela contém o workflow operacional completo (Fase 1 a 14). **Não duplique a ló
 ### Passo 4 — Conduzir o workflow
 
 Siga `SKILL.md` + `references/*.md`. Use templates de `assets/*.md` para criar artefatos no `openspec/changes/<nome>/`.
+
+Antes de iniciar cada fase e antes de lançar/redelegar subagentes, faça um gate operacional:
+
+- Se a mensagem mais recente do usuário indicar "cancela", "aborta", "para", "não continue", "pausa", "aguarde", reprovação do plano/contrato ou problema bloqueante, **interrompa imediatamente**.
+- Não invoque novos subagentes, não edite implementação e não avance de fase.
+- Atualize `monitoring.md`/`subagents-context.md` com `CANCELLED` ou `PAUSED` quando a mudança já tiver artefatos.
+- Responda com o estado atual, artefatos preservados e o que será necessário para retomada.
 
 ### Passo 5 — Reportar updates
 
