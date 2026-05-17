@@ -14,7 +14,7 @@
         {
             "name": "cc-orchestrador-subagents",
             "description": "Orchestrator skill + /orchestrator slash command that drive an OpenSpec -> orchestrator plan -> Codex review -> parallel Codex/Gemini execution -> review -> consolidated context -> implementation report workflow. Runs a preflight check for gemini-cli, codex-cli, openspec-cli and required plugins before starting; cancels operation if anything is missing.",
-            "version": "0.1.1",
+            "version": "0.2.0",
             "author": {
                 "name": "allanharlen"
             },
