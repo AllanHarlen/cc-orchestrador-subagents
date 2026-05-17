@@ -58,6 +58,32 @@ Quando o gate disparar:
 5. Preserve os artefatos OpenSpec para retomada.
 6. Responda ao usuário com: fase atual, subagentes em execução/concluídos, artefatos preservados, pendências e instrução objetiva para retomar.
 
+## Modos de invocação — leia antes de qualquer outra coisa
+
+Esta skill funciona corretamente **apenas** quando ativada no turno atual via:
+
+```text
+Skill("cc-orchestrador-subagents:orchestrator")
+```
+
+ou pelo comando:
+
+```text
+/orchestrator <demanda>
+```
+
+**Invocação via `Agent(subagent_type="cc-orchestrador-subagents:orchestrator")`** — seja por outro agente ou pelo próprio orquestrador — **não ativa esta SKILL.md no subagente**. O subagente recebe apenas o texto do parâmetro `prompt`. Consequência: as 17 fases, o preflight obrigatório, os gates operacionais e as regras de autoridade do orquestrador são ignorados.
+
+Se você foi invocado via `Agent()` sem o conteúdo desta SKILL.md no prompt, você **não deve** iniciar o workflow orquestrado. Em vez disso, informe quem invocou:
+
+```
+Esta skill requer ativação direta via Skill() ou /orchestrator.
+Invocação via Agent() sem contexto da SKILL.md não é suportada.
+Use Skill("cc-orchestrador-subagents:orchestrator") no turno atual.
+```
+
+---
+
 ## Modelo mental em 17 passos
 
 -1. **Goal autonomy** — se o usuario pediu trabalho independente, rode ou retome sob `/goal` com condicao mensuravel
@@ -183,6 +209,18 @@ Artefatos esperados em `openspec/changes/<nome-da-mudanca>/`: `proposal.md`, `de
 ### Fase 3 — Planejamento
 Use o template `assets/plan-template.md` como esqueleto e preencha diretamente os artefatos OpenSpec (`proposal.md`, `design.md`, `tasks.md`). Não chame `Agent(subagent_type="Plan")`, `general-purpose` ou qualquer outro subagente Claude para planejamento. O primeiro subagente permitido no fluxo é Codex na Fase 4.
 
+### Fase 3.5 — Gate de suficiência do plano (obrigatório antes da Fase 4)
+
+Antes de delegar o review ao Codex, confirme que o plano está minimamente completo:
+
+- [ ] Todas as tasks têm ID, categoria e dependências definidas
+- [ ] Pelo menos um critério de aceite mensurável por task
+- [ ] Estratégia de rollback descrita
+- [ ] Impactos em banco e autenticação documentados (mesmo que N/A)
+- [ ] Riscos arquiteturais listados
+
+Se algum item faltar, preencha agora. O Codex não pode revisar o que não existe.
+
 ### Fase 4 — Review do plano (Codex)
 Delegue ao Codex via rescue subagent com prompt explícito:
 ```
@@ -195,7 +233,7 @@ Agent(
 Prompt completo: `references/subagent-prompts.md` (seção "Review de plano").
 
 ### Fase 5 — Consolidação
-Você analisa plano + revisão e ajusta `proposal.md` / `design.md` / `tasks.md`. Rejeite sugestões com justificativa quando não fizer sentido — não aceite tudo cegamente.
+Você analisa plano + revisão e ajusta `proposal.md` / `design.md` / `tasks.md`. Rejeite sugestões com justificativa quando não fizer sentido — não aceite tudo cegamente. **REPROVADO no review não para o workflow** — trate os problemas bloqueantes aqui e continue.
 
 ### Fase 6 — Classificação
 Para cada task em `tasks.md`, classifique em uma das 7 categorias e marque dependências.
@@ -308,6 +346,8 @@ Antes de declarar "feito":
 - [ ] Contexto de todos os subagentes consolidado em `subagents-context.md`
 - [ ] Evidencias de conclusao publicadas na conversa para o avaliador do `/goal`
 - [ ] `implementation-report.md` criado e linkado
+- [ ] Todas as 15 seções do `implementation-report.md` preenchidas (nenhuma com `<placeholder>` ou vazia)
+- [ ] Seção "Instruções de Negócio para o Usuário" não está vazia
 - [ ] Instruções de negócio entregues ao usuário e registradas no relatório
 - [ ] `/openspec-verify-change`, `/openspec-sync-specs` e `/openspec-archive-change` executados
 

@@ -90,6 +90,12 @@ Contrato técnico (API/UI):
 Arquivos e módulos relevantes:
 <LISTAR ARQUIVOS>
 
+Diretórios e arquivos permitidos nesta task:
+<LISTAR DIRETÓRIOS E ARQUIVOS QUE PODEM SER CRIADOS OU ALTERADOS>
+
+Arquivos explicitamente fora do escopo (não toque):
+<LISTAR ARQUIVOS CENTRAIS COMPARTILHADOS: ex.: Program.cs, appsettings.json, RouteConfig.cs, qualquer migration já existente>
+
 Stack do projeto:
 <STACK>
 
@@ -161,6 +167,12 @@ Contrato API/UI:
 
 Arquivos e módulos relevantes:
 <LISTAR ARQUIVOS>
+
+Diretórios e arquivos permitidos nesta task:
+<LISTAR DIRETÓRIOS E ARQUIVOS QUE PODEM SER CRIADOS OU ALTERADOS>
+
+Arquivos explicitamente fora do escopo (não toque):
+<LISTAR ARQUIVOS CENTRAIS COMPARTILHADOS: ex.: App.tsx, router/index.ts, store/index.ts, qualquer arquivo de configuração global>
 
 Stack do projeto:
 <STACK FRONT-END — EX.: React 18 + TypeScript + Ant Design 5 + Tailwind>

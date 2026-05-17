@@ -81,19 +81,6 @@ Se as skills `openspec-*` não estiverem no ambiente:
 3. Não crie estrutura manual, não pule comandos `/openspec-*` e não continue como Claude direto dentro do `/orchestrator`.
 4. Se o usuário quiser trabalhar sem OpenSpec, isso deve acontecer fora deste fluxo orquestrado.
 
-## Mapeamento de comandos `/opsx:*` mencionados em outras referências
+## Naming legado `/opsx:*`
 
-Documentos externos podem usar o naming antigo `/opsx:*`. A correspondência é:
-
-| `/opsx:*` antigo | Skill `openspec-*` atual |
-|---|---|
-| `/opsx:propose` | `/openspec-new-change` (e edita o proposal direto) |
-| `/opsx:new` | `/openspec-new-change` |
-| `/opsx:ff` | `/openspec-ff-change` |
-| `/opsx:continue` | `/openspec-continue-change` |
-| `/opsx:apply` | `/openspec-apply-change` |
-| `/opsx:verify` | `/openspec-verify-change` |
-| `/opsx:sync` | `/openspec-sync-specs` |
-| `/opsx:archive` | `/openspec-archive-change` |
-
-Se o usuário pedir `/opsx:foo`, traduza mentalmente para `/openspec-foo-change` (ou variante apropriada) antes de chamar.
+O prefixo `/opsx:*` foi descontinuado. Use sempre `openspec-*`. Se encontrar referências a `/opsx:*` em documentos externos ou histórico de conversa, ignore-as — o nome correto está na tabela de skills acima.

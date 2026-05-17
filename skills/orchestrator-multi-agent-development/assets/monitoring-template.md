@@ -17,6 +17,24 @@
 | `QUOTA_EXHAUSTED` | agente não consegue continuar por cota/rate limit/capacidade |
 | `REVIEWED` | passou pelo review pós-implementação (fase 12) |
 
+## Heurísticas de SLOW_CHECKIN
+
+Dispare `SLOW_CHECKIN` quando:
+
+| Complexidade | Tempo sem notificação |
+|---|---|
+| `simples` | > 3 min |
+| `média` | > 5 min |
+| `complexa` | > 8 min |
+| qualquer | outra task da onda já concluiu e esta ainda não |
+
+Outros gatilhos independentes de tempo:
+- Task bloqueando início da próxima onda
+- Agente iniciou mas não reportou nenhum arquivo criado/alterado
+- Suspeita de loop de retry por cota/rate limit
+
+Registre cada SLOW_CHECKIN no log abaixo com timestamp.
+
 ## Onda 1 — <Resumo da onda>
 
 ### Task T1 — <Título>

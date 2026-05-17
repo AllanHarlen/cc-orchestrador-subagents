@@ -196,6 +196,19 @@ Use `assets/plan-template.md` como esqueleto e divida o conteúdo conforme aprop
 
 Saída: artefatos OpenSpec preenchidos pelo orquestrador.
 
+### Gate de suficiência — obrigatório antes de avançar para a Fase 4
+
+Antes de delegar o review ao Codex, confirme que o plano está minimamente completo. Se qualquer item estiver faltando, preencha agora — o Codex não pode revisar o que não existe.
+
+- [ ] Todas as tasks têm ID, título, categoria e dependências definidas
+- [ ] Pelo menos um critério de aceite mensurável por task (passa em teste, retorna status X)
+- [ ] Estratégia de rollback descrita (mesmo que "revert do commit")
+- [ ] Impactos em banco de dados documentados (mesmo que "N/A — sem migração")
+- [ ] Impactos em autenticação/autorização documentados (mesmo que "N/A")
+- [ ] Riscos arquiteturais listados (mesmo que "nenhum identificado")
+
+Só após esse gate avance. Um plano incompleto resulta em review superficial e retrabalho na Fase 5.
+
 ---
 
 ## Fase 4 — Review do Plano com Codex
@@ -242,6 +255,18 @@ NÃO modifique arquivos. NÃO implemente nada. Apenas revise.
 ```
 
 Saída: comentário crítico do Codex no chat (que você precisa salvar em `openspec/changes/<nome>/review-codex.md` antes da fase 5).
+
+### Tratamento obrigatório do resultado do review
+
+Independentemente da decisão do Codex, **sempre avance para a Fase 5**. O review nunca é um ponto de parada — é uma entrada para a consolidação.
+
+| Decisão do Codex | O que fazer na Fase 5 |
+|---|---|
+| `APROVADO` | Registre em `review-codex.md` e avance para Fase 6 |
+| `APROVADO COM AJUSTES` | Trate as sugestões obrigatórias, registre as rejeitadas com justificativa, avance |
+| `REPROVADO` | **Trate todos os problemas bloqueantes** nos artefatos OpenSpec, re-execute a Fase 4 apenas se o escopo mudou substancialmente; caso contrário, avance com o plano corrigido |
+
+**Não pare o workflow em REPROVADO.** REPROVADO significa "há trabalho de consolidação a fazer antes de implementar" — não significa "cancele tudo". O orquestrador resolve os problemas e continua.
 
 ---
 
@@ -364,6 +389,25 @@ Atualize `monitoring.md` para `RUNNING` em cada task envolvida.
 
 Não faça polling contínuo. Os agentes em background notificam ao concluir, mas o orquestrador deve fazer check-in leve quando uma task parecer estagnada.
 
+### Heurísticas de `SLOW_CHECKIN` — quando disparar
+
+Use o julgamento contextual, mas aplique as heurísticas abaixo como referência objetiva:
+
+| Complexidade da task | Disparar SLOW_CHECKIN se sem notificação após |
+|---|---|
+| `simples` | 3 minutos |
+| `média` | 5 minutos |
+| `complexa` | 8 minutos |
+| Qualquer complexidade | Imediatamente se outra task da mesma onda já concluiu e esta não |
+
+Outros gatilhos para SLOW_CHECKIN independente de tempo:
+
+- A task está bloqueando o início da próxima onda
+- O agente confirmou início mas não reportou nenhum arquivo criado/alterado
+- Você suspeita de loop de retry (agente tentando contornar cota/rate limit)
+
+Registre cada SLOW_CHECKIN no log de `monitoring.md` com timestamp.
+
 Mantenha `openspec/changes/<nome>/monitoring.md` (cópia de `assets/monitoring-template.md`). Status válidos:
 
 - `PENDING` — ainda não delegado
@@ -398,6 +442,20 @@ Política de recuperação:
 - falha operacional do Gemini em tools/escrita/criação: orquestrador registra o estado parcial e delega revisão/continuação para Codex gpt-5.4 medium antes de continuar;
 - `QUOTA_EXHAUSTED` no Codex: tente outro Codex/modelo apenas se houver caminho viável; caso contrário marque `BLOCKED` e peça decisão ao usuário;
 - falha não relacionada a cota continua como `FAILED`, `BLOCKED` ou `NEEDS_SYNC`, conforme o caso.
+
+### Níveis de autonomia no fallback Gemini → Codex
+
+**Fallback automático permitido** (orquestrador pode agir sem confirmar com o usuário):
+
+- `QUOTA_EXHAUSTED` no Gemini com arquivos parciais claramente listados e task de UI simples (Gemini Flash → Codex gpt-5.4 medium)
+- Falha operacional de tool/escrita isolada em task `simples` com contrato claro
+
+**Fallback requer confirmação do usuário** (pare e pergunte):
+
+- `QUOTA_EXHAUSTED` no Gemini 3 em UI complexa (dashboard, wizard, design system) — a qualidade do Codex pode ser insuficiente para substituir
+- Falha grave que invalida o contrato ou exige revisão de escopo
+- Handoff que muda o modelo de implementação (ex.: Gemini estava criando componentes novos, Codex precisaria reescrever do zero)
+- Qualquer fallback que afete mais de uma task da onda
 
 Quando todas as tasks da onda chegarem em `DONE`, `FAILED`, `QUOTA_EXHAUSTED` ou `BLOCKED`, prossiga para a fase 11 apenas se houver ação clara de integração, redelegação ou decisão do usuário. Se qualquer item estiver `PAUSED` ou `CANCELLED`, não avance.
 
