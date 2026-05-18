@@ -1,14 +1,41 @@
-# Contrato API/UI — <TASK ID> — <TÍTULO>
+# Contrato API/UI - <TASK ID OU PAR> - <TITULO>
 
-> Salve em `openspec/changes/<nome>/contracts/<task-id>.md`. Um arquivo por task FULLSTACK.
+> Salve em `openspec/changes/<nome>/contracts/<task-id-ou-par>.md`.
+
+## Contract Metadata
+
+- `contractRequired: yes`
+- `tasks:` `<T1 | T2 | T1+T4>`
+- `consumers:` `<tela/hook/store/componente>`
+- `producers:` `<endpoint/handler/controller>`
 
 ## Endpoint
 
-`<URL relativa — ex.: /api/reservas/{id}>`
+`<URL relativa - ex.: /api/reservas/{id}>`
 
-## Método HTTP
+## Metodo HTTP
 
 `<GET | POST | PUT | PATCH | DELETE>`
+
+## Wire Format
+
+### Casing JSON esperado
+
+- request: `<camelCase | PascalCase | snake_case>`
+- response: `<camelCase | PascalCase | snake_case>`
+- erro: `<camelCase | PascalCase | snake_case>`
+
+### Regras de serializacao
+
+- serializer/config global: `<ex.: JsonNamingPolicy.CamelCase | N/A>`
+- atributos por campo: `<ex.: [JsonPropertyName("checkInDate")] | N/A>`
+- observacao sobre DTO interno vs payload publico: `<texto>`
+
+### Validacao contra TypeScript
+
+- arquivo/interface TypeScript validada: `<path>`
+- estrategia de validacao: `<payload real, fixture, teste, mapper>`
+- status: `<confirmado | pendente>`
 
 ## Request
 
@@ -20,22 +47,22 @@
 
 ### Path params
 
-| Nome | Tipo | Descrição |
+| Nome | Tipo | Descricao |
 |---|---|---|
-| `<nome>` | `<tipo>` | `<descrição>` |
+| `<nome>` | `<tipo>` | `<descricao>` |
 
 ### Query params
 
-| Nome | Tipo | Obrigatório | Descrição |
+| Nome | Tipo | Obrigatorio | Descricao |
 |---|---|---|---|
-| `<nome>` | `<tipo>` | sim/não | `<descrição>` |
+| `<nome>` | `<tipo>` | `sim|nao` | `<descricao>` |
 
 ### Body
 
 ```json
 {
-  "<campo1>": "<tipo (constraint)>",
-  "<campo2>": "<tipo>"
+  "<campo1>": "<valor exemplo>",
+  "<campo2>": "<valor exemplo>"
 }
 ```
 
@@ -45,123 +72,138 @@
 
 ```json
 {
-  "id": "<uuid>",
-  "<campo1>": "<valor exemplo>"
+  "<campo1>": "<valor exemplo>",
+  "<campo2>": "<valor exemplo>"
 }
 ```
 
 ### 201 Created
 
-`<aplicável quando POST cria recurso novo. Header Location: /api/.../<id>>`
+```json
+{
+  "<campo1>": "<valor exemplo>"
+}
+```
 
 ### 204 No Content
 
-`<aplicável quando DELETE ou PUT sem corpo de retorno>`
+`<quando aplicavel>`
 
-### 4xx — Erros do cliente
+### Erros 4xx
 
-| Status | Quando |
-|---|---|
-| 400 Bad Request | validação de payload falhou |
-| 401 Unauthorized | token ausente/inválido |
-| 403 Forbidden | usuário autenticado sem permissão |
-| 404 Not Found | recurso não existe |
-| 409 Conflict | violação de regra de negócio (ex.: já reservado) |
-| 422 Unprocessable Entity | semântica errada (campos válidos mas estado inválido) |
+| Status | Quando | Wire format |
+|---|---|---|
+| `400 Bad Request` | `<quando>` | `<schema resumido>` |
+| `401 Unauthorized` | `<quando>` | `<schema resumido>` |
+| `403 Forbidden` | `<quando>` | `<schema resumido>` |
+| `404 Not Found` | `<quando>` | `<schema resumido>` |
+| `409 Conflict` | `<quando>` | `<schema resumido>` |
+| `422 Unprocessable Entity` | `<quando>` | `<schema resumido>` |
 
-Schema de erro padronizado:
+Schema de erro padrao:
 
 ```json
 {
   "errors": [
-    { "field": "<campo>", "code": "<CODE>", "message": "<mensagem amigável>" }
+    {
+      "field": "<campo>",
+      "code": "<CODE>",
+      "message": "<mensagem amigavel>"
+    }
   ]
 }
 ```
 
-### 5xx — Erros do servidor
+### Erros 5xx
 
-- `500 Internal Server Error` — não vaza stack trace ou dado interno; UI mostra mensagem genérica e botão "tentar de novo".
+- `500 Internal Server Error` - nao vaza stack trace; UI mostra mensagem generica.
 
 ## Estados de UI
 
 ### Loading
-- `<descrição: spinner inline / skeleton / progress bar>`
+
+- `<spinner inline | skeleton | progress bar | N/A>`
 
 ### Erro
-- `<descrição: toast / banner / mensagem inline>`
+
+- `<toast | banner | mensagem inline | N/A>`
 
 ### Empty
-- `<descrição: card com CTA / texto explicativo>`
+
+- `<card com CTA | mensagem | N/A>`
 
 ### Sucesso
-- `<descrição: toast de confirmação / redirect / atualização inline>`
 
-## Permissões
+- `<toast | redirect | refresh local | N/A>`
 
-- requer claim/role: `<claim ou role>`
-- regras adicionais: `<ex.: usuário só pode ver suas próprias reservas>`
+## Permissoes
 
-## Validações back-end
+- claim/role/policy: `<valor>`
+- regras adicionais: `<texto>`
 
-- `<campo>`: `<regra>` (mensagem: `<...>`)
+## Validacoes Back-end
+
+- `<campo>`: `<regra>`
 - `<campo>`: `<regra>`
 
-## Validações front-end
+## Validacoes Front-end
 
-- `<campo>`: `<regra>` (espelha back-end para feedback imediato)
+- `<campo>`: `<regra espelhada do back-end>`
+- `<campo>`: `<regra>`
 
-## Campos obrigatórios
+## Campos Obrigatorios
 
 - `<campo>`
 - `<campo>`
 
-## Campos opcionais
+## Campos Opcionais
 
 - `<campo>` (default: `<valor>`)
 - `<campo>`
 
-## Exemplo de payload completo
+## Exemplos Completos
 
-### Request
+### Request HTTP
 
 ```http
-POST /api/reservas HTTP/1.1
+POST /api/exemplo HTTP/1.1
 Authorization: Bearer eyJ...
 Content-Type: application/json
 
 {
-  "imovelId": "abc-123",
-  "checkin": "2026-06-01",
-  "checkout": "2026-06-05",
-  "hospedes": 2
+  "campoA": "valor",
+  "campoB": 2
 }
 ```
 
-### Response 201
+### Response HTTP
 
 ```http
 HTTP/1.1 201 Created
-Location: /api/reservas/r-789
 Content-Type: application/json
 
 {
-  "id": "r-789",
-  "imovelId": "abc-123",
-  "checkin": "2026-06-01",
-  "checkout": "2026-06-05",
-  "hospedes": 2,
-  "status": "PENDING",
-  "createdAt": "2026-05-14T13:42:11Z"
+  "id": "abc-123",
+  "campoA": "valor",
+  "campoB": 2
 }
 ```
 
-## Decisões pendentes
+## Checklist de Fechamento do Contrato
 
-- `<nenhuma>` ou `<decisão>` — bloqueia execução até resolver.
+- [ ] wire format definido
+- [ ] casing JSON definido
+- [ ] serializacao documentada
+- [ ] TypeScript validado contra payload real
+- [ ] exemplos completos incluidos
+- [ ] front-end e back-end alinhados
 
-## Histórico de alterações no contrato
+## Decisoes Pendentes
 
-| Data | Quem | O quê | Por quê |
+- `<nenhuma>` ou `<decisao>`
+
+## Historico de Alteracoes
+
+| Data | Quem | O que mudou | Motivo |
 |---|---|---|---|
-| `<data>` | `<orquestrador>` | `<mudança>` | `<motivo>` |
+| `<data>` | `<orquestrador>` | `<mudanca>` | `<motivo>` |

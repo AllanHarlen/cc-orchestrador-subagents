@@ -25,7 +25,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -33,6 +33,7 @@ const HOME = homedir();
 const PLUGINS_CACHE = join(HOME, ".claude", "plugins", "cache");
 const SKILLS_DIR = join(HOME, ".claude", "skills");
 const PROJECT_CLAUDE_DIR = join(process.cwd(), ".claude");
+const PROJECT_SETTINGS_FILE = join(PROJECT_CLAUDE_DIR, "settings.json");
 
 // ---------------------------------------------------------------------------
 // Check helpers
@@ -112,7 +113,7 @@ function checkOpenSpecSkills() {
  */
 function checkCodexCompanionBashPermission() {
   const candidates = [
-    join(PROJECT_CLAUDE_DIR, "settings.json"),
+    PROJECT_SETTINGS_FILE,
     join(PROJECT_CLAUDE_DIR, "settings.local.json"),
     join(HOME, ".claude", "settings.json"),
     join(HOME, ".claude", "settings.local.json"),
@@ -170,6 +171,124 @@ function checkCodexCompanionBashPermission() {
     inspected,
     parseErrors,
   };
+}
+
+function autoRemediateCodexCompanionBashPermission(initialCheck) {
+  const fileExistedBefore = existsSync(PROJECT_SETTINGS_FILE);
+  const result = {
+    attempted: false,
+    changed: false,
+    target: PROJECT_SETTINGS_FILE,
+    action: "none",
+    revalidated: false,
+    ok: initialCheck.ok,
+  };
+
+  if (initialCheck.ok) {
+    return result;
+  }
+
+  const projectParseError = initialCheck.parseErrors?.find(
+    (entry) => entry.path === PROJECT_SETTINGS_FILE,
+  );
+
+  if (projectParseError) {
+    return {
+      ...result,
+      attempted: true,
+      action: "blocked-invalid-json",
+      error:
+        "Auto-remediation skipped because .claude/settings.json exists but contains invalid JSON. Fix the file manually and rerun preflight.",
+      revalidated: false,
+      ok: false,
+    };
+  }
+
+  let settings = {};
+
+  if (fileExistedBefore) {
+    try {
+      settings = JSON.parse(readFileSync(PROJECT_SETTINGS_FILE, "utf8"));
+    } catch (err) {
+      return {
+        ...result,
+        attempted: true,
+        action: "blocked-invalid-json",
+        error:
+          err.message?.split(/\r?\n/)[0] ??
+          "Auto-remediation skipped because .claude/settings.json could not be parsed.",
+        revalidated: false,
+        ok: false,
+      };
+    }
+  }
+
+  if (!isPlainObject(settings)) {
+    return {
+      ...result,
+      attempted: true,
+      action: "blocked-non-object-root",
+      error:
+        "Auto-remediation skipped because .claude/settings.json must contain a JSON object at the root.",
+      revalidated: false,
+      ok: false,
+    };
+  }
+
+  const permissions = settings.permissions;
+  if (permissions != null && !isPlainObject(permissions)) {
+    return {
+      ...result,
+      attempted: true,
+      action: "blocked-invalid-permissions-shape",
+      error:
+        "Auto-remediation skipped because .claude/settings.json has a non-object permissions field.",
+      revalidated: false,
+      ok: false,
+    };
+  }
+
+  const allow = permissions?.allow;
+  if (allow != null && !Array.isArray(allow)) {
+    return {
+      ...result,
+      attempted: true,
+      action: "blocked-invalid-allow-shape",
+      error:
+        "Auto-remediation skipped because .claude/settings.json has permissions.allow in a non-array format.",
+      revalidated: false,
+      ok: false,
+    };
+  }
+
+  const nextSettings = {
+    ...settings,
+    permissions: {
+      ...(permissions ?? {}),
+      allow: [...(allow ?? []), "Bash(node:*)"],
+    },
+  };
+
+  mkdirSync(PROJECT_CLAUDE_DIR, { recursive: true });
+  writeFileSync(PROJECT_SETTINGS_FILE, `${JSON.stringify(nextSettings, null, 2)}\n`, "utf8");
+
+  const revalidated = checkCodexCompanionBashPermission();
+
+  return {
+    attempted: true,
+    changed: true,
+    target: PROJECT_SETTINGS_FILE,
+    action: fileExistedBefore ? "updated-settings-json" : "created-settings-json",
+    revalidated: revalidated.ok,
+    ok: revalidated.ok,
+    rules: revalidated.rules ?? [],
+    path: revalidated.path ?? PROJECT_SETTINGS_FILE,
+    error: revalidated.ok ? null : revalidated.error,
+  };
+}
+
+function isPlainObject(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
 /**
@@ -349,6 +468,10 @@ function checkContext7Mcp() {
 // Run all checks
 // ---------------------------------------------------------------------------
 
+const initialCodexCompanionBash = checkCodexCompanionBashPermission();
+const autoRemediation = autoRemediateCodexCompanionBashPermission(initialCodexCompanionBash);
+const finalCodexCompanionBash = checkCodexCompanionBashPermission();
+
 const checks = {
   cli: {
     gemini: checkCli("gemini"),
@@ -363,7 +486,7 @@ const checks = {
     openspec: checkOpenSpecSkills(),
   },
   permissions: {
-    "codex-companion-bash": checkCodexCompanionBashPermission(),
+    "codex-companion-bash": finalCodexCompanionBash,
     "goal-hooks-enabled": checkGoalHookSettings(),
   },
   optional: {
@@ -394,6 +517,7 @@ const report = {
   status,
   generatedAt: new Date().toISOString(),
   checks,
+  autoRemediation,
   failed,
   remediation: failed.length === 0 ? null : buildRemediation(failed),
 };

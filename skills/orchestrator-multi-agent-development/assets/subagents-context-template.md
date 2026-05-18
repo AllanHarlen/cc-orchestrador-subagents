@@ -29,7 +29,7 @@
 - **Onda:** `<wave>`
 - **Task:** `<ID e título>`
 - **Subagent type:** `<codex:codex-rescue | cc-gemini-plugin:gemini-agent>`
-- **Modelo:** `<gpt-5.4-codex | gpt-5.5-codex | gemini-3-pro | gemini-3-flash>`
+- **Modelo:** `<Codex padrao da conta | gemini-3-pro | gemini-3-flash>`
 - **Status final:** `<DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED | NEEDS_SYNC | PAUSED | CANCELLED>`
 - **Resumo entregue:** `<2-5 linhas>`
 - **Arquivos criados/alterados:**
