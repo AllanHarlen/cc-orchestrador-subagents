@@ -18,7 +18,7 @@ Este arquivo expande as fases do `SKILL.md`. Leia a fase específica quando prec
 - [Fase 11 — Integração dos Resultados](#fase-11--integração-dos-resultados)
 - [Fase 12 — Review Pós-Implementação](#fase-12--review-pós-implementação)
 - [Fase 13 — Verificação OpenSpec](#fase-13--verificação-openspec)
-- [Fase 14 — Log, Contexto Consolidado e Relatório Final](#fase-14--log-contexto-consolidado-e-relatório-final)
+e- [Fase 14 — Log, Contexto Consolidado e Relatório Final](#fase-14--log-contexto-consolidado-e-relatório-final)
 - [Fase 15 — Instruções de Negócio](#fase-15--instruções-de-negócio)
 
 ---
