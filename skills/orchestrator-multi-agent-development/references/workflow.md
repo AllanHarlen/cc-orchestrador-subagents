@@ -18,7 +18,7 @@ Este arquivo expande as fases do `SKILL.md`. Leia a fase específica quando prec
 - [Fase 11 — Integração dos Resultados](#fase-11--integração-dos-resultados)
 - [Fase 12 — Review Pós-Implementação](#fase-12--review-pós-implementação)
 - [Fase 13 — Verificação OpenSpec](#fase-13--verificação-openspec)
-- [Fase 14 — Contexto Consolidado e Relatório Final](#fase-14--contexto-consolidado-e-relatório-final)
+- [Fase 14 — Log, Contexto Consolidado e Relatório Final](#fase-14--log-contexto-consolidado-e-relatório-final)
 - [Fase 15 — Instruções de Negócio](#fase-15--instruções-de-negócio)
 
 ---
@@ -30,7 +30,7 @@ Use `/goal` quando o workflow precisa continuar entre turnos sem o usuario dar o
 Condicao padrao para o orquestrador:
 
 ```text
-/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; workflow-log.md, subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
 ```
 
 Durante cada turno sob `/goal`, mantenha o trabalho andando ate a proxima acao real. Antes de encerrar o turno, escreva um bloco curto de evidencias:
@@ -41,13 +41,15 @@ Durante cada turno sob `/goal`, mantenha o trabalho andando ate a proxima acao r
 - comandos/testes/validacoes executados e resultado;
 - criterios restantes da condicao.
 
-Se a condicao ainda nao estiver satisfeita, o avaliador dara continuidade. Se houver bloqueio sem recuperacao segura, registre `BLOCKED`/`PAUSED`, explique a pendencia e preserve os artefatos.
+Se a condicao ainda nao estiver satisfeita, o avaliador dara continuidade. Se houver bloqueio sem recuperacao segura, registre `BLOCKED`/`PAUSED`, atualize `workflow-log.md` quando a mudanca OpenSpec ja existir, explique a pendencia e preserve os artefatos.
 
 ---
 
 ## Fase 0 — Preflight Check
 
-**Obrigatória. Bloqueante. Roda antes de qualquer outra coisa.**
+**Obrigatória. Bloqueante. Incontornável. Roda antes de qualquer outra coisa — inclusive antes de ler artefatos existentes ou entender a demanda.**
+
+Se você se encontrar prestes a fazer qualquer ação (ler proposal.md, planejar, abrir OpenSpec) e ainda não rodou o preflight nesta invocação, pare imediatamente e execute agora.
 
 Execute:
 
@@ -94,7 +96,7 @@ Ao parar:
 1. Não invoque novos subagentes.
 2. Não faça handoff automático.
 3. Não implemente código diretamente.
-4. Atualize `monitoring.md` com `CANCELLED` ou `PAUSED`, incluindo motivo e timestamp.
+4. Atualize `monitoring.md` e `workflow-log.md` com `CANCELLED` ou `PAUSED`, incluindo motivo, fase, impacto e timestamp.
 5. Se já existirem retornos parciais, registre-os em `subagents-context.md` para retomada.
 6. Responda ao usuário com estado atual, artefatos preservados e condição mínima para retomar.
 
@@ -120,6 +122,8 @@ Regras de ambiguidade:
 
 - **pequena**: faça suposição razoável e registre no `proposal.md`;
 - **bloqueante**: pergunte com `AskUserQuestion` (máx 4 perguntas, opções específicas).
+
+**Artefatos existentes:** se `openspec/changes/<nome>/` já existe com `proposal.md`, leia-o antes de qualquer planejamento novo. Compare o objetivo atual com o escopo registrado. Se houver divergência de escopo (funcionalidade diferente, stack diferente, módulo diferente), use `AskUserQuestion` para confirmar: atualizar os artefatos existentes ou criar nova mudança com nome diferente? Nunca reutilize artefatos de execução anterior sem confirmar que ainda refletem a demanda atual.
 
 Saída desta fase: um parágrafo de contexto que vai alimentar o `proposal.md` da fase 2.
 
@@ -208,6 +212,8 @@ Antes de delegar o review ao Codex, confirme que o plano está minimamente compl
 - [ ] Riscos arquiteturais listados (mesmo que "nenhum identificado")
 
 Só após esse gate avance. Um plano incompleto resulta em review superficial e retrabalho na Fase 5.
+
+**Salve o gate:** após confirmar todos os itens, escreva o checklist preenchido em `openspec/changes/<nome>/plan-sufficiency-check.md`. Formato simples: copie os 6 itens com `[x]` ou `[ ]` e adicione timestamp. O arquivo serve como evidência auditável de que o plano passou o gate antes de ir para revisão.
 
 ---
 
@@ -359,6 +365,12 @@ Se houver dúvida sobre campo/tipo, pergunte ao usuário antes de delegar — é
 
 ## Fase 9 — Delegação Paralela
 
+**Verificações antes de delegar:**
+
+1. **Contagem da onda:** some todos os agentes a lançar (cada task FULLSTACK = 2, BACKEND_ONLY = 1, FRONTEND_ONLY = 1). Se N > 6, divida a onda em partes menores antes de prosseguir. Escreva no chat: "Lançando N agentes nesta onda (limite: 6)."
+
+2. **Skills reais no ambiente:** leia a lista de skills disponíveis no `<system-reminder>` do turno atual. Para cada skill citada nos templates de prompt (ex.: `csharp-pro`, `dotnet-architect`, `frontend-developer`), confirme que ela aparece na lista pelo nome exato. Remova do prompt qualquer skill ausente. Nunca cite skill que não existe no ambiente do usuário.
+
 Use **uma única chamada** com múltiplos `Agent(..., run_in_background=true)` para a onda inteira.
 
 Exemplo (Wave 1 com 2 tasks FULLSTACK + 1 BACKEND_ONLY = 5 agentes):
@@ -459,6 +471,12 @@ Política de recuperação:
 
 Quando todas as tasks da onda chegarem em `DONE`, `FAILED`, `QUOTA_EXHAUSTED` ou `BLOCKED`, prossiga para a fase 11 apenas se houver ação clara de integração, redelegação ou decisão do usuário. Se qualquer item estiver `PAUSED` ou `CANCELLED`, não avance.
 
+**Heartbeat de visibilidade:** publique um update curto na conversa em dois momentos:
+- quando cada onda completar (todas as tasks em DONE/FAILED/BLOCKED/QUOTA_EXHAUSTED);
+- quando qualquer task permanecer em RUNNING por mais de 3 minutos sem notificação.
+
+Formato do update (máximo 3 linhas): onda atual, contagem de tasks por status, próximo passo. Exemplo: "Onda 1: 2 DONE, 1 RUNNING — aguardando T3 front-end; se não concluir em ~2 min, SLOW_CHECKIN."
+
 ---
 
 ## Fase 11 — Integração dos Resultados
@@ -545,9 +563,13 @@ Por último:
 
 ---
 
-## Fase 14 — Contexto Consolidado e Relatório Final
+## Fase 14 — Log, Contexto Consolidado e Relatório Final
 
-Primeiro copie `assets/subagents-context-template.md` para `openspec/changes/<nome>/subagents-context.md` e preencha com o resumo de contexto de todos os subagentes Codex/Gemini executados.
+Primeiro copie `assets/workflow-log-template.md` para `openspec/changes/<nome>/workflow-log.md` e preencha com a linha do tempo auditável do workflow inteiro, da Fase -1/0 até a Fase 15 quando aplicável. O log deve registrar decisões do orquestrador, artefatos criados/atualizados, validações, subagentes acionados, falhas possíveis, falhas ocorridas, evidência curta, impacto, fallback, bloqueio, pausa, cancelamento e próxima ação.
+
+Se o workflow estiver `PAUSED`, `CANCELLED` ou `BLOCKED`, ainda assim entregue `workflow-log.md` como artefato de retomada. Quando uma falha ocorrer depois que a mudança OpenSpec já existe, atualize o log com: fase, evento, evidência curta, impacto, status final e próxima ação. Use `monitoring.md` como fonte viva de eventos de ondas/subagentes, mas consolide no `workflow-log.md` apenas o que for relevante para auditoria e retomada.
+
+Depois copie `assets/subagents-context-template.md` para `openspec/changes/<nome>/subagents-context.md` e preencha com o resumo de contexto de todos os subagentes Codex/Gemini executados.
 
 Esse arquivo deve preservar o que o orquestrador precisa lembrar para finalizar, auditar e retomar a mudança:
 
@@ -561,7 +583,7 @@ Esse arquivo deve preservar o que o orquestrador precisa lembrar para finalizar,
 - pendências e riscos;
 - handoffs, falhas de cota/tool/escrita e próxima ação tomada.
 
-Copie `assets/implementation-report-template.md` para `openspec/changes/<nome>/implementation-report.md` e preencha todas as seções:
+Copie `assets/implementation-report-template.md` para `openspec/changes/<nome>/implementation-report.md` e preencha todas as seções. O relatório deve linkar e resumir `workflow-log.md`, sem duplicar a linha do tempo operacional completa:
 
 1. Resumo Executivo
 2. Objetivo da Mudança
@@ -581,6 +603,7 @@ Copie `assets/implementation-report-template.md` para `openspec/changes/<nome>/i
 
 Encerre informando ao usuário:
 
+- caminho do log de workflow;
 - caminho do relatório;
 - caminho do contexto consolidado dos subagentes;
 - resumo em 2-3 frases;

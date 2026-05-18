@@ -1,6 +1,6 @@
 # Monitoramento da Execução — <NOME DA MUDANÇA>
 
-> Atualize este arquivo conforme os subagentes em background notificam conclusão. Não faça polling contínuo; use `SLOW_CHECKIN` apenas quando uma task parecer estagnada. Ao final, consolide os dados relevantes em `subagents-context.md`.
+> Atualize este arquivo conforme os subagentes em background notificam conclusão. Não faça polling contínuo; use `SLOW_CHECKIN` apenas quando uma task parecer estagnada. Ao final, consolide os dados relevantes em `subagents-context.md` e os eventos operacionais importantes em `workflow-log.md`.
 
 ## Legenda de status
 
@@ -119,3 +119,11 @@ Registre cada SLOW_CHECKIN no log abaixo com timestamp.
 | Task | Subagent type | Modelo | Status final | Resumo entregue | Arquivos alterados | Testes | Pendências/Riscos |
 |---|---|---|---|---|---|---|---|
 | `<task>` | `<codex/gemini>` | `<modelo>` | `<status>` | `<2 linhas>` | `<lista>` | `<lista>` | `<lista>` |
+
+## Dados para `workflow-log.md`
+
+> Antes de encerrar ou pausar a mudança, transfira para `workflow-log.md` os eventos que explicam a execução do workflow, especialmente falhas, fallback, bloqueios, pausa, cancelamento, divergências de contrato, cota esgotada e verificações finais.
+
+| Timestamp | Fase | Evento relevante | Evidência curta | Impacto | Ação tomada |
+|---|---|---|---|---|---|
+| `<ts>` | `<fase>` | `<evento>` | `<mensagem curta>` | `<baixo/médio/alto>` | `<fallback/redelegação/pausa/integração>` |

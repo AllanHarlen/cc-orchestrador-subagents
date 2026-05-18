@@ -58,18 +58,19 @@ openspec/
         ├── contracts/                      # contratos API/UI por task FULLSTACK
         │   └── <task-id>.md
         ├── monitoring.md                   # status das tasks (fase 10)
+        ├── workflow-log.md                 # log auditável do workflow (fase 14)
         ├── subagents-context.md            # contexto consolidado dos subagentes (fase 14)
         ├── review-codex.md                 # output do review do plano (fase 4)
         ├── review-final.md                 # output do review pós-implementação (fase 12)
         ├── specs/                          # deltas de spec gerados nesta mudança
-        ├── implementation-report.md        # entregável final (fase 14)
+        ├── implementation-report.md        # relatório final (fase 14)
         └── README.md                       # (opcional)
 ```
 
 ## Boas práticas
 
 - **Não pule `/openspec-verify-change`.** Mesmo que tudo pareça pronto, o verify pega referências quebradas em spec.
-- **`/openspec-archive-change` é destrutivo no sentido de mover pastas.** Só rode depois de garantir `implementation-report.md` e `subagents-context.md` salvos e o usuário ciente.
+- **`/openspec-archive-change` é destrutivo no sentido de mover pastas.** Só rode depois de garantir `workflow-log.md`, `implementation-report.md` e `subagents-context.md` salvos e o usuário ciente.
 - **Pode haver várias mudanças em paralelo no repo.** Não misture artefatos de mudanças diferentes — cada uma em seu diretório.
 
 ## Se OpenSpec não estiver disponível

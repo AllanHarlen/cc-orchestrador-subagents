@@ -18,6 +18,7 @@
 - `openspec/changes/<nome>/specs/` (lista de specs deltas)
 - `openspec/changes/<nome>/contracts/` (lista de contratos por task FULLSTACK)
 - `openspec/changes/<nome>/monitoring.md`
+- `openspec/changes/<nome>/workflow-log.md`
 - `openspec/changes/<nome>/subagents-context.md`
 - `openspec/changes/<nome>/review-codex.md` (review do plano)
 - `openspec/changes/<nome>/review-final.md` (review pós-implementação)
@@ -124,6 +125,17 @@
 | `<T1>` | `cc-gemini-plugin:gemini-agent` | `<modelo>` | `<status>` | `<resumo>` | `<nenhum | item>` |
 
 Contexto completo: `openspec/changes/<nome>/subagents-context.md`.
+
+## 10.1. Log de Workflow do Orquestrador
+
+> Resumo executivo do arquivo `workflow-log.md`. Não duplique a linha do tempo completa aqui; registre apenas o status geral, fases críticas, falhas ocorridas e ações de recuperação.
+
+- **Log completo:** `openspec/changes/<nome>/workflow-log.md`
+- **Status final do workflow:** `<DONE | DONE_WITH_PENDING_ITEMS | BLOCKED | PAUSED | CANCELLED | FAILED>`
+- **Fases críticas:** `<preflight, review, delegação, monitoramento, verificação OpenSpec, etc.>`
+- **Falhas ocorridas:** `<nenhuma | resumo curto>`
+- **Recuperações/fallbacks:** `<nenhum | resumo curto>`
+- **Condição de retomada:** `<N/A | instrução objetiva>`
 
 ## 11. Testes e Validações
 

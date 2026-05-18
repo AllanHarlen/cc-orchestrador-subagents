@@ -1,5 +1,5 @@
 ---
-description: Conduzir manualmente um workflow de desenvolvimento multiagêntico, com suporte a execucao autonoma via /goal (OpenSpec + planejamento do orquestrador + Codex review + Codex/Gemini execução paralela + relatório final + instruções de negócio)
+description: Conduzir manualmente um workflow de desenvolvimento multiagêntico, com suporte a execucao autonoma via /goal (OpenSpec + planejamento do orquestrador + Codex review + Codex/Gemini execução paralela + log de workflow + relatório final + instruções de negócio)
 argument-hint: "<descrição da demanda — ex.: 'implemente o fluxo de reservas com listagem, criação e cancelamento'>"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
@@ -23,7 +23,7 @@ Inicia o **Orquestrador Multiagêntico de Desenvolvimento** para a demanda descr
 11. Integração e resolução de divergências
 12. Review pós-implementação (Codex gpt-5.5 high)
 13. Verificação OpenSpec (`/openspec-verify-change` → `/openspec-sync-specs` → `/openspec-archive-change`)
-14. `subagents-context.md` + `implementation-report.md` finais
+14. `workflow-log.md` + `subagents-context.md` + `implementation-report.md` finais
 15. Instruções de negócio para o usuário sobre a feature implementada
 
 ## Regra central de execução
@@ -43,7 +43,7 @@ Para trabalho independente entre turnos, o modo recomendado e envolver a demanda
 Use este formato quando o usuario pedir autonomia, modo independente, "continue ate terminar" ou equivalente:
 
 ```text
-/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; workflow-log.md, subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
 ```
 
 Se o workflow ja estiver rodando sob `/goal`, nao peca confirmacao a cada etapa operacional. Ao final de cada turno, exponha evidencias que o avaliador consegue ler: fase atual, arquivos criados, subagentes pendentes/concluidos, comandos/testes executados com resultado e criterios restantes.
@@ -108,7 +108,7 @@ Antes de iniciar cada fase e antes de lançar/redelegar subagentes, faça um gat
 
 - Se a mensagem mais recente do usuário indicar "cancela", "aborta", "para", "não continue", "pausa", "aguarde", reprovação do plano/contrato ou problema bloqueante, **interrompa imediatamente**.
 - Não invoque novos subagentes, não edite implementação e não avance de fase.
-- Atualize `monitoring.md`/`subagents-context.md` com `CANCELLED` ou `PAUSED` quando a mudança já tiver artefatos.
+- Atualize `monitoring.md`/`workflow-log.md`/`subagents-context.md` com `CANCELLED` ou `PAUSED` quando a mudança já tiver artefatos.
 - Responda com o estado atual, artefatos preservados e o que será necessário para retomada.
 
 ### Passo 5 — Reportar updates
@@ -119,7 +119,7 @@ Mantenha o usuário informado com mensagens curtas:
 - "Context7 MCP detectado; vou exigir docs atuais nos prompts dos subagentes" ou "Context7 MCP não detectado; seguindo sem bloquear";
 - "criando mudança OpenSpec <nome>";
 - "lancei <N> subagentes em paralelo para a onda <N>, aviso quando completarem";
-- no fim: caminhos do `implementation-report.md` e `subagents-context.md` + resumo de 2-3 frases + instruções de negócio para homologar/operar a feature.
+- no fim: caminhos do `workflow-log.md`, `implementation-report.md` e `subagents-context.md` + resumo de 2-3 frases + instruções de negócio para homologar/operar a feature.
 
 ## Quando o usuário invocar sem argumento
 

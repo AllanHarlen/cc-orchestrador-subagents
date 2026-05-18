@@ -30,7 +30,7 @@ O `cc-orchestrador-subagents` transforma o Claude Code em um **gerente técnico 
 5. execução paralela de duplas back-end/front-end (Codex + Gemini) em background;
 6. monitoramento sem polling contínuo, com check-ins leves para tasks lentas, integração e revisão pós-implementação;
 7. contexto consolidado de todos os subagentes executados;
-8. relatório final em Markdown com instruções de negócio para o usuário.
+8. log de workflow e relatório final em Markdown com instruções de negócio para o usuário.
 
 O orquestrador (Claude Sonnet 4.6 Medium) coordena o fluxo, mas **não executa subagentes Claude Code**. As únicas delegações do workflow são para Codex e Gemini via plugins:
 
@@ -51,7 +51,7 @@ Times e devs solo que:
 - já usam OpenSpec ou querem padronizar mudanças via spec;
 - têm Codex e Gemini instalados e querem aproveitar especialização (back-end → Codex, front-end → Gemini);
 - preferem plano e contrato antes do código em mudanças com risco arquitetural;
-- querem rastreabilidade automática (proposal, design, tasks, contratos, monitoring, relatório final).
+- querem rastreabilidade automática (proposal, design, tasks, contratos, monitoring, log de workflow, relatório final).
 
 ### Quando NÃO usar
 
@@ -119,7 +119,7 @@ Para o orquestrador trabalhar independente entre turnos, use `/goal`. O `/goal` 
 Este repositorio tambem define `permissions.defaultMode: "auto"` em `.claude/settings.json`, para reduzir prompts de permissao durante execucoes longas. Em ambientes mais restritivos, rode explicitamente:
 
 ```bash
-claude --permission-mode auto -p "/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado."
+claude --permission-mode auto -p "/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; workflow-log.md, subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado."
 ```
 
 ### Skills do OpenSpec
@@ -224,7 +224,7 @@ Exemplos:
 Para deixar o Claude continuar entre turnos ate o fim verificavel:
 
 ```text
-/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: implemente o CRUD de reservas com listagem, criacao e cancelamento. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: implemente o CRUD de reservas com listagem, criacao e cancelamento. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; workflow-log.md, subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
 ```
 
 O avaliador do `/goal` nao le arquivos nem roda comandos por conta propria. Por isso o orquestrador sempre publica no chat os caminhos criados, resultados de testes/validacoes e criterios restantes antes de encerrar cada turno.
@@ -232,7 +232,7 @@ O avaliador do `/goal` nao le arquivos nem roda comandos por conta propria. Por 
 Modo headless:
 
 ```bash
-claude --permission-mode auto -p "/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: implemente o CRUD de reservas com listagem, criacao e cancelamento. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado."
+claude --permission-mode auto -p "/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: implemente o CRUD de reservas com listagem, criacao e cancelamento. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; workflow-log.md, subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado."
 ```
 
 ### Invocacao direta da skill
@@ -261,14 +261,14 @@ A skill é manual-only (`disable-model-invocation: true`) para evitar que Claude
 | 11. Integração | resolve divergências entre agentes | decidir em divergências de design |
 | 12. Review final | delega ao Codex gpt-5.5 high para revisar tudo | revisar `review-final.md` |
 | 13. Verificação OpenSpec | roda `/openspec-verify-change` → `/openspec-sync-specs` → `/openspec-archive-change` | nada |
-| 14. Relatório | gera `subagents-context.md` e `implementation-report.md` | revisar e seguir para merge |
+| 14. Relatório | gera `workflow-log.md`, `subagents-context.md` e `implementation-report.md` | revisar e seguir para merge |
 | 15. Instruções de negócio | explica a feature em termos de homologação/operação/produto | validar próximos passos |
 
 ### Cancelamento e retomada
 
 - **Preflight falhou:** instale o que falta e rode `/orchestrator` de novo.
 - **Plano reprovado pelo Codex:** o orquestrador re-elabora (ou pede sua decisão) e re-revisa.
-- **Subagente falhou ou esgotou cota:** o orquestrador registra a evidência, atualiza `monitoring.md` e só redelega para subagente permitido (normalmente Codex gpt-5.4 medium) se não houver pausa/cancelamento do usuário; caso contrário bloqueia para sua decisão.
+- **Subagente falhou ou esgotou cota:** o orquestrador registra a evidência, atualiza `monitoring.md` e consolida o evento em `workflow-log.md`; só redelega para subagente permitido (normalmente Codex gpt-5.4 medium) se não houver pausa/cancelamento do usuário; caso contrário bloqueia para sua decisão.
 - **Você quer abortar:** diga "cancela" no chat — o orquestrador marca `CANCELLED`, não lança novos subagentes, não faz handoff automático e mantém os artefatos OpenSpec para retomada futura.
 
 ---
@@ -440,9 +440,10 @@ Recomendações:
 /openspec-archive-change fluxo-reservas → arquivado
 ```
 
-### Fase 14 — Contexto e relatório (1 turno)
+### Fase 14 — Log, contexto e relatório (1 turno)
 
 ```
+Log do workflow criado: openspec/changes/fluxo-reservas/workflow-log.md
 Contexto dos subagentes criado: openspec/changes/fluxo-reservas/subagents-context.md
 Relatório criado: openspec/changes/fluxo-reservas/implementation-report.md
 
@@ -474,6 +475,7 @@ openspec/changes/fluxo-reservas/
 │   ├── T2.md
 │   └── T3.md
 ├── monitoring.md
+├── workflow-log.md              (linha do tempo auditável do orquestrador)
 ├── subagents-context.md          (resumo consolidado dos subagentes)
 ├── review-codex.md            (review do plano)
 ├── review-final.md            (review pós-implementação)
@@ -514,6 +516,7 @@ cc-orchestrador-subagents/
             ├── plan-template.md
             ├── contract-template.md
             ├── monitoring-template.md
+            ├── workflow-log-template.md
             ├── subagents-context-template.md
             └── implementation-report-template.md
 ```
@@ -531,6 +534,7 @@ cc-orchestrador-subagents/
 - **Sem agentes desnecessários.** Task só back-end = 1 agente. Task só front-end = 1 agente. Task full-stack = dupla.
 - **Contrato antes do paralelismo.** Toda task full-stack passa por um contrato API/UI antes dos agentes saírem em paralelo — evita divergência de campos (`description` vs `descricao`).
 - **Sem polling contínuo.** Subagentes em background notificam ao concluir; o orquestrador atualiza `monitoring.md` sob demanda e faz `SLOW_CHECKIN` quando uma task parece estagnada.
+- **Log de workflow obrigatório.** Toda execução registra `workflow-log.md` com linha do tempo por fase, falhas possíveis, falhas ocorridas e ações de recuperação.
 - **Sem subagente Claude para planejar.** O orquestrador mantém o conhecimento geral e só delega para Codex/Gemini via plugins.
 - **Contexto consolidado obrigatório.** Toda execução registra `subagents-context.md` com o resumo de todos os subagentes executados.
 - **Relatório obrigatório com instruções de negócio.** Toda execução fecha com `implementation-report.md` e orientações para homologar/operar a feature.

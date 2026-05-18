@@ -2,6 +2,8 @@
 
 Sempre leia este arquivo **antes** de delegar para Codex ou Gemini. Copie o prompt da seção correta e preencha os placeholders (`<...>`) antes de chamar `Agent(...)`.
 
+**Antes de preencher qualquer prompt:** verifique a lista de skills disponíveis no `<system-reminder>` do turno atual. Substitua os placeholders de skills (ex.: `<LISTAR SKILLS BACK-END DISPONÍVEIS>`) somente com skills que aparecem nessa lista pelo nome exato. Remova completamente qualquer skill ausente no ambiente — nunca passe skill inexistente para Codex ou Gemini.
+
 O orquestrador não delega planejamento para subagentes Claude Code. Não use `Plan`, `general-purpose` ou outro subagente Claude neste fluxo; o planejamento OpenSpec é feito diretamente pelo orquestrador com `assets/plan-template.md`.
 
 Cada prompt já contém:

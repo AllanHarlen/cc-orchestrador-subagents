@@ -150,7 +150,7 @@ Skills relevantes neste repositório:
 
 - Planejamento OpenSpec: faça diretamente como orquestrador usando `assets/plan-template.md`.
 - Consolidação/finalização: faça diretamente como orquestrador, usando os retornos de Codex/Gemini.
-- Artefatos de coordenação do workflow (`proposal.md`, `design.md`, `tasks.md`, `monitoring.md`, `subagents-context.md`, `implementation-report.md`): faça diretamente como orquestrador.
+- Artefatos de coordenação do workflow (`proposal.md`, `design.md`, `tasks.md`, `monitoring.md`, `workflow-log.md`, `subagents-context.md`, `implementation-report.md`): faça diretamente como orquestrador.
 - Tarefa trivial fora do `/orchestrator` (typo, rename simples, commit message): não use esta skill; trate como execução direta fora do fluxo orquestrado.
 
 Nunca invoque um agente "porque pode". O custo é tempo + tokens + risco de escopo expandido.

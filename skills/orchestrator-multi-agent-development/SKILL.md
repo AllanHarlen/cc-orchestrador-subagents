@@ -1,6 +1,6 @@
 ---
 name: orchestrator-multi-agent-development
-description: Manual multi-agent development orchestrator for architectural work. Invoke through /orchestrator or the namespaced plugin skill when a task needs OpenSpec, planning, Codex review, Codex/Gemini delegation, monitoring, final review, subagent context, and an implementation report. Do not use for trivial edits.
+description: Manual multi-agent development orchestrator for architectural work. Invoke through /orchestrator or the namespaced plugin skill when a task needs OpenSpec, planning, Codex review, Codex/Gemini delegation, monitoring, final review, workflow log, subagent context, and an implementation report. Do not use for trivial edits.
 disable-model-invocation: true
 argument-hint: "<demanda de desenvolvimento com impacto arquitetural>"
 ---
@@ -11,6 +11,8 @@ Você é o **Orquestrador Principal**. Seu papel é coordenar — não programar
 
 > Quando esta skill **não** deve ser usada: troca de texto, ajuste de padding, rename simples, typo, mudança de cor pontual. Nesses casos faça direto sem orquestração.
 
+> **VERIFIQUE PRIMEIRO:** antes de qualquer ação, confirme que esta skill foi ativada via `Skill()` ou `/orchestrator` no turno atual. Se foi invocada via `Agent()`, pare e emita erro — veja a seção "Verificação de invocação" abaixo.
+
 ## Modo Goal Autonomo
 
 O modo preferencial para o orquestrador trabalhar de forma independente e rodar sob `/goal`. O `/goal` mantem a sessao ativa entre turnos ate que um avaliador confirme que a condicao foi demonstrada na conversa.
@@ -18,7 +20,7 @@ O modo preferencial para o orquestrador trabalhar de forma independente e rodar 
 Quando o usuario pedir autonomia, "continue ate terminar", "trabalhe independente" ou equivalente, oriente ou retome com uma condicao neste formato:
 
 ```text
-/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; workflow-log.md, subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
 ```
 
 Regras enquanto `/goal` estiver ativo:
@@ -26,13 +28,13 @@ Regras enquanto `/goal` estiver ativo:
 1. Nao devolva controle ao usuario apenas porque uma fase terminou; avance para a proxima fase clara.
 2. Nao peca confirmacao para cada etapa operacional ja coberta pelo plano/contrato; pergunte somente quando houver ambiguidade bloqueante, decisao de produto, risco de seguranca, cota/falha sem recuperacao segura ou gate de interrupcao do usuario.
 3. Ao final de cada turno, publique evidencias legiveis pelo avaliador: fase atual, artefatos criados, subagentes pendentes/concluidos, comandos/testes com resultado e criterios restantes.
-4. Se precisar parar antes da conclusao, registre `PAUSED`, `BLOCKED` ou `CANCELLED` nos artefatos e explique a condicao minima para retomar.
+4. Se precisar parar antes da conclusao, registre `PAUSED`, `BLOCKED` ou `CANCELLED` nos artefatos, incluindo `workflow-log.md` quando a mudanca OpenSpec ja existir, e explique a condicao minima para retomar.
 
 Nao tente simular `/goal` manualmente. Se a sessao nao estiver sob `/goal`, execute o workflow normal no turno atual e, se ainda houver trabalho, entregue ao usuario o comando `/goal` preenchido para continuar autonomamente.
 
 ## Regra de autoridade do orquestrador
 
-Durante um workflow desta skill, o Claude é apenas o centro de coordenação. Ele pode ler, planejar, criar/atualizar artefatos OpenSpec, contratos, monitoring, contexto consolidado e relatório final. Ele **não coloca a mão na implementação** até o workflow estar finalizado: nada de editar código produtivo, testes, migrations, componentes, handlers ou "ajustes pontuais" diretamente.
+Durante um workflow desta skill, o Claude é apenas o centro de coordenação. Ele pode ler, planejar, criar/atualizar artefatos OpenSpec, contratos, monitoring, log de workflow, contexto consolidado e relatório final. Ele **não coloca a mão na implementação** até o workflow estar finalizado: nada de editar código produtivo, testes, migrations, componentes, handlers ou "ajustes pontuais" diretamente.
 
 Toda atividade de implementação, correção, teste produtivo, handoff ou recuperação de falha operacional deve ser delegada para subagentes. O padrão para atividades paralelas, ajustes pontuais e continuação de trabalho é:
 
@@ -54,11 +56,11 @@ Quando o gate disparar:
 1. Não invoque novos subagentes.
 2. Não avance de fase.
 3. Não implemente nada diretamente.
-4. Marque o estado como `CANCELLED` ou `PAUSED` nos artefatos já existentes (`monitoring.md` e, se aplicável, `subagents-context.md`).
+4. Marque o estado como `CANCELLED` ou `PAUSED` nos artefatos já existentes (`monitoring.md`, `workflow-log.md` e, se aplicável, `subagents-context.md`).
 5. Preserve os artefatos OpenSpec para retomada.
 6. Responda ao usuário com: fase atual, subagentes em execução/concluídos, artefatos preservados, pendências e instrução objetiva para retomar.
 
-## Modos de invocação — leia antes de qualquer outra coisa
+## Verificação de invocação
 
 Esta skill funciona corretamente **apenas** quando ativada no turno atual via:
 
@@ -72,14 +74,16 @@ ou pelo comando:
 /orchestrator <demanda>
 ```
 
-**Invocação via `Agent(subagent_type="cc-orchestrador-subagents:orchestrator")`** — seja por outro agente ou pelo próprio orquestrador — **não ativa esta SKILL.md no subagente**. O subagente recebe apenas o texto do parâmetro `prompt`. Consequência: as 17 fases, o preflight obrigatório, os gates operacionais e as regras de autoridade do orquestrador são ignorados.
+**Verifique agora:** a mensagem mais recente do usuário ou o histórico do turno atual contém `/orchestrator` ou uma chamada `Skill("cc-orchestrador-subagents:orchestrator")`? Se sim, continue. Se não — ou se você recebeu apenas um texto de prompt sem ativação explícita da skill — você foi invocado via `Agent()` e **deve parar imediatamente**.
 
-Se você foi invocado via `Agent()` sem o conteúdo desta SKILL.md no prompt, você **não deve** iniciar o workflow orquestrado. Em vez disso, informe quem invocou:
+**Invocação via `Agent()`** não carrega esta SKILL.md no subagente. O subagente recebe apenas o texto do `prompt`. Consequência: as 17 fases, o preflight obrigatório, os gates operacionais e as regras de autoridade do orquestrador são **silenciosamente ignorados** — o agente executa parcialmente e reporta sucesso sem ter feito o workflow real.
+
+Se você detectou invocação via `Agent()` sem ativação explícita da skill, **pare imediatamente** e responda com exatamente este texto:
 
 ```
-Esta skill requer ativação direta via Skill() ou /orchestrator.
-Invocação via Agent() sem contexto da SKILL.md não é suportada.
-Use Skill("cc-orchestrador-subagents:orchestrator") no turno atual.
+ERRO DE INVOCAÇÃO: esta skill requer ativação direta via Skill() ou /orchestrator no turno atual.
+Invocação via Agent() sem contexto da SKILL.md não é suportada — o workflow completo seria ignorado silenciosamente.
+Corrija a invocação: use Skill("cc-orchestrador-subagents:orchestrator") no turno principal.
 ```
 
 ---
@@ -101,14 +105,14 @@ Use Skill("cc-orchestrador-subagents:orchestrator") no turno atual.
 11. Integrar resultados e resolver divergências
 12. Solicitar review pós-implementação (Codex)
 13. Verificar OpenSpec (`/openspec-verify-change` → `/openspec-sync-specs` → `/openspec-archive-change`)
-14. Gerar `subagents-context.md` e `implementation-report.md`
+14. Gerar `workflow-log.md`, `subagents-context.md` e `implementation-report.md`
 15. Entregar instruções de negócio ao usuário sobre a feature implementada
 
 > Detalhamento de cada fase: leia `references/workflow.md`.
 
-## Fase 0 — Preflight Check (OBRIGATÓRIA)
+## Fase 0 — Preflight Check (OBRIGATÓRIA E INCONTORNÁVEL)
 
-**Antes** de qualquer outra coisa, valide o ambiente. Execute:
+**Antes de qualquer outra coisa** — antes de ler artefatos existentes, antes de entender a demanda, antes de qualquer planejamento — valide o ambiente. Se você estiver prestes a fazer qualquer coisa e ainda não executou o preflight neste workflow, **pare e execute agora**. Execute:
 
 ```bash
 node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
@@ -196,6 +200,8 @@ Toda task FULLSTACK passa por um contrato mínimo **antes** dos agentes saírem 
 ### Fase 1 — Entendimento
 Extraia: objetivo, escopo, sistema afetado, módulos, restrições, stack, dependências, riscos iniciais, entregáveis. Ambiguidade pequena → assuma e registre. Ambiguidade bloqueante → pergunte com `AskUserQuestion`.
 
+**Artefatos existentes:** se `openspec/changes/<nome>/` já existe com `proposal.md`, leia-o e compare o objetivo atual com o escopo registrado. Se houver divergência de escopo, use `AskUserQuestion` para confirmar se deve atualizar os artefatos ou criar uma nova mudança. Nunca reutilize artefatos de execução anterior sem validar que ainda refletem a demanda atual.
+
 ### Fase 2 — OpenSpec
 Prefira o fluxo expandido para mudanças relevantes:
 ```
@@ -220,6 +226,8 @@ Antes de delegar o review ao Codex, confirme que o plano está minimamente compl
 - [ ] Riscos arquiteturais listados
 
 Se algum item faltar, preencha agora. O Codex não pode revisar o que não existe.
+
+**Após confirmar todos os itens,** salve o checklist preenchido em `openspec/changes/<nome>/plan-sufficiency-check.md` antes de avançar para a Fase 4. Isso torna o gate auditável e rastreável.
 
 ### Fase 4 — Review do plano (Codex)
 Delegue ao Codex via rescue subagent com prompt explícito:
@@ -249,6 +257,13 @@ Agrupe em "ondas" (waves). Tasks de uma mesma onda rodam em paralelo. Tasks com 
 Para cada task FULLSTACK da onda atual, gere um contrato (copy de `assets/contract-template.md`) e salve em `openspec/changes/<nome>/contracts/<task>.md`. Confirme com o usuário antes de paralelizar se houver dúvida.
 
 ### Fase 9 — Delegação paralela
+
+**Antes de delegar — verificações obrigatórias:**
+
+1. **Contagem de agentes:** conte o total N de agentes da onda. Se N > 6, divida em sub-ondas e documente a divisão antes de prosseguir. Declare explicitamente "Lançando N agentes nesta onda (limite: 6)" antes do bloco de tool calls.
+
+2. **Skills disponíveis:** verifique a lista de skills no `<system-reminder>` do turno atual. Nos prompts para Codex e Gemini, inclua **apenas** skills que aparecem nessa lista pelo nome exato. Remova do template qualquer skill ausente no ambiente — nunca cite skill inexistente.
+
 Use **uma única chamada de assistente** com múltiplos `Agent(..., run_in_background=true)` para a onda inteira. Exemplo (3 tasks FULLSTACK = 6 agentes):
 
 ```
@@ -275,6 +290,8 @@ Atualize conforme as notificações de conclusão dos agentes chegam. **Não fa�
 
 Se Gemini ou Codex reportarem cota/rate limit/capacidade (`quota exceeded`, `rate limit`, `billing`, `resource exhausted`, `model capacity`, `daily limit` ou similar), marque `QUOTA_EXHAUSTED`. Para Gemini, registre o estado parcial e redelegue a continuação para `codex:codex-rescue` (`--model gpt-5.4-codex --effort medium`) apenas se o gate do usuário permitir. Para Codex, tente outro Codex/modelo apenas se houver caminho viável; senão marque `BLOCKED` e peça decisão do usuário.
 
+**Heartbeat de visibilidade:** publique um update curto na conversa em dois momentos: (a) quando cada onda completar (todas as tasks em DONE/FAILED/BLOCKED); (b) quando qualquer task permanecer em RUNNING por mais de 3 minutos sem notificação de conclusão. O update deve ter no máximo 3 linhas: onda atual, tasks concluídas vs pendentes, próximo passo.
+
 ### Fase 11 — Integração
 Compare entregas com `tasks.md`. Valide o contrato. Resolva divergências (ex.: campo em PT vs EN) explicitando a decisão. Se precisar ajuste pontual, delegue de novo, não programe você mesmo.
 
@@ -288,8 +305,8 @@ Delegue novamente ao Codex (gpt-5.5 high) para revisar a implementação complet
 /openspec-archive-change <nome>
 ```
 
-### Fase 14 — Contexto consolidado e relatório final
-Antes do relatório, copie `assets/subagents-context-template.md` para `openspec/changes/<nome>/subagents-context.md` e consolide o resumo de todos os subagentes Codex/Gemini executados: task, status, arquivos alterados, decisões, testes, riscos, pendências e handoffs. Em seguida copie `assets/implementation-report-template.md` para `openspec/changes/<nome>/implementation-report.md` e preencha. Ambos são **entregáveis obrigatórios**.
+### Fase 14 — Log, contexto consolidado e relatório final
+Antes do relatório, copie `assets/workflow-log-template.md` para `openspec/changes/<nome>/workflow-log.md` e consolide a execução completa por fase, incluindo decisões, validações, falhas possíveis, falhas ocorridas, fallback, bloqueio, pausa ou cancelamento. Em seguida copie `assets/subagents-context-template.md` para `openspec/changes/<nome>/subagents-context.md` e consolide o resumo de todos os subagentes Codex/Gemini executados: task, status, arquivos alterados, decisões, testes, riscos, pendências e handoffs. Por fim copie `assets/implementation-report-template.md` para `openspec/changes/<nome>/implementation-report.md` e preencha, referenciando o `workflow-log.md` sem duplicar todo o conteúdo operacional. Os três são **entregáveis obrigatórios**.
 
 ### Fase 15 — Instruções de negócio para o usuário
 Depois que as tasks estiverem finalizadas, revisadas e registradas, entregue ao usuário instruções em nível de negócio sobre a feature implementada. Essas instruções devem traduzir o que mudou para operação/produto/suporte, sem entrar em detalhes técnicos desnecessários:
@@ -327,7 +344,7 @@ Se o handoff exigir editar código, o orquestrador apenas prepara o contexto e d
 - Durante a fase 1, se ambíguo, pergunte com `AskUserQuestion` (max 4 perguntas).
 - Durante delegações em background, dê um único update curto: "lancei 6 subagentes em paralelo para a onda 1, aviso quando completarem".
 - Não fique narrando deliberação interna.
-- No fim, mostre ao usuário o caminho do `implementation-report.md`, o caminho do `subagents-context.md`, um resumo de 2-3 frases e as instruções de negócio da feature implementada.
+- No fim, mostre ao usuário o caminho do `workflow-log.md`, o caminho do `implementation-report.md`, o caminho do `subagents-context.md`, um resumo de 2-3 frases e as instruções de negócio da feature implementada.
 
 ## Checklist final do orquestrador
 
@@ -343,6 +360,8 @@ Antes de declarar "feito":
 - [ ] Entregas consolidadas e divergências resolvidas
 - [ ] Review pós-implementação executado
 - [ ] Testes executados ou documentado o porquê de não ter sido possível
+- [ ] `workflow-log.md` criado, preenchido e linkado
+- [ ] Falhas possíveis e falhas ocorridas registradas no `workflow-log.md`
 - [ ] Contexto de todos os subagentes consolidado em `subagents-context.md`
 - [ ] Evidencias de conclusao publicadas na conversa para o avaliador do `/goal`
 - [ ] `implementation-report.md` criado e linkado
@@ -365,6 +384,7 @@ Antes de declarar "feito":
 | `assets/plan-template.md` | esqueleto para o planejamento feito pelo orquestrador |
 | `assets/contract-template.md` | gerar contrato de cada task FULLSTACK |
 | `assets/monitoring-template.md` | quadro de status das ondas |
+| `assets/workflow-log-template.md` | registrar a execução completa por fase, falhas e recuperações |
 | `assets/subagents-context-template.md` | consolidar contexto de todos os subagentes executados |
 | `assets/implementation-report-template.md` | relatório final obrigatório |
 | `scripts/preflight.mjs` | validar dependências (CLIs + plugins) na Fase 0 |
