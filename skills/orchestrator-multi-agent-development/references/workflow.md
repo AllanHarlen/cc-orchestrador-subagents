@@ -17,10 +17,55 @@ Regras:
 - a auto-remediacao so vale para `codex-companion-bash`;
 - se `.claude/settings.json` existir com JSON invalido, nao sobrescreva; falhe com remediacao clara.
 
-## Fases 1 a 5 - Entendimento, OpenSpec, plano e review
+## Fase 1 - Entendimento da demanda
 
-- o orquestrador entende a demanda;
-- cria a mudanca OpenSpec;
+### 1.1 Explorar o repositorio OpenSpec
+
+Antes de criar qualquer artefato, execute:
+
+```
+/explore https://github.com/Fission-AI/OpenSpec/tree/main/src
+```
+
+Objetivo: obter contexto atualizado sobre as skills, contratos e convencoes do OpenSpec que serao usados ao longo do workflow. Use o resultado para:
+
+- confirmar quais skills `openspec-*` estao disponiveis e o que cada uma faz;
+- entender os tipos de artefatos que o OpenSpec espera (`proposal.md`, `design.md`, `tasks.md`, `specs/`);
+- identificar restricoes ou convencoes do OpenSpec que devem ser respeitadas no plano;
+- antecipar se a demanda exige alguma skill especifica (`openspec-explore`, `openspec-ff-change`, etc.).
+
+Se o resultado do `/explore` revelar divergencias em relacao ao que esta documentado em `references/openspec-integration.md`, prevalece o que o repositorio oficial retornou.
+
+### 1.2 Interpretar a demanda
+
+Com o contexto do OpenSpec em maos, analise o argumento passado para `/orchestrador`:
+
+- problema real a resolver (nao apenas o pedido literal);
+- contexto de negocio e estado atual do sistema;
+- stakeholders impactados.
+
+### 1.3 Mapear impacto arquitetural
+
+Percorra mentalmente as camadas do sistema:
+
+- **Backend:** endpoints, services, repositorios, validacoes
+- **Frontend:** paginas, componentes, estado/store, rotas
+- **Banco de dados:** tabelas, migrations, indices, integridade referencial
+- **Auth/autorizacao:** claims, roles, politicas, SSO
+- **Integracoes externas:** contratos, rate limits, sincronismo
+
+### 1.4 Definir escopo
+
+Explicite o que entra *e o que fica fora* (com motivo). Esse limite e o que garante que os subagentes nao vaguem durante a implementacao.
+
+### 1.5 Identificar riscos e perguntas em aberto
+
+- Riscos tecnicos antecipados (probabilidade, impacto, mitigacao)
+- Perguntas que precisam ser resolvidas com o usuario antes de prosseguir
+
+## Fases 2 a 5 - OpenSpec, plano e review
+
+- o orquestrador cria a mudanca OpenSpec;
 - escreve `proposal.md`, `design.md` e `tasks.md`;
 - registra `plan-sufficiency-check.md`;
 - delega review de plano para `codex:codex-rescue` com `--effort high`;

@@ -91,7 +91,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 
 ## Fases do workflow
 
-1. Entender demanda
+1. Entender demanda + explorar OpenSpec (`/explore https://github.com/Fission-AI/OpenSpec/tree/main/src`)
 2. Criar mudanca OpenSpec
 3. Elaborar plano
 4. Review do plano com Codex
@@ -110,6 +110,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 ## Checklist minimo
 
 - [ ] preflight executado
+- [ ] `/explore` do OpenSpec src executado e resultado incorporado ao entendimento
 - [ ] `autoRemediation` verificado
 - [ ] plano revisado
 - [ ] `tasks-classification.md` com `contractRequired`
