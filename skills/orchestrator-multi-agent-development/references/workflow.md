@@ -177,7 +177,7 @@ Use:
 
 ## Fases 14 e 15 - Relatorio final
 
-Entregaveis obrigatorios:
+Entregaveis obrigatorios (salve na **raiz de execucao do agente**, nao dentro de `openspec/`):
 
 - `workflow-log.md`
 - `subagents-context.md`
@@ -188,4 +188,15 @@ O relatorio final deve citar:
 - se houve auto-remediacao no preflight;
 - quais contratos foram criados;
 - quais validacoes de wire format e serializacao foram feitas;
-- se houve fallback de review interno por `QUOTA_EXHAUSTED`.
+- se houve fallback de review interno por `QUOTA_EXHAUSTED`;
+- contagem de tokens por agente (tabela consolidada em `implementation-report.md` secao 11a e em `subagents-context.md` secao "Uso de Tokens por Agente").
+
+### Contagem de tokens
+
+Cada subagente deve incluir no retorno:
+
+```
+Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+```
+
+O orquestrador coleta esses valores, preenche as tabelas de tokens nos tres entregaveis finais e calcula o total consolidado de toda a execucao. Use `N/A` quando o agente nao reportar ou a plataforma nao expuser o dado.

@@ -39,6 +39,8 @@ Retorne:
 2. Sugestoes obrigatorias
 3. Sugestoes opcionais
 4. Decisao final: APROVADO | APROVADO COM AJUSTES | REPROVADO
+5. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+   (informe N/A se a plataforma nao expor o dado)
 ```
 
 ## 2. Back-end - Codex
@@ -100,6 +102,8 @@ Retorno:
 6. Pendencias
 7. Riscos
 8. Evidencia operacional
+9. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+   (informe N/A se a plataforma nao expor o dado)
 ```
 
 ## 3. Front-end - Gemini
@@ -174,6 +178,8 @@ Retorno:
 7. Pendencias
 8. Riscos
 9. Evidencia operacional
+10. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+    (informe N/A se a plataforma nao expor o dado)
 ```
 
 ## 4. SLOW_CHECKIN
@@ -227,6 +233,8 @@ Retorne:
 3. Problemas nao bloqueantes
 4. Recomendacoes
 5. Checklist final
+6. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+   (informe N/A se a plataforma nao expor o dado)
 ```
 
 ## 6. Ajustes pontuais - Codex
