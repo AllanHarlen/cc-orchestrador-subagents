@@ -219,6 +219,18 @@ Cada prompt deve incluir:
 - wire format;
 - regra de validar casing JSON e serializacao.
 
+### Verificacao de skills compativeis
+
+Todo subagente em background deve, como **primeiro passo antes de implementar**, listar as skills disponiveis no ambiente e filtrar as compativeis com sua task:
+
+1. execute `/skills` ou equivalente para listar as skills do ambiente;
+2. ignore todas as skills cujo nome comece com `openspec` ou `opsx` — essas sao exclusivas do orquestrador;
+3. das skills restantes, identifique quais se aplicam a task em execucao;
+4. use as skills compativeis durante a implementacao;
+5. registre no retorno quais skills foram utilizadas (campo obrigatorio no retorno de Codex e Gemini).
+
+O orquestrador consolida as skills utilizadas por subagente em `subagents-context.md`.
+
 ## Fase 10 - Monitoramento
 
 Status validos:

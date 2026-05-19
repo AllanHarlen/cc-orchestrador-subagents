@@ -45,6 +45,7 @@
   - `<comando ou validação>: <resultado>`
 - **Pendências reportadas:** `<nenhuma | lista>`
 - **Riscos reportados:** `<nenhum | lista>`
+- **Skills utilizadas:** `<lista das skills usadas ou "nenhuma">`
 - **Evidência operacional:** `<mensagem curta quando houve falha/cota/bloqueio>`
 - **Ação do orquestrador:** `<integrado | redelegado | contrato ajustado | decisão do usuário | pendente>`
 

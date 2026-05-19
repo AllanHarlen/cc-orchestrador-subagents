@@ -62,6 +62,11 @@ Salve o resultado em `review-entendimento.md`.
 
 Voce e o subagente back-end desta task.
 
+Antes de implementar, liste as skills disponiveis no ambiente com `/skills` ou equivalente.
+Ignore todas as skills cujo nome comece com `openspec` ou `opsx`.
+Das skills restantes, identifique quais sao compativeis com esta task e use-as durante a implementacao.
+Registre no retorno quais skills foram utilizadas.
+
 Contexto OpenSpec:
 - mudanca: openspec/changes/<nome>/
 - task atual: <TASK ID - TITULO>
@@ -112,8 +117,9 @@ Retorno:
 6. Pendencias
 7. Riscos
 8. Evidencia operacional
-9. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
-   (informe N/A se a plataforma nao expor o dado)
+9. Skills utilizadas: <lista das skills usadas ou "nenhuma">
+10. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+    (informe N/A se a plataforma nao expor o dado)
 ```
 
 ## 3. Front-end - Gemini
@@ -136,6 +142,11 @@ Retorno:
 
 ```text
 Voce e o subagente front-end desta task.
+
+Antes de implementar, liste as skills disponiveis no ambiente com `/skills` ou equivalente.
+Ignore todas as skills cujo nome comece com `openspec` ou `opsx`.
+Das skills restantes, identifique quais sao compativeis com esta task e use-as durante a implementacao.
+Registre no retorno quais skills foram utilizadas.
 
 Contexto OpenSpec:
 - mudanca: openspec/changes/<nome>/
@@ -188,7 +199,8 @@ Retorno:
 7. Pendencias
 8. Riscos
 9. Evidencia operacional
-10. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+10. Skills utilizadas: <lista das skills usadas ou "nenhuma">
+11. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
     (informe N/A se a plataforma nao expor o dado)
 ```
 
