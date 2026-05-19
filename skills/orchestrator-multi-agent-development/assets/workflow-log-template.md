@@ -31,7 +31,7 @@
 |---|---|---|---|---|---|
 | `-1 Goal autonomy` | `<N/A | DONE | BLOCKED>` | `<ts>` | `<usado ou N/A>` | `<links>` | `<observacao>` |
 | `0 Preflight` | `<DONE | FAILED>` | `<ts>` | `<resultado do preflight>` | `<N/A>` | `<falhas se houver>` |
-| `1 Entendimento` | `<status>` | `<ts>` | `/explore OpenSpec src executado; <resumo da demanda>` | `<proposal/design/tasks se aplicavel>` | `<falhas se houver>` |
+| `1 Entendimento` | `<status>` | `<ts>` | `/opsx:explore executado; <resumo da demanda>` | `<proposal/design/tasks se aplicavel>` | `<falhas se houver>` |
 | `2 OpenSpec` | `<status>` | `<ts>` | `<mudanca criada/atualizada>` | `<proposal/design/tasks/specs>` | `<falhas se houver>` |
 | `3 Planejamento` | `<status>` | `<ts>` | `<plano elaborado>` | `<proposal/design/tasks>` | `<falhas se houver>` |
 | `3.5 Gate de suficiencia` | `<status>` | `<ts>` | `<checklist preenchido>` | `<plan-sufficiency-check.md>` | `<falhas se houver>` |

@@ -19,22 +19,22 @@ Regras:
 
 ## Fase 1 - Entendimento da demanda
 
-### 1.1 Explorar o repositorio OpenSpec
+### 1.1 Executar `/opsx:explore`
 
 Antes de criar qualquer artefato, execute:
 
 ```
-/explore https://github.com/Fission-AI/OpenSpec/tree/main/src
+/opsx:explore
 ```
 
-Objetivo: obter contexto atualizado sobre as skills, contratos e convencoes do OpenSpec que serao usados ao longo do workflow. Use o resultado para:
+O `/opsx:explore` e o modo "thinking partner" do OpenSpec: ele investiga o projeto atual, le specs existentes, historico de mudancas e o estado do codebase para construir contexto antes de qualquer planejamento. Use o resultado para:
 
-- confirmar quais skills `openspec-*` estao disponiveis e o que cada uma faz;
-- entender os tipos de artefatos que o OpenSpec espera (`proposal.md`, `design.md`, `tasks.md`, `specs/`);
-- identificar restricoes ou convencoes do OpenSpec que devem ser respeitadas no plano;
-- antecipar se a demanda exige alguma skill especifica (`openspec-explore`, `openspec-ff-change`, etc.).
+- entender o estado atual do projeto e specs vigentes em `openspec/specs/`;
+- identificar mudancas anteriores relevantes em `openspec/changes/` que possam influenciar o plano;
+- detectar restricoes ou convencoes ja estabelecidas no projeto que os subagentes devem respeitar;
+- antecipar dependencias ocultas entre a demanda atual e o que ja foi implementado.
 
-Se o resultado do `/explore` revelar divergencias em relacao ao que esta documentado em `references/openspec-integration.md`, prevalece o que o repositorio oficial retornou.
+O resultado do `/opsx:explore` e insumo direto para as etapas seguintes desta fase — nao pule mesmo que o projeto pareca simples.
 
 ### 1.2 Interpretar a demanda
 
