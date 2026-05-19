@@ -43,11 +43,15 @@ Retorne:
 2. Ajustes obrigatorios
 3. Ajustes opcionais
 4. Decisao final: APROVADO | APROVADO COM AJUSTES | REPROVADO
-5. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+5. Duvidas: liste cada ponto em que voce ficou indeciso, nao teve informacao suficiente
+   para decidir ou que exige escolha humana antes de prosseguir. Se nao houver, escreva "nenhuma".
+6. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
    (informe N/A se a plataforma nao expor o dado)
 ```
 
 Salve o resultado em `review-entendimento.md`.
+
+> O orquestrador vai processar a secao "Duvidas" e, para cada item, usar `AskUserQuestion` para levar a decisao ao usuario antes de avancar.
 
 ## 2. Back-end - Codex
 

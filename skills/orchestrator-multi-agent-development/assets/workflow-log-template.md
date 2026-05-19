@@ -32,7 +32,7 @@
 | `-1 Goal autonomy` | `<N/A | DONE | BLOCKED>` | `<ts>` | `<usado ou N/A>` | `<links>` | `<observacao>` |
 | `0 Preflight` | `<DONE | FAILED>` | `<ts>` | `<resultado do preflight>` | `<N/A>` | `<falhas se houver>` |
 | `1 Entendimento` | `<status>` | `<ts>` | `/opsx:explore executado; <resumo da demanda>` | `<N/A>` | `<falhas se houver>` |
-| `2 Review do entendimento` | `<status>` | `<ts>` | `<decisao Codex>` | `<review-entendimento.md>` | `<APROVADO/REPROVADO e ajustes>` |
+| `2 Review do entendimento` | `<status>` | `<ts>` | `<decisao Codex; duvidas escaladas ao usuario via AskUserQuestion: sim/nao>` | `<review-entendimento.md>` | `<APROVADO/REPROVADO; decisoes do usuario registradas>` |
 | `3 OpenSpec` | `<status>` | `<ts>` | `<mudanca criada>` | `<N/A>` | `<falhas se houver>` |
 | `4 Planejamento` | `<status>` | `<ts>` | `<plano elaborado>` | `<proposal/design/tasks>` | `<falhas se houver>` |
 | `4.5 Gate de suficiencia` | `<status>` | `<ts>` | `<checklist preenchido>` | `<plan-sufficiency-check.md>` | `<falhas se houver>` |

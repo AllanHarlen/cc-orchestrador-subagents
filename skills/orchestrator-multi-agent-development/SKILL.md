@@ -112,6 +112,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] preflight executado
 - [ ] `/opsx:explore` executado e resultado incorporado ao entendimento
 - [ ] `autoRemediation` verificado
+- [ ] duvidas do Codex (fase 2) resolvidas via `AskUserQuestion` antes de avancar
 - [ ] plano revisado
 - [ ] `tasks-classification.md` com `contractRequired`
 - [ ] contratos criados para toda troca front-back

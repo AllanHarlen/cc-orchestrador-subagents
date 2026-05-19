@@ -83,9 +83,37 @@ Retorna:
 2. Ajustes obrigatorios
 3. Ajustes opcionais
 4. Decisao: `APROVADO` | `APROVADO COM AJUSTES` | `REPROVADO`
-5. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+5. Duvidas: lista de pontos em que o Codex ficou indeciso ou que exigem decisao humana
+6. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
 
-O resultado e salvo em `review-entendimento.md`. So apos aprovacao (ou incorporacao dos ajustes obrigatorios) o orquestrador avanca para a Fase 3.
+O resultado e salvo em `review-entendimento.md`.
+
+### Regra de escalada de duvidas para o usuario
+
+Ao processar o retorno do Codex, o orquestrador verifica se ha itens na secao **Duvidas**. Para cada duvida ou ponto de indecisao — seja sobre o que aplicar do review, seja sobre a direcao de implementacao — o orquestrador **nao decide sozinho**: ele pausa o workflow e usa `AskUserQuestion` para levar a questao ao usuario.
+
+**Quando acionar `AskUserQuestion`:**
+- o Codex retornou duvidas explicitas na secao 5;
+- o orquestrador esta indeciso sobre aplicar ou rejeitar um ajuste obrigatorio;
+- dois ajustes do Codex sao contraditories entre si;
+- a decisao afeta escopo, arquitetura ou prazo de forma significativa.
+
+**Como formular a pergunta:**
+- apresente o contexto em uma frase (o que o Codex sinalizou);
+- ofeca as opcoes possiveis como choices;
+- nao tome a decisao no texto da pergunta — deixe o usuario escolher.
+
+**Exemplo:**
+```
+O Codex identificou duas abordagens possiveis para o escopo de autenticacao:
+
+A) Incluir renovacao de token nesta mudanca (maior escopo, mais seguro)
+B) Deixar renovacao de token para uma mudanca futura (escopo menor, entrega mais rapida)
+
+Qual voce prefere?
+```
+
+Apos a resposta do usuario, registre a decisao e o motivo em `review-entendimento.md` na secao **Decisoes do usuario**. Somente entao o orquestrador avanca para a Fase 3.
 
 ## Fase 3 - Criar mudanca OpenSpec
 
