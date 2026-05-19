@@ -92,9 +92,9 @@ Em stacks C# + TypeScript, destaque explicitamente:
 ## Fases do workflow
 
 1. Entender demanda + executar `/opsx:explore` para investigar o projeto antes de planejar
-2. Criar mudanca OpenSpec
-3. Elaborar plano
-4. Review do plano com Codex
+2. Review do entendimento com Codex
+3. Criar mudanca OpenSpec
+4. Elaborar plano
 5. Consolidar plano
 6. Classificar tasks com `contractRequired`
 7. Montar waves

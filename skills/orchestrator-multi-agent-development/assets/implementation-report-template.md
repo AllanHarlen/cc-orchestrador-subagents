@@ -27,7 +27,7 @@
 - `openspec/changes/<nome>/waves.md`
 - `openspec/changes/<nome>/contracts/`
 - `openspec/changes/<nome>/monitoring.md`
-- `openspec/changes/<nome>/review-codex.md`
+- `openspec/changes/<nome>/review-entendimento.md`
 - `openspec/changes/<nome>/review-final.md`
 - `workflow-log.md` *(raiz de execucao)*
 - `subagents-context.md` *(raiz de execucao)*

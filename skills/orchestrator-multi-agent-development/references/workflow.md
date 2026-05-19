@@ -63,13 +63,53 @@ Explicite o que entra *e o que fica fora* (com motivo). Esse limite e o que gara
 - Riscos tecnicos antecipados (probabilidade, impacto, mitigacao)
 - Perguntas que precisam ser resolvidas com o usuario antes de prosseguir
 
-## Fases 2 a 5 - OpenSpec, plano e review
+## Fase 2 - Review do entendimento com Codex
 
-- o orquestrador cria a mudanca OpenSpec;
-- escreve `proposal.md`, `design.md` e `tasks.md`;
-- registra `plan-sufficiency-check.md`;
-- delega review de plano para `codex:codex-rescue` com `--effort high`;
-- consolida o plano.
+Com o entendimento da demanda formado (fases 1.1 a 1.5), o orquestrador delega uma revisao critica ao Codex **antes de criar qualquer artefato OpenSpec**:
+
+**Subagente:** `codex:codex-rescue` com `--effort high`
+**Modo:** somente leitura — o Codex nao modifica arquivos
+
+O Codex recebe o entendimento estruturado da demanda e avalia:
+
+- o problema identificado esta correto?
+- o escopo incluido e excluido faz sentido?
+- ha dependencias ocultas ou riscos nao mapeados?
+- o impacto arquitetural mapeado e completo?
+- ha perguntas em aberto que devem ser resolvidas antes de planejar?
+
+Retorna:
+1. Problemas ou lacunas no entendimento
+2. Ajustes obrigatorios
+3. Ajustes opcionais
+4. Decisao: `APROVADO` | `APROVADO COM AJUSTES` | `REPROVADO`
+5. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+
+O resultado e salvo em `review-entendimento.md`. So apos aprovacao (ou incorporacao dos ajustes obrigatorios) o orquestrador avanca para a Fase 3.
+
+## Fase 3 - Criar mudanca OpenSpec
+
+```
+/openspec-new-change <nome>
+```
+
+Cria o diretorio `openspec/changes/<nome>/`. O nome deve ser descritivo em kebab-case.
+
+## Fase 4 - Elaborar o plano
+
+O orquestrador escreve os tres artefatos diretamente — sem delegar:
+
+- `proposal.md` — objetivo mensuravel, escopo incluido/excluido, contexto
+- `design.md` — arquitetura proposta, impactos por camada, riscos, estrategia de testes e rollback
+- `tasks.md` — tasks com ID, categoria, dependencias, complexidade, arquivos criticos e criterios de aceite
+
+### Gate de suficiencia (Fase 4.5) — `plan-sufficiency-check.md`
+
+Antes de consolidar, o orquestrador preenche um checklist minimo que valida se o plano esta maduro. Plano insuficiente nao avanca.
+
+## Fase 5 - Consolidar o plano
+
+O orquestrador revisita o entendimento aprovado na Fase 2 e garante que os artefatos da Fase 4 estao alinhados. Atualiza `proposal.md`, `design.md` e `tasks.md` se necessario. O plano consolidado e a fonte da verdade para todo o restante do workflow.
 
 ## Fase 6 - Classificacao das tasks
 

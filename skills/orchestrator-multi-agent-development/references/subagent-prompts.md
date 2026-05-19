@@ -11,7 +11,7 @@ Sempre leia este arquivo antes de delegar para Codex ou Gemini.
 - Se existir contrato API/UI, siga o contrato como fonte da verdade.
 - Valide casing JSON e wire format real; nao assuma que nomes de DTO internos sao iguais ao payload na rede.
 
-## 1. Review de plano - Codex
+## 1. Review do entendimento - Codex (Fase 2)
 
 **Subagent type:** `codex:codex-rescue`
 
@@ -20,28 +20,34 @@ Sempre leia este arquivo antes de delegar para Codex ou Gemini.
 
 Nao modifique arquivos. Apenas revise.
 
-Revise criticamente o plano OpenSpec em openspec/changes/<nome>/.
+Revise criticamente o entendimento da demanda antes de qualquer artefato OpenSpec ser criado.
 
-Leia: proposal.md, design.md, tasks.md e specs/.
+Entendimento a revisar:
+- Problema identificado: <COLAR RESUMO DO PROBLEMA>
+- Escopo incluido: <COLAR LISTA>
+- Escopo excluido: <COLAR LISTA COM MOTIVOS>
+- Impacto arquitetural mapeado: <COLAR RESUMO POR CAMADA>
+- Riscos antecipados: <COLAR LISTA>
+- Perguntas em aberto: <COLAR LISTA OU "nenhuma">
 
 Avalie:
-- clareza de escopo;
-- granularidade das tasks;
-- dependencias ocultas;
-- riscos arquiteturais;
-- impacto em seguranca, auth e banco;
-- paralelizacao segura;
-- cobertura de criterios de aceite;
-- necessidade de contratos front-back.
+- o problema identificado esta correto e completo?
+- o escopo incluido faz sentido para o problema?
+- o escopo excluido tem justificativa valida?
+- ha dependencias ocultas ou riscos nao mapeados?
+- o impacto arquitetural esta completo?
+- ha perguntas em aberto criticas que bloqueiam o planejamento?
 
 Retorne:
-1. Problemas encontrados
-2. Sugestoes obrigatorias
-3. Sugestoes opcionais
+1. Problemas ou lacunas no entendimento
+2. Ajustes obrigatorios
+3. Ajustes opcionais
 4. Decisao final: APROVADO | APROVADO COM AJUSTES | REPROVADO
 5. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
    (informe N/A se a plataforma nao expor o dado)
 ```
+
+Salve o resultado em `review-entendimento.md`.
 
 ## 2. Back-end - Codex
 
