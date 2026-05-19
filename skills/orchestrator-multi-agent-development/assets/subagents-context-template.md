@@ -1,6 +1,6 @@
 # Contexto Consolidado dos Subagentes — <NOME DA MUDANÇA>
 
-> Entregável obrigatório. Salve em `openspec/changes/<nome>/subagents-context.md`.
+> Entregável obrigatório. Salve em `subagents-context.md` na raiz de execucao do agente (diretorio de trabalho atual no momento de invocar o orchestrador).
 > Use este arquivo para preservar o resumo operacional de todos os subagentes Codex/Gemini executados. Não registre subagentes Claude Code, porque o orquestrador não os executa neste fluxo.
 
 ## Resumo Geral
@@ -31,6 +31,11 @@
 - **Subagent type:** `<codex:codex-rescue | cc-gemini-plugin:gemini-agent>`
 - **Modelo:** `<Codex padrao da conta | gemini-3-pro | gemini-3-flash>`
 - **Status final:** `<DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED | NEEDS_SYNC | PAUSED | CANCELLED>`
+- **Tokens usados:**
+  - Input: `<N ou N/A>`
+  - Output: `<N ou N/A>`
+  - Cache read: `<N ou N/A>`
+  - Total: `<N ou N/A>`
 - **Resumo entregue:** `<2-5 linhas>`
 - **Arquivos criados/alterados:**
   - `<caminho>`
@@ -40,6 +45,7 @@
   - `<comando ou validação>: <resultado>`
 - **Pendências reportadas:** `<nenhuma | lista>`
 - **Riscos reportados:** `<nenhum | lista>`
+- **Skills utilizadas:** `<lista das skills usadas ou "nenhuma">`
 - **Evidência operacional:** `<mensagem curta quando houve falha/cota/bloqueio>`
 - **Ação do orquestrador:** `<integrado | redelegado | contrato ajustado | decisão do usuário | pendente>`
 
@@ -52,6 +58,15 @@
 - **Decisão do orquestrador:** `<decisão>`
 - **Motivo:** `<por que essa decisão preserva o contrato/negócio>`
 - **Subagentes impactados:** `<lista>`
+
+## Uso de Tokens por Agente
+
+> Consolide os valores reportados por cada subagente. Use `N/A` quando o agente nao informou ou a plataforma nao expoe o dado.
+
+| Onda | Task | Subagent type | Modelo | Input | Output | Cache Read | Total |
+|---|---|---|---|---|---|---|---|
+| `<wave>` | `<task>` | `<codex|gemini>` | `<modelo>` | `<N>` | `<N>` | `<N>` | `<N>` |
+| **TOTAL** | — | — | — | `<N>` | `<N>` | `<N>` | `<N>` |
 
 ## Riscos e Pendências Consolidados
 
