@@ -31,6 +31,11 @@
 - **Subagent type:** `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>`
 - **Modelo:** `<Codex padrao da conta | gemini-3.1-pro-low | gemini-3.5-flash-medium>`
 - **Status final:** `<DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED | NEEDS_SYNC | PAUSED | CANCELLED>`
+- **Tokens usados:**
+  - Input: `<N ou N/A>`
+  - Output: `<N ou N/A>`
+  - Cache read: `<N ou N/A>`
+  - Total: `<N ou N/A>`
 - **Resumo entregue:** `<2-5 linhas>`
 - **Arquivos criados/alterados:**
   - `<caminho>`

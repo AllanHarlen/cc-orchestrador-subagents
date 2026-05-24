@@ -91,10 +91,10 @@ Em stacks C# + TypeScript, destaque explicitamente:
 
 ## Fases do workflow
 
-1. Entender demanda
-2. Criar mudanca OpenSpec
-3. Elaborar plano
-4. Review do plano com Codex
+1. Entender demanda + executar `/opsx:explore` para investigar o projeto antes de planejar
+2. Review do entendimento com Codex
+3. Criar mudanca OpenSpec
+4. Elaborar plano
 5. Consolidar plano
 6. Classificar tasks com `contractRequired`
 7. Montar waves
@@ -104,13 +104,15 @@ Em stacks C# + TypeScript, destaque explicitamente:
 11. Integrar
 12. Review pos-implementacao
 13. Verificar OpenSpec
-14. Gerar `workflow-log.md`, `subagents-context.md`, `implementation-report.md`
+14. Gerar `workflow-log.md`, `subagents-context.md`, `implementation-report.md` na raiz de execucao; consolidar contagem de tokens por agente
 15. Entregar instrucoes de negocio
 
 ## Checklist minimo
 
 - [ ] preflight executado
+- [ ] `/opsx:explore` executado e resultado incorporado ao entendimento
 - [ ] `autoRemediation` verificado
+- [ ] duvidas do Codex (fase 2) resolvidas via `AskUserQuestion` antes de avancar
 - [ ] plano revisado
 - [ ] `tasks-classification.md` com `contractRequired`
 - [ ] contratos criados para toda troca front-back
@@ -118,7 +120,8 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] validacao de wire format e serializacao registrada
 - [ ] politica de quota aplicada corretamente
 - [ ] `review-final.md` criado, inclusive em fallback interno
-- [ ] entregaveis finais preenchidos
+- [ ] entregaveis finais preenchidos na raiz de execucao
+- [ ] contagem de tokens por agente consolidada em `implementation-report.md` e `subagents-context.md`
 
 ## Arquivos de apoio
 

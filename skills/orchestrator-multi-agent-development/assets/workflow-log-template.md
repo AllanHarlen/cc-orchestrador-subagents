@@ -1,6 +1,6 @@
 # Log de Workflow do Orquestrador - <NOME DA MUDANCA>
 
-> Entregavel final obrigatorio. Salve em `openspec/changes/<nome>/workflow-log.md`.
+> Entregavel final obrigatorio. Salve em `workflow-log.md` na raiz de execucao do agente (diretorio de trabalho atual no momento de invocar o orchestrador).
 > Este arquivo registra a execucao completa do orquestrador por fase. Use `monitoring.md` como fonte viva de eventos de ondas/subagentes e consolide aqui a linha do tempo auditavel.
 
 ## 1. Metadados da Execucao
@@ -17,9 +17,9 @@
   - `openspec/changes/<nome>/design.md`
   - `openspec/changes/<nome>/tasks.md`
   - `openspec/changes/<nome>/monitoring.md`
-  - `openspec/changes/<nome>/workflow-log.md`
-  - `openspec/changes/<nome>/subagents-context.md`
-  - `openspec/changes/<nome>/implementation-report.md`
+  - `workflow-log.md` *(raiz de execucao)*
+  - `subagents-context.md` *(raiz de execucao)*
+  - `implementation-report.md` *(raiz de execucao)*
 
 ## 2. Resumo Executivo do Workflow
 
@@ -31,11 +31,11 @@
 |---|---|---|---|---|---|
 | `-1 Goal autonomy` | `<N/A | DONE | BLOCKED>` | `<ts>` | `<usado ou N/A>` | `<links>` | `<observacao>` |
 | `0 Preflight` | `<DONE | FAILED>` | `<ts>` | `<resultado do preflight>` | `<N/A>` | `<falhas se houver>` |
-| `1 Entendimento` | `<status>` | `<ts>` | `<resumo>` | `<proposal/design/tasks se aplicavel>` | `<falhas se houver>` |
-| `2 OpenSpec` | `<status>` | `<ts>` | `<mudanca criada/atualizada>` | `<proposal/design/tasks/specs>` | `<falhas se houver>` |
-| `3 Planejamento` | `<status>` | `<ts>` | `<plano elaborado>` | `<proposal/design/tasks>` | `<falhas se houver>` |
-| `3.5 Gate de suficiencia` | `<status>` | `<ts>` | `<checklist preenchido>` | `<plan-sufficiency-check.md>` | `<falhas se houver>` |
-| `4 Review do plano` | `<status>` | `<ts>` | `<decisao Codex>` | `<review-codex.md>` | `<APROVADO/REPROVADO e ajustes>` |
+| `1 Entendimento` | `<status>` | `<ts>` | `/opsx:explore executado; <resumo da demanda>` | `<N/A>` | `<falhas se houver>` |
+| `2 Review do entendimento` | `<status>` | `<ts>` | `<decisao Codex; duvidas escaladas ao usuario via AskUserQuestion: sim/nao>` | `<review-entendimento.md>` | `<APROVADO/REPROVADO; decisoes do usuario registradas>` |
+| `3 OpenSpec` | `<status>` | `<ts>` | `<mudanca criada>` | `<N/A>` | `<falhas se houver>` |
+| `4 Planejamento` | `<status>` | `<ts>` | `<plano elaborado>` | `<proposal/design/tasks>` | `<falhas se houver>` |
+| `4.5 Gate de suficiencia` | `<status>` | `<ts>` | `<checklist preenchido>` | `<plan-sufficiency-check.md>` | `<falhas se houver>` |
 | `5 Consolidacao` | `<status>` | `<ts>` | `<ajustes do plano>` | `<proposal/design/tasks/specs>` | `<decisoes rejeitadas se houver>` |
 | `6 Classificacao` | `<status>` | `<ts>` | `<tasks classificadas>` | `<tasks-classification.md>` | `<falhas se houver>` |
 | `7 Paralelizacao` | `<status>` | `<ts>` | `<ondas definidas>` | `<waves.md>` | `<restricoes>` |
@@ -105,13 +105,25 @@ Se nenhuma falha ocorreu, escreva: `Nenhuma falha operacional ocorreu durante es
 - **Artefatos preservados:** `<lista>`
 - **Condicao para retomada:** `<instrucao objetiva | N/A>`
 
-## 10. Checklist Final do Log
+## 10. Resumo de Tokens
 
-- [ ] `workflow-log.md` criado em `openspec/changes/<nome>/workflow-log.md`
+> Consolide os totais reportados pelos subagentes. Valores em `N/A` quando o subagente nao reportou.
+
+| Agente | Tipo | Task | Input | Output | Cache Read | Total |
+|---|---|---|---|---|---|---|
+| `<agente>` | `<codex|gemini|orchestrador>` | `<task>` | `<N>` | `<N>` | `<N>` | `<N>` |
+| **TOTAL** | — | — | `<N>` | `<N>` | `<N>` | `<N>` |
+
+## 11. Checklist Final do Log
+
+- [ ] `workflow-log.md` criado na raiz de execucao do agente
+- [ ] `subagents-context.md` criado na raiz de execucao do agente
+- [ ] `implementation-report.md` criado na raiz de execucao do agente
 - [ ] Todas as fases aplicaveis registradas
 - [ ] Falhas possiveis consideradas
 - [ ] Falhas ocorridas registradas com evidencia, impacto e acao
 - [ ] Pausa/cancelamento/bloqueio registrado ou marcado como `N/A`
 - [ ] Subagentes resumidos e ligados ao `subagents-context.md`
 - [ ] Validacoes finais registradas
+- [ ] Tabela de tokens preenchida (seção 10)
 - [ ] `implementation-report.md` referencia este log

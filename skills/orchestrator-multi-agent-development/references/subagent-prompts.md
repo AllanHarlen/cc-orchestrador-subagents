@@ -11,7 +11,7 @@ Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 - Se existir contrato API/UI, siga o contrato como fonte da verdade.
 - Valide casing JSON e wire format real; nao assuma que nomes de DTO internos sao iguais ao payload na rede.
 
-## 1. Review de plano - Codex
+## 1. Review do entendimento - Codex (Fase 2)
 
 **Subagent type:** `codex:codex-rescue`
 
@@ -20,26 +20,38 @@ Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 
 Nao modifique arquivos. Apenas revise.
 
-Revise criticamente o plano OpenSpec em openspec/changes/<nome>/.
+Revise criticamente o entendimento da demanda antes de qualquer artefato OpenSpec ser criado.
 
-Leia: proposal.md, design.md, tasks.md e specs/.
+Entendimento a revisar:
+- Problema identificado: <COLAR RESUMO DO PROBLEMA>
+- Escopo incluido: <COLAR LISTA>
+- Escopo excluido: <COLAR LISTA COM MOTIVOS>
+- Impacto arquitetural mapeado: <COLAR RESUMO POR CAMADA>
+- Riscos antecipados: <COLAR LISTA>
+- Perguntas em aberto: <COLAR LISTA OU "nenhuma">
 
 Avalie:
-- clareza de escopo;
-- granularidade das tasks;
-- dependencias ocultas;
-- riscos arquiteturais;
-- impacto em seguranca, auth e banco;
-- paralelizacao segura;
-- cobertura de criterios de aceite;
-- necessidade de contratos front-back.
+- o problema identificado esta correto e completo?
+- o escopo incluido faz sentido para o problema?
+- o escopo excluido tem justificativa valida?
+- ha dependencias ocultas ou riscos nao mapeados?
+- o impacto arquitetural esta completo?
+- ha perguntas em aberto criticas que bloqueiam o planejamento?
 
 Retorne:
-1. Problemas encontrados
-2. Sugestoes obrigatorias
-3. Sugestoes opcionais
+1. Problemas ou lacunas no entendimento
+2. Ajustes obrigatorios
+3. Ajustes opcionais
 4. Decisao final: APROVADO | APROVADO COM AJUSTES | REPROVADO
+5. Duvidas: liste cada ponto em que voce ficou indeciso, nao teve informacao suficiente
+   para decidir ou que exige escolha humana antes de prosseguir. Se nao houver, escreva "nenhuma".
+6. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+   (informe N/A se a plataforma nao expor o dado)
 ```
+
+Salve o resultado em `review-entendimento.md`.
+
+> O orquestrador vai processar a secao "Duvidas" e, para cada item, usar `AskUserQuestion` para levar a decisao ao usuario antes de avancar.
 
 ## 2. Back-end - Codex
 
@@ -49,6 +61,11 @@ Retorne:
 --effort medium
 
 Voce e o subagente back-end desta task.
+
+Antes de implementar, liste as skills disponiveis no ambiente com `/skills` ou equivalente.
+Ignore todas as skills cujo nome comece com `openspec` ou `opsx`.
+Das skills restantes, identifique quais sao compativeis com esta task e use-as durante a implementacao.
+Registre no retorno quais skills foram utilizadas.
 
 Contexto OpenSpec:
 - mudanca: openspec/changes/<nome>/
@@ -100,6 +117,9 @@ Retorno:
 6. Pendencias
 7. Riscos
 8. Evidencia operacional
+9. Skills utilizadas: <lista das skills usadas ou "nenhuma">
+10. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+    (informe N/A se a plataforma nao expor o dado)
 ```
 
 ## 3. Front-end - Antigravity (AGY)
@@ -122,6 +142,11 @@ Retorno:
 
 ```text
 Voce e o subagente front-end desta task.
+
+Antes de implementar, liste as skills disponiveis no ambiente com `/skills` ou equivalente.
+Ignore todas as skills cujo nome comece com `openspec` ou `opsx`.
+Das skills restantes, identifique quais sao compativeis com esta task e use-as durante a implementacao.
+Registre no retorno quais skills foram utilizadas.
 
 Contexto OpenSpec:
 - mudanca: openspec/changes/<nome>/
@@ -174,6 +199,9 @@ Retorno:
 7. Pendencias
 8. Riscos
 9. Evidencia operacional
+10. Skills utilizadas: <lista das skills usadas ou "nenhuma">
+11. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+    (informe N/A se a plataforma nao expor o dado)
 ```
 
 ## 4. SLOW_CHECKIN
@@ -227,6 +255,8 @@ Retorne:
 3. Problemas nao bloqueantes
 4. Recomendacoes
 5. Checklist final
+6. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+   (informe N/A se a plataforma nao expor o dado)
 ```
 
 ## 6. Ajustes pontuais - Codex
