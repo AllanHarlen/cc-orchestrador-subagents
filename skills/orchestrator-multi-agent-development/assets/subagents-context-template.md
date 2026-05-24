@@ -1,20 +1,20 @@
-# Contexto Consolidado dos Subagentes - <NOME DA MUDANCA>
+# Contexto Consolidado dos Subagentes - <NOME DA MUDANÇA>
 
-> Entregavel obrigatorio. Salve em `openspec/changes/<nome>/subagents-context.md`.
-> Use este arquivo para preservar o resumo operacional de todos os subagentes Codex/Antigravity executados. Nao registre subagentes Claude Code, porque o orquestrador nao os executa neste fluxo.
+> Entregável obrigatório. Salve em `openspec/changes/<nome>/subagents-context.md`.
+> Use este arquivo para preservar o resumo operacional de todos os subagentes Codex/Antigravity executados. Não registre subagentes Claude Code, porque o orquestrador não os executa neste fluxo.
 
 ## Resumo Geral
 
-- **Mudanca:** `<nome>`
-- **Status final:** `<concluida | concluida com pendencias | bloqueada | pausada | cancelada>`
+- **Mudança:** `<nome>`
+- **Status final:** `<concluída | concluída com pendências | bloqueada | pausada | cancelada>`
 - **Ondas executadas:** `<N>`
 - **Subagentes executados:** `<N total>`
 - **Subagentes por tipo:**
   - `codex:codex-rescue`: `<N>`
   - `cc-antigravity-plugin:antigravity-agent`: `<N>`
 - **Fallbacks/handoffs realizados:** `<nenhum | resumo>`
-- **Gate do usuario:** `<ok | pausado | cancelado>`
-- **Pendencias globais:** `<nenhuma | lista curta>`
+- **Gate do usuário:** `<ok | pausado | cancelado>`
+- **Pendências globais:** `<nenhuma | lista curta>`
 
 ## Linha do Tempo
 
@@ -24,10 +24,10 @@
 
 ## Contexto por Subagente
 
-### <AGENTE ID OU DESCRICAO> - <TASK ID>
+### <AGENTE ID OU DESCRIÇÃO> - <TASK ID>
 
 - **Onda:** `<wave>`
-- **Task:** `<ID e titulo>`
+- **Task:** `<ID e título>`
 - **Subagent type:** `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>`
 - **Modelo:** `<Codex padrao da conta | gemini-3.1-pro-low | gemini-3.5-flash-medium>`
 - **Status final:** `<DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED | NEEDS_SYNC | PAUSED | CANCELLED>`
@@ -39,43 +39,43 @@
 - **Resumo entregue:** `<2-5 linhas>`
 - **Arquivos criados/alterados:**
   - `<caminho>`
-- **Decisoes relevantes:**
-  - `<decisao tecnica ou UI/UX>`
-- **Testes/validacoes reportados:**
-  - `<comando ou validacao>: <resultado>`
-- **Pendencias reportadas:** `<nenhuma | lista>`
+- **Decisões relevantes:**
+  - `<decisão técnica ou UI/UX>`
+- **Testes/validações reportados:**
+  - `<comando ou validação>: <resultado>`
+- **Pendências reportadas:** `<nenhuma | lista>`
 - **Riscos reportados:** `<nenhum | lista>`
-- **Evidencia operacional:** `<mensagem curta quando houve falha/cota/bloqueio>`
-- **Acao do orquestrador:** `<integrado | redelegado | contrato ajustado | decisao do usuario | pendente>`
+- **Evidência operacional:** `<mensagem curta quando houve falha/cota/bloqueio>`
+- **Ação do orquestrador:** `<integrado | redelegado | contrato ajustado | decisão do usuário | pendente>`
 
-## Decisoes Cruzadas Entre Subagentes
+## Decisões Cruzadas Entre Subagentes
 
-> Use quando back-end/front-end divergirem ou quando um handoff mudar a execucao.
+> Use quando back-end/front-end divergirem ou quando um handoff mudar a execução.
 
 - **Contexto:** `<task/contrato/arquivo>`
-- **Divergencia ou descoberta:** `<descricao>`
-- **Decisao do orquestrador:** `<decisao>`
-- **Motivo:** `<por que essa decisao preserva o contrato/negocio>`
+- **Divergência ou descoberta:** `<descrição>`
+- **Decisão do orquestrador:** `<decisão>`
+- **Motivo:** `<por que essa decisão preserva o contrato/negócio>`
 - **Subagentes impactados:** `<lista>`
 
-## Riscos e Pendencias Consolidados
+## Riscos e Pendências Consolidados
 
-| Item | Origem | Impacto | Proxima acao | Owner |
+| Item | Origem | Impacto | Próxima ação | Owner |
 |---|---|---|---|---|
-| `<risco/pendencia>` | `<task/agente>` | `<baixo/medio/alto>` | `<acao>` | `<owner>` |
+| `<risco/pendência>` | `<task/agente>` | `<baixo/medio/alto>` | `<ação>` | `<owner>` |
 
 ## Contexto para Retomada
 
-<Explique em 5-10 linhas o estado atual da mudanca para alguem retomar sem reler todos os retornos dos subagentes. Inclua o que ja foi integrado, o que foi validado, o que ainda exige decisao e quais arquivos/contratos sao fonte da verdade.>
+<Explique em 5-10 linhas o estado atual da mudança para alguém retomar sem reler todos os retornos dos subagentes. Inclua o que já foi integrado, o que foi validado, o que ainda exige decisão e quais arquivos/contratos são fonte da verdade.>
 
-## Cancelamento ou Pausa pelo Usuario
+## Cancelamento ou Pausa pelo Usuário
 
-> Preencha apenas quando o gate de interrupcao disparar.
+> Preencha apenas quando o gate de interrupção disparar.
 
 - **Status:** `<PAUSED | CANCELLED>`
-- **Motivo informado pelo usuario:** `<texto curto>`
+- **Motivo informado pelo usuário:** `<texto curto>`
 - **Fase interrompida:** `<fase>`
-- **Subagentes em execucao no momento:** `<lista | nenhum>`
-- **Subagentes concluidos antes da interrupcao:** `<lista | nenhum>`
+- **Subagentes em execução no momento:** `<lista | nenhum>`
+- **Subagentes concluídos antes da interrupção:** `<lista | nenhum>`
 - **Artefatos preservados:** `<proposal/design/tasks/contracts/monitoring/etc.>`
-- **Condicao para retomada:** `<nova aprovacao do plano | contrato revisto | nova instrucao explicita | outra>`
+- **Condição para retomada:** `<nova aprovação do plano | contrato revisto | nova instrução explícita | outra>`

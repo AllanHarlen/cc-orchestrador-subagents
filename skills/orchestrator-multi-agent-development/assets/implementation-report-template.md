@@ -1,12 +1,10 @@
-# Relatorio de implementacao - <NOME DA MUDANCA>
-
-> Entregavel obrigatorio. Salve em `implementation-report.md` na raiz de execucao do agente (diretorio de trabalho atual no momento de invocar o orchestrador).
+# Relatório de implementação - <NOME DA MUDANÇA>
 
 ## 1. Resumo executivo
 
 <2-4 frases>
 
-## 2. Objetivo da mudanca
+## 2. Objetivo da mudança
 
 <texto>
 
@@ -20,18 +18,17 @@
 
 ## 4. Artefatos OpenSpec utilizados
 
-- `openspec/changes/<nome>/proposal.md`
-- `openspec/changes/<nome>/design.md`
-- `openspec/changes/<nome>/tasks.md`
-- `openspec/changes/<nome>/tasks-classification.md`
-- `openspec/changes/<nome>/waves.md`
-- `openspec/changes/<nome>/contracts/`
-- `openspec/changes/<nome>/monitoring.md`
-- `openspec/changes/<nome>/review-entendimento.md`
-- `openspec/changes/<nome>/review-final.md`
-- `workflow-log.md` *(raiz de execucao)*
-- `subagents-context.md` *(raiz de execucao)*
-- `implementation-report.md` *(raiz de execucao)*
+- `proposal.md`
+- `design.md`
+- `tasks.md`
+- `tasks-classification.md`
+- `waves.md`
+- `contracts/`
+- `monitoring.md`
+- `review-codex.md`
+- `review-final.md`
+- `workflow-log.md`
+- `subagents-context.md`
 
 ## 5. Agentes utilizados
 
@@ -50,7 +47,7 @@
 ### Front-end
 - Modelo: AGY (`gemini-3.1-pro-low` ou `gemini-3.5-flash-medium`)
 
-### Review pos-implementacao
+### Review pos-implementação
 - Modelo: Codex padrao da conta ou fallback interno do orquestrador
 - Effort: High
 
@@ -77,11 +74,11 @@ Para cada contrato:
 - exemplos completos;
 - validacao de serializacao real contra TypeScript.
 
-## 8. Decisoes tecnicas
+## 8. Decisões técnicas
 
 - `<decisao>`: `<motivo>`
 
-## 9. Ajustes apos review
+## 9. Ajustes após review
 
 - `<ajuste>` - driver: `<fase 4 | fase 12>`
 
@@ -95,17 +92,7 @@ Para cada contrato:
 |---|---|---|---|---|---|
 | `<T1>` | `codex:codex-rescue` | `Codex padrao da conta` | `<status>` | `<resumo>` | `<riscos>` |
 
-## 11a. Uso de tokens por agente
-
-> Valores reportados pelos subagentes. Use `N/A` quando o agente nao informou ou a plataforma nao expoe o dado.
-
-| Agente | Tipo | Task | Input | Output | Cache Read | Total |
-|---|---|---|---|---|---|---|
-| Orquestrador | Claude Sonnet 4.6 | (coordenacao) | `<N>` | `<N>` | `<N>` | `<N>` |
-| `<agente>` | `<codex|gemini>` | `<task>` | `<N>` | `<N>` | `<N>` | `<N>` |
-| **TOTAL** | — | — | `<N>` | `<N>` | `<N>` | `<N>` |
-
-## 12. Testes e validacoes
+## 12. Testes e validações
 
 - build;
 - testes;
@@ -114,13 +101,13 @@ Para cada contrato:
 - validacao de serializacao;
 - typecheck/lint.
 
-## 13. Criterios de aceite
+## 13. Critérios de aceite
 
 - [ ] `<criterio>`
 
-## 14. Instrucoes de negocio para o usuario
+## 14. Instruções de negócio para o usuário
 
-### O que mudou para o negocio
+### O que mudou para o negócio
 <texto>
 
 ### Como homologar
@@ -132,10 +119,10 @@ Para cada contrato:
 ### Impactos operacionais
 <texto>
 
-### Proximo passo recomendado
+### Próximo passo recomendado
 <texto>
 
-## 15. Pendencias
+## 15. Pendências
 
 - `<pendencia>` ou `Nenhuma`
 
@@ -145,6 +132,6 @@ Para cada contrato:
 - arquivo: `review-final.md`
 - houve `QUOTA_EXHAUSTED` no review Codex?: `<sim|nao>`
 
-## 17. Conclusao
+## 17. Conclusão
 
 <pronto para merge | pronto para homologacao | bloqueado>

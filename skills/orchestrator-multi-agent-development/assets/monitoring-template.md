@@ -1,43 +1,43 @@
-# Monitoramento da execucao - <NOME DA MUDANCA>
+# Monitoramento da execução - <NOME DA MUDANÇA>
 
 ## Legenda de status
 
 | Status | Significado |
 |---|---|
-| `PENDING` | task identificada, ainda nao delegada |
+| `PENDING` | task identificada, ainda não delegada |
 | `RUNNING` | agente rodando |
-| `PAUSED` | usuario pediu pausa |
-| `CANCELLED` | usuario cancelou |
-| `BLOCKED` | precisa decisao do orquestrador ou do usuario |
+| `PAUSED` | usuário pediu pausa |
+| `CANCELLED` | usuário cancelou |
+| `BLOCKED` | precisa decisão do orquestrador ou do usuário |
 | `NEEDS_SYNC` | contrato divergiu |
 | `DONE` | agente concluiu |
 | `FAILED` | agente falhou |
 | `QUOTA_EXHAUSTED` | agente parou por quota/rate limit/capacidade |
 | `REVIEWED` | passou pelo review final |
 
-## Task <ID> - <TITULO>
+## Task <ID> - <TÍTULO>
 
 - **Categoria:** `<FULLSTACK | BACKEND_ONLY | FRONTEND_ONLY | ...>`
 - **contractRequired:** `<yes | no>`
 - **Status:** `<PENDING>`
-- **Dependencias:** `<nenhuma | lista>`
+- **Dependências:** `<nenhuma | lista>`
 - **Agentes:**
   - Back-end: `codex:codex-rescue` (Codex padrao da conta, `--effort medium`)
   - Front-end: `cc-antigravity-plugin:antigravity-agent` (`gemini-3.1-pro-low` ou `gemini-3.5-flash-medium`)
 - **Contrato:** `<contracts/T1.md | N/A>`
 - **Wire format validado:** `<sim | nao | pendente>`
 - **Riscos atuais:** `<texto>`
-- **Supervisao operacional:**
+- **Supervisão operacional:**
   - Motivo atual: `<nenhum | cota | tool | escrita | task lenta | bloqueio>`
-  - Evidencia: `<mensagem curta>`
+  - Evidência: `<mensagem curta>`
   - Arquivos parciais: `<lista | nenhum>`
-  - Fallback escolhido: `<nenhum | codex effort medium | review interno do orquestrador | decisao do usuario>`
-  - Proxima acao: `<aguardar | check-in | redelegar | pedir decisao | integrar>`
+  - Fallback escolhido: `<nenhum | codex effort medium | review interno do orquestrador | decisão do usuário>`
+  - Próxima ação: `<aguardar | check-in | redelegar | pedir decisão | integrar>`
 
-## Politica de quota
+## Política de quota
 
-- `QUOTA_EXHAUSTED` no Antigravity/AGY: registrar evidencia e avaliar fallback para Codex.
-- `QUOTA_EXHAUSTED` no Codex em implementacao ou ajuste: marcar `BLOCKED` e pedir decisao.
+- `QUOTA_EXHAUSTED` no Antigravity/AGY: registrar evidência e avaliar fallback para Codex.
+- `QUOTA_EXHAUSTED` no Codex em implementação ou ajuste: marcar `BLOCKED` e pedir decisão.
 - `QUOTA_EXHAUSTED` no Codex em review: registrar fallback de review interno read-only do orquestrador em `review-final.md`.
 
 ## Log de eventos
