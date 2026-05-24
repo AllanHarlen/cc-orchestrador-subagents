@@ -23,7 +23,7 @@
 - **Dependencias:** `<nenhuma | lista>`
 - **Agentes:**
   - Back-end: `codex:codex-rescue` (Codex padrao da conta, `--effort medium`)
-  - Front-end: `cc-gemini-plugin:gemini-agent` (`gemini-3-pro` ou `gemini-3-flash`)
+  - Front-end: `cc-antigravity-plugin:antigravity-agent` (`gemini-3.1-pro-low` ou `gemini-3.5-flash-medium`)
 - **Contrato:** `<contracts/T1.md | N/A>`
 - **Wire format validado:** `<sim | nao | pendente>`
 - **Riscos atuais:** `<texto>`
@@ -36,7 +36,7 @@
 
 ## Politica de quota
 
-- `QUOTA_EXHAUSTED` no Gemini: registrar evidencia e avaliar fallback para Codex.
+- `QUOTA_EXHAUSTED` no Antigravity/AGY: registrar evidencia e avaliar fallback para Codex.
 - `QUOTA_EXHAUSTED` no Codex em implementacao ou ajuste: marcar `BLOCKED` e pedir decisao.
 - `QUOTA_EXHAUSTED` no Codex em review: registrar fallback de review interno read-only do orquestrador em `review-final.md`.
 
@@ -46,6 +46,6 @@
 |---|---|---|
 | `<ts>` | `<T1>` | delegado |
 | `<ts>` | `<T1>` | SLOW_CHECKIN |
-| `<ts>` | `<T1>` | QUOTA_EXHAUSTED - agente: `<gemini|codex>`; fallback: `<acao>` |
+| `<ts>` | `<T1>` | QUOTA_EXHAUSTED - agente: `<antigravity|codex>`; fallback: `<acao>` |
 | `<ts>` | `<T1>` | NEEDS_SYNC - contrato atualizado |
 | `<ts>` | `<T1>` | DONE |

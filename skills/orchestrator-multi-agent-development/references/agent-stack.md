@@ -7,8 +7,8 @@
 | Orquestrador | Claude Sonnet 4.6 | voce mesmo | Medium | coordena e consolida |
 | Review de plano | Codex padrao da conta | `codex:codex-rescue` | High | read-only |
 | Back-end | Codex padrao da conta | `codex:codex-rescue` | Medium | implementacao |
-| Front-end UI complexa | Gemini 3 | `cc-gemini-plugin:gemini-agent` | - | `gemini-3-pro` |
-| Front-end UI simples | Gemini 3 Flash | `cc-gemini-plugin:gemini-agent` | - | `gemini-3-flash` |
+| Front-end UI complexa | AGY | `cc-antigravity-plugin:antigravity-agent` | - | `gemini-3.1-pro-low` |
+| Front-end UI simples | AGY | `cc-antigravity-plugin:antigravity-agent` | - | `gemini-3.5-flash-medium` |
 | Review pos-implementacao | Codex padrao da conta | `codex:codex-rescue` | High | read-only |
 
 ## Regra para Codex
@@ -56,10 +56,10 @@ Use para:
 
 - `QUOTA_EXHAUSTED` em implementacao Codex: bloquear e pedir decisao ao usuario.
 - `QUOTA_EXHAUSTED` em review Codex: fazer fallback de review interno read-only do orquestrador e salvar em `review-final.md`.
-- `QUOTA_EXHAUSTED` em Gemini: seguir a politica de fallback descrita em `workflow.md`.
+- `QUOTA_EXHAUSTED` em Antigravity/AGY: seguir a politica de fallback descrita em `workflow.md`.
 
 ## Skills e Context7
 
 Antes de delegar, cite apenas skills que realmente existem no ambiente.
 
-Se `checks.optional.mcp.context7.ok=true`, instrua Codex e Gemini a consultar Context7 antes de mexer em bibliotecas, frameworks, SDKs, APIs, CLIs ou cloud services.
+Se `checks.optional.mcp.context7.ok=true`, instrua Codex e Antigravity/AGY a consultar Context7 antes de mexer em bibliotecas, frameworks, SDKs, APIs, CLIs ou cloud services.

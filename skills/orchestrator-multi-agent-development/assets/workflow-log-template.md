@@ -54,7 +54,7 @@
 
 | Onda | Task | Subagent type | Modelo | Status final | Link/contexto |
 |---|---|---|---|---|---|
-| `<wave>` | `<task>` | `<codex:codex-rescue | cc-gemini-plugin:gemini-agent>` | `<modelo>` | `<status>` | `subagents-context.md#<secao>` |
+| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>` | `<modelo>` | `<status>` | `subagents-context.md#<secao>` |
 
 ## 5. Falhas Possiveis Monitoradas
 

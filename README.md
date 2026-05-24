@@ -1,6 +1,6 @@
 # cc-orchestrador-subagents
 
-Plugin de Claude Code para conduzir um workflow de desenvolvimento multiagente com OpenSpec, Codex, Gemini e artefatos de auditoria.
+Plugin de Claude Code para conduzir um workflow de desenvolvimento multiagente com OpenSpec, Codex, Antigravity/AGY e artefatos de auditoria.
 
 ## O que mudou nesta versao
 
@@ -20,7 +20,7 @@ O orquestrador:
 3. pede review de plano ao Codex;
 4. classifica tasks e waves;
 5. exige contratos antes do paralelismo quando houver troca de dados;
-6. delega implementacao para Codex e Gemini;
+6. delega implementacao para Codex e Antigravity/AGY;
 7. monitora, integra e revisa;
 8. entrega `workflow-log.md`, `subagents-context.md` e `implementation-report.md`.
 
@@ -91,9 +91,9 @@ Se houver `QUOTA_EXHAUSTED`:
 - salva o resultado em `review-final.md`;
 - nao edita codigo produtivo.
 
-### Gemini
+### Antigravity/AGY
 
-Gemini continua com fallback controlado para Codex apenas quando for seguro.
+Antigravity/AGY continua com fallback controlado para Codex apenas quando for seguro.
 
 ## Contratos obrigatorios
 

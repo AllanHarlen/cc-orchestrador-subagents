@@ -1,5 +1,5 @@
 ---
-description: Conduzir manualmente um workflow de desenvolvimento multiagentico, com suporte a execucao autonoma via /goal (OpenSpec + planejamento do orquestrador + Codex review + Codex/Gemini execucao paralela + log de workflow + relatorio final + instrucoes de negocio)
+description: Conduzir manualmente um workflow de desenvolvimento multiagentico, com suporte a execucao autonoma via /goal (OpenSpec + planejamento do orquestrador + Codex review + Codex/Antigravity execucao paralela + log de workflow + relatorio final + instrucoes de negocio)
 argument-hint: "<descricao da demanda - ex.: 'implemente o fluxo de reservas com listagem, criacao e cancelamento'>"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
@@ -18,7 +18,7 @@ Inicia o **Orquestrador Multiagentico de Desenvolvimento** para a demanda descri
 8. Contratos API/UI para toda troca front-back com `contractRequired: yes|no`
 9. Delegacao paralela em background:
    - Back-end -> `codex:codex-rescue` com `--effort medium`
-   - Front-end -> `cc-gemini-plugin:gemini-agent` (Gemini 3 ou Gemini 3 Flash)
+   - Front-end -> `cc-antigravity-plugin:antigravity-agent` (AGY com `gemini-3.1-pro-low` ou `gemini-3.5-flash-medium`)
 10. Monitoramento
 11. Integracao e resolucao de divergencias
 12. Review pos-implementacao
@@ -46,7 +46,7 @@ Politica de cota:
 Para trabalho independente entre turnos, o modo recomendado e envolver a demanda em `/goal`.
 
 ```text
-/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Gemini encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; workflow-log.md, subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Antigravity encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; workflow-log.md, subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
 ```
 
 ## Comportamento

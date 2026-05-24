@@ -45,7 +45,7 @@
 - Effort: Medium
 
 ### Front-end
-- Modelo: Gemini 3 ou Gemini 3 Flash
+- Modelo: AGY (`gemini-3.1-pro-low` ou `gemini-3.5-flash-medium`)
 
 ### Review pos-implementacao
 - Modelo: Codex padrao da conta ou fallback interno do orquestrador

@@ -1,6 +1,6 @@
 ---
 name: orchestrator-multi-agent-development
-description: Manual multi-agent development orchestrator for architectural work. Invoke through /orchestrator or the namespaced plugin skill when a task needs OpenSpec, planning, Codex review, Codex/Gemini delegation, monitoring, final review, workflow log, subagent context, and an implementation report. Do not use for trivial edits.
+description: Manual multi-agent development orchestrator for architectural work. Invoke through /orchestrator or the namespaced plugin skill when a task needs OpenSpec, planning, Codex review, Codex/Antigravity delegation, monitoring, final review, workflow log, subagent context, and an implementation report. Do not use for trivial edits.
 disable-model-invocation: true
 argument-hint: "<demanda de desenvolvimento com impacto arquitetural>"
 ---
@@ -44,13 +44,13 @@ Se `.claude/settings.json` existir com JSON invalido, nao sobrescreva. Falhe com
 
 - review de plano -> `codex:codex-rescue` com `--effort high`
 - back-end, banco, testes, handoff e ajuste -> `codex:codex-rescue` com `--effort medium`
-- front-end complexo -> Gemini 3
-- front-end simples -> Gemini 3 Flash
+- front-end complexo -> AGY (`gemini-3.1-pro-low`)
+- front-end simples -> AGY (`gemini-3.5-flash-medium`)
 - review pos-implementacao -> `codex:codex-rescue` com `--effort high`
 
 ## Politica de quota
 
-- `QUOTA_EXHAUSTED` no Gemini:
+- `QUOTA_EXHAUSTED` no Antigravity/AGY:
   - registre o estado parcial;
   - faca fallback para Codex apenas quando for seguro;
   - peca decisao do usuario se o fallback mudar muito a natureza da task.

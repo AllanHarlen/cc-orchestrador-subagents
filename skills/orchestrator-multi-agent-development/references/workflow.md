@@ -93,10 +93,10 @@ Para Codex:
 - review -> `--effort high`;
 - nao fixe `--model`.
 
-Para Gemini:
+Para Antigravity/AGY:
 
-- `gemini-3-pro` em UI complexa;
-- `gemini-3-flash` em UI simples.
+- `gemini-3.1-pro-low` em UI complexa;
+- `gemini-3.5-flash-medium` em UI simples.
 
 Cada prompt deve incluir:
 
@@ -123,7 +123,7 @@ Status validos:
 
 ### Politica de quota
 
-- `QUOTA_EXHAUSTED` no Gemini:
+- `QUOTA_EXHAUSTED` no Antigravity/AGY:
   - registre evidencia;
   - se o fallback for seguro, redelegue para Codex com `--effort medium`;
   - se mudar muito a natureza da entrega, peca confirmacao do usuario.

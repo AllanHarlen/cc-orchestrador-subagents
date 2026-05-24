@@ -3,8 +3,8 @@
  * Preflight check for cc-orchestrador-subagents.
  *
  * Validates that every dependency the orchestrator needs is present:
- *  - CLIs on PATH: gemini, codex, openspec
- *  - Claude Code plugins: cc-gemini-plugin, openai-codex
+ *  - CLIs on PATH: agy, codex, openspec
+ *  - Claude Code plugins: cc-antigravity-plugin, openai-codex
  *  - OpenSpec skills under ~/.claude/skills/openspec-*
  *  - A compatible Bash permission for the Codex companion runtime
  *  - A summary of the broader agent permission profile when available
@@ -12,16 +12,11 @@
  *  - Optional Context7 MCP configuration (reported, never blocking)
  *
  * Outputs a JSON report to stdout and exits with code 0 if every required
- * dependency is OK; exits with code 1 otherwise. The orchestrator parses the
- * JSON and decides whether to cancel.
+ * dependency is OK; exits with code 1 otherwise.
  *
  * Usage:
  *   node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" [--json] [--silent]
  *   node scripts/preflight.mjs [--json] [--silent] # compatibility wrapper
- *
- * Flags:
- *   --json    force JSON-only output (default)
- *   --silent  suppress remediation hints (still prints JSON)
  */
 
 import { execSync } from "node:child_process";
@@ -35,14 +30,6 @@ const SKILLS_DIR = join(HOME, ".claude", "skills");
 const PROJECT_CLAUDE_DIR = join(process.cwd(), ".claude");
 const PROJECT_SETTINGS_FILE = join(PROJECT_CLAUDE_DIR, "settings.json");
 
-// ---------------------------------------------------------------------------
-// Check helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Try to run `<cli> --version` and capture its stdout.
- * Returns { ok: true, version } on success, { ok: false, error } on failure.
- */
 function checkCli(cli) {
   try {
     const out = execSync(`${cli} --version`, {
@@ -57,34 +44,27 @@ function checkCli(cli) {
   }
 }
 
-/**
- * Check whether a Claude Code plugin is installed under ~/.claude/plugins/cache.
- * The folder layout is plugins/cache/<marketplace>/<plugin>/<version>/.
- * We accept any version >= 0.0.0; the orchestrator can warn separately if
- * it wants a specific minimum.
- */
 function checkPlugin(marketplace, pluginName) {
   const dir = join(PLUGINS_CACHE, marketplace, pluginName);
   if (!existsSync(dir)) {
     return { ok: false, error: `missing ${dir}` };
   }
+
   let versions = [];
   try {
     versions = readdirSync(dir);
   } catch {
     return { ok: false, error: `cannot read ${dir}` };
   }
+
   if (versions.length === 0) {
     return { ok: false, error: `no versions installed in ${dir}` };
   }
+
   versions.sort();
   return { ok: true, version: versions[versions.length - 1], path: dir };
 }
 
-/**
- * Check whether the openspec-* skills are present under ~/.claude/skills/.
- * Returns an aggregated result.
- */
 function checkOpenSpecSkills() {
   const required = [
     "openspec-new-change",
@@ -94,12 +74,15 @@ function checkOpenSpecSkills() {
     "openspec-archive-change",
     "openspec-sync-specs",
   ];
+
   const missing = required.filter(
     (name) => !existsSync(join(SKILLS_DIR, name, "SKILL.md")),
   );
+
   if (missing.length === 0) {
     return { ok: true, found: required };
   }
+
   return {
     ok: false,
     error: `missing skill folders: ${missing.join(", ")}`,
@@ -107,10 +90,6 @@ function checkOpenSpecSkills() {
   };
 }
 
-/**
- * Check whether Claude Code can run the Codex companion from a background
- * subagent without stopping for Bash approval.
- */
 function checkCodexCompanionBashPermission() {
   const candidates = [
     PROJECT_SETTINGS_FILE,
@@ -199,13 +178,11 @@ function autoRemediateCodexCompanionBashPermission(initialCheck) {
       action: "blocked-invalid-json",
       error:
         "Auto-remediation skipped because .claude/settings.json exists but contains invalid JSON. Fix the file manually and rerun preflight.",
-      revalidated: false,
       ok: false,
     };
   }
 
   let settings = {};
-
   if (fileExistedBefore) {
     try {
       settings = JSON.parse(readFileSync(PROJECT_SETTINGS_FILE, "utf8"));
@@ -217,7 +194,6 @@ function autoRemediateCodexCompanionBashPermission(initialCheck) {
         error:
           err.message?.split(/\r?\n/)[0] ??
           "Auto-remediation skipped because .claude/settings.json could not be parsed.",
-        revalidated: false,
         ok: false,
       };
     }
@@ -230,7 +206,6 @@ function autoRemediateCodexCompanionBashPermission(initialCheck) {
       action: "blocked-non-object-root",
       error:
         "Auto-remediation skipped because .claude/settings.json must contain a JSON object at the root.",
-      revalidated: false,
       ok: false,
     };
   }
@@ -243,7 +218,6 @@ function autoRemediateCodexCompanionBashPermission(initialCheck) {
       action: "blocked-invalid-permissions-shape",
       error:
         "Auto-remediation skipped because .claude/settings.json has a non-object permissions field.",
-      revalidated: false,
       ok: false,
     };
   }
@@ -256,7 +230,6 @@ function autoRemediateCodexCompanionBashPermission(initialCheck) {
       action: "blocked-invalid-allow-shape",
       error:
         "Auto-remediation skipped because .claude/settings.json has permissions.allow in a non-array format.",
-      revalidated: false,
       ok: false,
     };
   }
@@ -273,7 +246,6 @@ function autoRemediateCodexCompanionBashPermission(initialCheck) {
   writeFileSync(PROJECT_SETTINGS_FILE, `${JSON.stringify(nextSettings, null, 2)}\n`, "utf8");
 
   const revalidated = checkCodexCompanionBashPermission();
-
   return {
     attempted: true,
     changed: true,
@@ -291,14 +263,6 @@ function isPlainObject(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
-/**
- * /goal is implemented as a session-scoped Stop hook. If hooks are disabled,
- * Claude Code will reject /goal before the orchestrator can become autonomous.
- *
- * We can only inspect local/project settings that are readable from this
- * process. Managed enterprise policy may still block /goal at runtime; in that
- * case Claude Code reports the reason when the user runs /goal.
- */
 function checkGoalHookSettings() {
   const candidates = [
     join(PROJECT_CLAUDE_DIR, "settings.json"),
@@ -396,14 +360,6 @@ function summarizePermissionProfile(settings) {
   };
 }
 
-/**
- * Optional Context7 MCP detection.
- *
- * Context7 improves agent accuracy for library/framework/API work, but it is
- * not required for the orchestrator to run. We look for common Claude Code,
- * Codex, Gemini and project MCP configuration files, plus the Context7 skill
- * installed by `npx ctx7 setup --claude`.
- */
 function checkContext7Mcp() {
   const evidence = [];
 
@@ -417,6 +373,16 @@ function checkContext7Mcp() {
     }
   }
 
+  const directoryCandidates = [
+    join(HOME, ".gemini", "antigravity-cli", "mcp", "context7"),
+    join(HOME, ".gemini", "antigravity-cli", "plugins", "context7"),
+  ];
+  for (const dir of directoryCandidates) {
+    if (existsSync(dir)) {
+      evidence.push({ type: "mcp-directory", path: dir });
+    }
+  }
+
   const configCandidates = [
     join(process.cwd(), ".mcp.json"),
     join(HOME, ".claude.json"),
@@ -425,6 +391,9 @@ function checkContext7Mcp() {
     join(HOME, ".codex", "config.toml"),
     join(HOME, ".gemini", "settings.json"),
     join(HOME, ".gemini", "mcp.json"),
+    join(HOME, ".gemini", "antigravity-cli", "settings.json"),
+    join(HOME, ".gemini", "antigravity-cli", "import_manifest.json"),
+    join(HOME, ".gemini", "antigravity-cli", "plugins", "context7", "mcp_config.json"),
   ];
 
   for (const file of configCandidates) {
@@ -449,14 +418,14 @@ function checkContext7Mcp() {
       optional: true,
       evidence,
       usage:
-        "When delegating Codex/Gemini work involving libraries, frameworks, SDKs, APIs or cloud services, instruct the agent to use Context7 MCP before relying on memory.",
+        "When delegating Codex/Antigravity work involving libraries, frameworks, SDKs, APIs or cloud services, instruct the agent to use Context7 MCP before relying on memory.",
     };
   }
 
   return {
     ok: false,
     optional: true,
-    error: "Context7 MCP not detected in known Claude/Codex/Gemini/project config locations.",
+    error: "Context7 MCP not detected in known Claude/Codex/Antigravity/project config locations.",
     install: [
       "npx ctx7 setup --claude",
       'or: claude mcp add --scope user --header "CONTEXT7_API_KEY: YOUR_API_KEY" --transport http context7 https://mcp.context7.com/mcp',
@@ -464,22 +433,18 @@ function checkContext7Mcp() {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Run all checks
-// ---------------------------------------------------------------------------
-
 const initialCodexCompanionBash = checkCodexCompanionBashPermission();
 const autoRemediation = autoRemediateCodexCompanionBashPermission(initialCodexCompanionBash);
 const finalCodexCompanionBash = checkCodexCompanionBashPermission();
 
 const checks = {
   cli: {
-    gemini: checkCli("gemini"),
+    agy: checkCli("agy"),
     codex: checkCli("codex"),
     openspec: checkCli("openspec"),
   },
   plugins: {
-    "cc-gemini-plugin": checkPlugin("cc-gemini-plugin", "cc-gemini-plugin"),
+    "cc-antigravity-plugin": checkPlugin("cc-antigravity-plugin", "cc-antigravity-plugin"),
     "openai-codex": checkPlugin("openai-codex", "codex"),
   },
   skills: {
@@ -526,33 +491,24 @@ console.log(JSON.stringify(report, null, 2));
 
 process.exit(status === "ok" ? 0 : 1);
 
-// ---------------------------------------------------------------------------
-// Remediation hints
-// ---------------------------------------------------------------------------
-
 function buildRemediation(failures) {
-  const hints = [];
-  for (const f of failures) {
-    hints.push(remediationFor(f));
-  }
-  return hints;
+  return failures.map((failure) => remediationFor(failure));
 }
 
 function remediationFor(f) {
   const key = `${f.category}:${f.name}`;
   switch (key) {
-    case "cli:gemini":
+    case "cli:agy":
       return {
-        target: "gemini-cli",
+        target: "Antigravity CLI (agy)",
         steps: [
-          "Instalar Gemini CLI globalmente:",
-          "  npm install -g @google/gemini-cli",
-          "  # ou: brew install gemini-cli (macOS)",
-          "Autenticar:",
-          "  gemini auth",
-          "Garantir que o binário 'gemini' está no PATH global.",
+          "Instalar Antigravity CLI:",
+          "  Windows: irm https://antigravity.google/cli/install.ps1 | iex",
+          "  macOS/Linux: curl -fsSL https://antigravity.google/cli/install.sh | bash",
+          "Abrir `agy` uma vez para concluir a autenticacao interativa.",
+          "Garantir que o binario 'agy' esta no PATH global.",
         ],
-        docs: "https://ai.google.dev/gemini-api/docs/cli",
+        docs: "https://antigravity.google/cli",
       };
     case "cli:codex":
       return {
@@ -562,7 +518,7 @@ function remediationFor(f) {
           "  npm install -g @openai/codex",
           "Autenticar:",
           "  codex login",
-          "Garantir que o binário 'codex' está no PATH global.",
+          "Garantir que o binario 'codex' esta no PATH global.",
         ],
         docs: "https://github.com/openai/codex",
       };
@@ -574,19 +530,18 @@ function remediationFor(f) {
           "  npm install -g @fission-ai/openspec",
           "Inicializar no projeto atual:",
           "  openspec init",
-          "Garantir que o binário 'openspec' está no PATH global.",
+          "Garantir que o binario 'openspec' esta no PATH global.",
         ],
         docs: "https://github.com/Fission-AI/OpenSpec",
       };
-    case "plugin:cc-gemini-plugin":
+    case "plugin:cc-antigravity-plugin":
       return {
-        target: "Claude Code plugin: cc-gemini-plugin",
+        target: "Claude Code plugin: cc-antigravity-plugin",
         steps: [
           "Dentro do Claude Code:",
-          "  /plugin marketplace add thepushkarp/cc-gemini-plugin",
-          "  /plugin install cc-gemini-plugin@cc-gemini-plugin",
+          "  claude plugin install AllanHarlen/cc-antigravity-plugin",
         ],
-        docs: "https://github.com/thepushkarp/cc-gemini-plugin",
+        docs: "https://github.com/AllanHarlen/cc-antigravity-plugin",
       };
     case "plugin:openai-codex":
       return {
@@ -602,9 +557,9 @@ function remediationFor(f) {
       return {
         target: "OpenSpec skills (~/.claude/skills/openspec-*)",
         steps: [
-          "Esses skills são instalados pelo CLI do OpenSpec:",
+          "Esses skills sao instalados pelo CLI do OpenSpec:",
           "  openspec init",
-          "Após inicializar, os skills openspec-* aparecem em ~/.claude/skills/.",
+          "Apos inicializar, os skills openspec-* aparecem em ~/.claude/skills/.",
           "Se ainda assim faltarem, reinstale o OpenSpec CLI:",
           "  npm install -g @fission-ai/openspec",
         ],
@@ -637,7 +592,7 @@ function remediationFor(f) {
     default:
       return {
         target: f.name,
-        steps: ["Verifique manualmente a dependência."],
+        steps: ["Verifique manualmente a dependencia."],
         docs: null,
       };
   }

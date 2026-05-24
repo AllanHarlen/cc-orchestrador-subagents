@@ -1,6 +1,6 @@
 # Prompts oficiais para subagentes
 
-Sempre leia este arquivo antes de delegar para Codex ou Gemini.
+Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 
 ## Regras comuns
 
@@ -102,20 +102,20 @@ Retorno:
 8. Evidencia operacional
 ```
 
-## 3. Front-end - Gemini
+## 3. Front-end - Antigravity (AGY)
 
-**Subagent type:** `cc-gemini-plugin:gemini-agent`
+**Subagent type:** `cc-antigravity-plugin:antigravity-agent`
 
 ### UI complexa
 
 ```text
---model gemini-3-pro --dirs <DIRS>
+--model gemini-3.1-pro-low --dirs <DIRS>
 ```
 
 ### UI simples
 
 ```text
---model gemini-3-flash --dirs <DIRS>
+--model gemini-3.5-flash-medium --dirs <DIRS>
 ```
 
 **Corpo do prompt:**

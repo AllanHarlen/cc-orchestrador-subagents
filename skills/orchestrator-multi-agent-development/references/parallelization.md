@@ -5,8 +5,8 @@
 | Categoria | Agentes tipicos |
 |---|---|
 | `BACKEND_ONLY` | 1 Codex com `--effort medium` |
-| `FRONTEND_ONLY` | 1 Gemini |
-| `FULLSTACK` | 1 Codex + 1 Gemini |
+| `FRONTEND_ONLY` | 1 Antigravity/AGY |
+| `FULLSTACK` | 1 Codex + 1 Antigravity/AGY |
 | `DATABASE_ONLY` | 1 Codex com `--effort medium` |
 | `REVIEW_ONLY` | 1 Codex com `--effort high` |
 | `TEST_ONLY` | 1 Codex com `--effort medium` |
