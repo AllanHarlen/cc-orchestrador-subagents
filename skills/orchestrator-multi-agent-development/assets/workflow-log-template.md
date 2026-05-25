@@ -67,6 +67,7 @@
 | Falha de subagente | `9-11` | subagente retorna `FAILED` ou nao entrega artefatos | registrar causa, impacto e proxima acao antes de continuar |
 | Cota esgotada | `9-11` | `quota exceeded`, `rate limit`, `resource exhausted`, `daily limit` ou similar | marcar `QUOTA_EXHAUSTED` e aplicar fallback permitido |
 | Falha de escrita/tool | `9-11` | erro de tool, terminal, escrita ou criação de arquivo | parar agente afetado, registrar parciais e handoff para Codex se seguro |
+| Sandbox Codex bloqueado | `9-11` | `NU1301`, registry externo inacessivel, pacote ausente no cache local ou `UnauthorizedAccessException` fora do working directory | marcar `BLOCKED`, registrar evidencia e pedir decisao do usuario |
 | Pausa/cancelamento | qualquer | mensagem do usuário ou gate operacional | marcar `PAUSED`/`CANCELLED`, não lançar novos agentes e preservar artefatos |
 | Verificação OpenSpec reprovada | `13` | `/openspec-verify-change` falha | registrar problemas e voltar para integração/ajuste antes de arquivar |
 

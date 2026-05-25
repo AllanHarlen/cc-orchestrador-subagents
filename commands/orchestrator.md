@@ -41,6 +41,12 @@ Politica de cota:
 - `QUOTA_EXHAUSTED` em implementacao, ajuste pontual ou handoff via Codex: marque `BLOCKED`, registre evidencia e peca decisao ao usuario.
 - `QUOTA_EXHAUSTED` em review Codex: faca fallback de review read-only pelo proprio orquestrador, sem editar codigo produtivo, e salve o resultado em `review-final.md`.
 
+Politica de sandbox Codex:
+
+- Rede externa bloqueada para pacote/restore, pacote ausente no cache local ou `UnauthorizedAccessException` fora do working directory permitido devem virar `BLOCKED`, com evidencia em `monitoring.md`, `workflow-log.md` e `subagents-context.md`.
+- Nao tente contornar esses limites com retries longos, troca arbitraria de ferramenta ou escrita fora do escopo.
+- Para UI sem dependencia de rede, mantenha Antigravity/AGY como rota primaria; Codex so assume front-end com fallback documentado e escrita permitida.
+
 ## Argumento
 
 `$ARGUMENTS` - descricao da demanda em linguagem natural. Pode ser frase unica ou paragrafo com contexto.

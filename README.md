@@ -10,7 +10,9 @@ Plugin de Claude Code para conduzir um workflow de desenvolvimento multiagente c
 - roteamento por categoria: `FRONTEND_ONLY` vai para Antigravity/AGY, inclusive setup de front-end;
 - foco explicito em wire format, casing JSON e serializacao real;
 - fallback de review interno do orquestrador quando o Codex ficar sem quota no review;
-- bloqueio com decisao do usuario quando o Codex ficar sem quota em implementacao.
+- bloqueio com decisao do usuario quando o Codex ficar sem quota em implementacao;
+- politica operacional para limites de sandbox Codex: rede externa bloqueada para pacotes/restore e escrita fora do working directory permitido;
+- reforco de que UI sem dependencia de rede deve permanecer com Antigravity/AGY, registrando fallback para Codex apenas quando for seguro.
 
 ## Visao geral
 
@@ -25,6 +27,19 @@ O orquestrador:
 7. monitora, integra e revisa;
 8. entrega `workflow-log.md`, `subagents-context.md` e `implementation-report.md`.
 
+## Dependencias oficiais
+
+Este plugin depende do Codex plugin oficial para Claude Code:
+
+```text
+/plugin marketplace add openai/codex-plugin-cc
+/plugin install codex@openai-codex
+/reload-plugins
+/codex:setup
+```
+
+O marketplace/dependency usado nos manifests e `openai-codex`, e o subagente esperado e `codex:codex-rescue`.
+
 ## Codex: modelo e effort
 
 O workflow nao fixa mais modelos Codex como `gpt-5.4` ou `gpt-5.5`.
@@ -35,6 +50,16 @@ Use:
 - `codex:codex-rescue` com `--effort high` para review de plano e review pos-implementacao.
 
 O modelo fica no padrao disponivel na conta do usuario.
+
+## Codex: limites de sandbox
+
+Quando o Codex estiver em ambiente sandboxado, trate como bloqueio operacional:
+
+- falha de rede externa para pacotes, restore ou registries, como `NU1301` ao acessar `https://api.nuget.org/v3/index.json`;
+- pacote necessario ausente do cache local;
+- `UnauthorizedAccessException` ou erro equivalente ao tentar criar/editar arquivos fora do working directory permitido.
+
+Nesses casos o subagente deve parar, registrar evidencia e retornar `Status: BLOCKED`, sem insistir em retries longos nem tentar contornar o sandbox. O orquestrador pede decisao do usuario ou ajusta o handoff. Para tasks de UI sem dependencia de rede, mantenha o roteamento primario para Antigravity/AGY.
 
 ## Roteamento de front-end
 

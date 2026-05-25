@@ -46,6 +46,7 @@
 - **Pendências reportadas:** `<nenhuma | lista>`
 - **Riscos reportados:** `<nenhum | lista>`
 - **Evidência operacional:** `<mensagem curta quando houve falha/cota/bloqueio>`
+- **Limites de sandbox Codex:** `<N/A | nenhum | rede externa bloqueada | pacote ausente no cache | escrita fora do working directory>`
 - **Ação do orquestrador:** `<integrado | redelegado | contrato ajustado | decisão do usuário | pendente>`
 
 ## Decisões Cruzadas Entre Subagentes

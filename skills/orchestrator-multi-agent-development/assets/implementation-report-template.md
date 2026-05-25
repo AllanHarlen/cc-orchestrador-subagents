@@ -64,6 +64,7 @@ Para cada task:
 - agentes;
 - arquivos alterados;
 - testes;
+- limites de sandbox Codex se houver;
 - pendencias.
 
 ## 7. Contratos implementados
@@ -88,6 +89,12 @@ Para cada contrato:
 ## 10. Riscos identificados
 
 - `<risco>`
+
+## 10a. Bloqueios operacionais
+
+- Sandbox Codex: `<nenhum | rede externa bloqueada | pacote ausente no cache | escrita fora do working directory | N/A>`
+- Evidencia: `<comando/erro/caminho ou N/A>`
+- Decisao do usuario: `<texto ou N/A>`
 
 ## 11. Resumo dos subagentes
 

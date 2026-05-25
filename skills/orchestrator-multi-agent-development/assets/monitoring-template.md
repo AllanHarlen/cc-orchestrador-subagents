@@ -33,6 +33,7 @@
 - **Supervisão operacional:**
   - Motivo atual: `<nenhum | cota | tool | escrita | task lenta | bloqueio>`
   - Evidência: `<mensagem curta>`
+  - Sandbox Codex: `<N/A | rede externa bloqueada | pacote ausente no cache | escrita fora do working directory | nenhum>`
   - Arquivos parciais: `<lista | nenhum>`
   - Fallback escolhido: `<nenhum | codex effort medium | review interno do orquestrador | decisão do usuário>`
   - Próxima ação: `<aguardar | check-in | redelegar | pedir decisão | integrar>`
@@ -43,6 +44,13 @@
 - `QUOTA_EXHAUSTED` no Codex em implementação ou ajuste: marcar `BLOCKED` e pedir decisão.
 - `QUOTA_EXHAUSTED` no Codex em review: registrar fallback de review interno read-only do orquestrador em `review-final.md`.
 
+## Política de sandbox Codex
+
+- Rede externa bloqueada para pacote/restore: marcar `BLOCKED`, registrar comando, pacote e erro.
+- Pacote ausente no cache local: marcar `BLOCKED`, registrar dependencia.
+- Escrita fora do working directory permitido: marcar `BLOCKED`, registrar working directory e caminho alvo.
+- UI sem dependencia de rede segue preferencialmente com Antigravity/AGY.
+
 ## Log de eventos
 
 | Timestamp | Task | Evento |
@@ -50,5 +58,6 @@
 | `<ts>` | `<T1>` | delegado |
 | `<ts>` | `<T1>` | SLOW_CHECKIN |
 | `<ts>` | `<T1>` | QUOTA_EXHAUSTED - agente: `<antigravity|codex>`; fallback: `<acao>` |
+| `<ts>` | `<T1>` | BLOCKED - sandbox Codex: `<rede externa | pacote ausente | escrita fora do working directory>` |
 | `<ts>` | `<T1>` | NEEDS_SYNC - contrato atualizado |
 | `<ts>` | `<T1>` | DONE |

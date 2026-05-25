@@ -69,6 +69,8 @@ Use para:
 - ajustes pontuais;
 - handoffs apos falha operacional.
 
+Bloqueie e escale ao usuario quando o Codex depender de rede externa indisponivel para pacotes/restore, de pacote ausente do cache local, ou quando nao puder escrever fora do working directory permitido. Exemplos: NuGet `NU1301` em `https://api.nuget.org/v3/index.json` e `UnauthorizedAccessException`.
+
 ### Codex com `--effort high`
 
 Use para:
@@ -83,6 +85,13 @@ Use para:
 - `QUOTA_EXHAUSTED` em implementacao Codex: bloquear e pedir decisao ao usuario.
 - `QUOTA_EXHAUSTED` em review Codex: fazer fallback de review interno read-only do orquestrador e salvar em `review-final.md`.
 - `QUOTA_EXHAUSTED` em Antigravity/AGY: seguir a politica de fallback descrita em `workflow.md`.
+
+## Politica de sandbox
+
+- Rede externa bloqueada no Codex para NuGet/npm/pip/outros registries: registrar evidencia e marcar `BLOCKED`.
+- Pacote necessario nao existe no cache local do ambiente Codex: registrar dependencia ausente e marcar `BLOCKED`.
+- Escrita fora do working directory permitido retorna erro de permissao: registrar caminho alvo, working directory efetivo e marcar `BLOCKED`.
+- Para tasks `FRONTEND_ONLY` sem necessidade de instalar dependencias externas, AGY continua sendo a rota preferida.
 
 ## Skills e Context7
 

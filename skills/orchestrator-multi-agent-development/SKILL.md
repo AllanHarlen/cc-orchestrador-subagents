@@ -20,6 +20,7 @@ Voce e o **Orquestrador Principal**. Coordene; nao implemente codigo produtivo d
 7. Contrato e obrigatorio sempre que houver troca de dados front-back.
 8. Review Codex sem quota pode cair para review interno read-only do orquestrador.
 9. O roteamento de implementacao e decidido pela **categoria da task**, nao pela aparencia do trabalho. Toda task `FRONTEND_ONLY` vai para Antigravity/AGY; Codex so assume front-end em fallback operacional registrado.
+10. Limites de sandbox Codex como rede externa bloqueada, pacote ausente do cache local ou escrita fora do working directory permitido sao bloqueios operacionais: registre evidencia e peca decisao do usuario.
 
 ## Fase 0 - Preflight
 
@@ -48,6 +49,16 @@ Se `.claude/settings.json` existir com JSON invalido, nao sobrescreva. Falhe com
 - back-end, banco, testes, handoff e ajuste -> `codex:codex-rescue` com `--effort medium`
 - front-end, incluindo setup Vite/React, rotas, servicos API, tipos TypeScript, componentes e UX -> AGY sem `--model`
 - review pos-implementacao -> `codex:codex-rescue` com `--effort high`
+
+## Politica de sandbox Codex
+
+Trate como `BLOCKED` operacional no Codex:
+
+- restore/instalacao de pacotes sem acesso a rede externa, como NuGet `NU1301` em `https://api.nuget.org/v3/index.json`;
+- pacote necessario ausente do cache local;
+- `UnauthorizedAccessException` ou erro equivalente ao escrever fora do working directory permitido.
+
+Nao tente contornar o sandbox com retries longos, troca arbitraria de ferramenta ou escrita em caminho alternativo fora do escopo. Registre a evidencia em `monitoring.md`, `workflow-log.md` e `subagents-context.md`, depois peca decisao do usuario. Para UI sem dependencia de rede, preserve AGY como executor primario.
 
 ## Politica de quota
 
@@ -121,6 +132,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] contratos criados para toda troca front-back
 - [ ] prompts Codex sem `--model`
 - [ ] prompts AGY sem `--model`
+- [ ] bloqueios de sandbox Codex tratados como `BLOCKED` com evidencia
 - [ ] validacao de wire format e serializacao registrada
 - [ ] politica de quota aplicada corretamente
 - [ ] `review-final.md` criado, inclusive em fallback interno

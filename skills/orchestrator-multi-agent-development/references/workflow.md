@@ -232,6 +232,8 @@ Para Codex:
 - implementacao, handoff e ajuste -> `--effort medium`;
 - review -> `--effort high`;
 - nao fixe `--model`.
+- antes de executar instalacao/restore de pacotes, verifique se a task depende de rede externa ou de cache local; se falhar por rede bloqueada ou pacote ausente, pare como `BLOCKED`.
+- se houver erro de permissao ao escrever fora do working directory permitido, pare como `BLOCKED` e reporte o caminho alvo.
 
 Para Antigravity/AGY:
 
@@ -290,6 +292,20 @@ Status validos:
   - faca review interno read-only no orquestrador;
   - salve o resultado em `review-final.md`;
   - nao edite codigo produtivo.
+
+### Politica de sandbox Codex
+
+- `NU1301`, falha ao acessar registry externo, restore sem rede ou pacote ausente do cache local:
+  - marque `BLOCKED`;
+  - registre comando, erro e pacote necessario;
+  - peca decisao do usuario antes de alterar plano ou dependencia.
+
+- `UnauthorizedAccessException` ou erro equivalente ao escrever fora do working directory permitido:
+  - marque `BLOCKED`;
+  - registre working directory efetivo e caminho que falhou;
+  - peca decisao do usuario para ajustar o diretorio permitido, mover a execucao para a raiz correta ou redefinir o escopo.
+
+- Para UI sem dependencia de rede, mantenha AGY como executor primario. So faca handoff para Codex se o bloqueio AGY estiver documentado e o sandbox Codex permitir a escrita necessaria.
 
 ## Fase 11 - Integracao
 

@@ -11,6 +11,7 @@ Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 - Se o preflight indicar `checks.optional.mcp.context7.ok: true`, use Context7 antes de decidir sobre bibliotecas, frameworks, SDKs, APIs, CLIs ou cloud services.
 - Se existir contrato API/UI, siga o contrato como fonte da verdade.
 - Valide casing JSON e wire format real; nao assuma que nomes de DTO internos sao iguais ao payload na rede.
+- No Codex, trate rede externa bloqueada para pacotes/restore, pacote ausente do cache local e erro de escrita fora do working directory permitido como `Status: BLOCKED`.
 
 ## 1. Review do entendimento - Codex (Fase 2)
 
@@ -106,6 +107,8 @@ Regras:
 - adicione testes quando aplicavel;
 - reporte todos os arquivos alterados;
 - se houver cota, retorne `Status: QUOTA_EXHAUSTED`;
+- se `dotnet restore`, `dotnet add package`, npm, pip ou outro registry falhar por rede externa bloqueada ou pacote ausente do cache local, retorne `Status: BLOCKED` com o comando, pacote e erro;
+- se houver `UnauthorizedAccessException` ou erro de permissao ao escrever fora do working directory permitido, retorne `Status: BLOCKED` com working directory efetivo e caminho alvo;
 - se receber `SLOW_CHECKIN`, responda com progresso real, arquivos tocados, bloqueios, riscos e ETA.
 
 Retorno:
@@ -118,8 +121,9 @@ Retorno:
 6. Pendencias
 7. Riscos
 8. Evidencia operacional
-9. Skills utilizadas: <lista das skills usadas ou "nenhuma">
-10. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+9. Limites de sandbox: <nenhum | rede externa bloqueada | pacote ausente no cache | escrita fora do working directory | outro>
+10. Skills utilizadas: <lista das skills usadas ou "nenhuma">
+11. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
     (informe N/A se a plataforma nao expor o dado)
 ```
 
@@ -272,6 +276,7 @@ Ajuste pontual na implementacao:
 
 Nao altere nada fora do escopo informado.
 Se houver cota, retorne `Status: QUOTA_EXHAUSTED`.
+Se houver rede externa bloqueada, pacote ausente no cache local ou escrita fora do working directory permitido, retorne `Status: BLOCKED` com evidencia.
 ```
 
 ## 7. Fallback de review sem quota Codex
