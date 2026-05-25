@@ -16,8 +16,10 @@ Voce e o **Orquestrador Principal**. Coordene; nao implemente codigo produtivo d
 3. Planejamento OpenSpec e artefatos de coordenacao ficam com o orquestrador.
 4. Implementacao, handoff, testes produtivos e ajustes pontuais vao para subagentes.
 5. Codex usa o modelo padrao disponivel na conta; controle apenas `--effort medium` ou `--effort high`.
-6. Contrato e obrigatorio sempre que houver troca de dados front-back.
-7. Review Codex sem quota pode cair para review interno read-only do orquestrador.
+6. AGY nao recebe modelo nem modo; delegue pelo subagent type e deixe o plugin/CLI usar o padrao.
+7. Contrato e obrigatorio sempre que houver troca de dados front-back.
+8. Review Codex sem quota pode cair para review interno read-only do orquestrador.
+9. O roteamento de implementacao e decidido pela **categoria da task**, nao pela aparencia do trabalho. Toda task `FRONTEND_ONLY` vai para Antigravity/AGY; Codex so assume front-end em fallback operacional registrado.
 
 ## Fase 0 - Preflight
 
@@ -44,8 +46,7 @@ Se `.claude/settings.json` existir com JSON invalido, nao sobrescreva. Falhe com
 
 - review de plano -> `codex:codex-rescue` com `--effort high`
 - back-end, banco, testes, handoff e ajuste -> `codex:codex-rescue` com `--effort medium`
-- front-end complexo -> AGY (`gemini-3.1-pro-low`)
-- front-end simples -> AGY (`gemini-3.5-flash-medium`)
+- front-end, incluindo setup Vite/React, rotas, servicos API, tipos TypeScript, componentes e UX -> AGY sem `--model`
 - review pos-implementacao -> `codex:codex-rescue` com `--effort high`
 
 ## Politica de quota
@@ -98,7 +99,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 5. Consolidar plano
 6. Classificar tasks com `contractRequired`
 7. Montar waves
-8. Criar contratos obrigatorios
+8. Validar roteamento e criar contratos obrigatorios
 9. Delegar em paralelo
 10. Monitorar
 11. Integrar
@@ -115,8 +116,11 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] duvidas do Codex (fase 2) resolvidas via `AskUserQuestion` antes de avancar
 - [ ] plano revisado
 - [ ] `tasks-classification.md` com `contractRequired`
+- [ ] `tasks-classification.md` e `waves.md` com agente derivado da categoria
+- [ ] `validate-routing.mjs` executado antes da delegacao
 - [ ] contratos criados para toda troca front-back
 - [ ] prompts Codex sem `--model`
+- [ ] prompts AGY sem `--model`
 - [ ] validacao de wire format e serializacao registrada
 - [ ] politica de quota aplicada corretamente
 - [ ] `review-final.md` criado, inclusive em fallback interno

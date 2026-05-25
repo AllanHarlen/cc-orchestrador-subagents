@@ -52,9 +52,9 @@
 
 > Resumo curto. O detalhe completo fica em `openspec/changes/<nome>/subagents-context.md`.
 
-| Onda | Task | Subagent type | Modelo | Status final | Link/contexto |
+| Onda | Task | Subagent type | Execucao | Status final | Link/contexto |
 |---|---|---|---|---|---|
-| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>` | `<modelo>` | `<status>` | `subagents-context.md#<secao>` |
+| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>` | `<--effort medium/high | AGY sem --model>` | `<status>` | `subagents-context.md#<secao>` |
 
 ## 5. Falhas Possíveis Monitoradas
 

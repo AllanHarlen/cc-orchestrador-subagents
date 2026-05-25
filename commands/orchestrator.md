@@ -18,7 +18,7 @@ Inicia o **Orquestrador Multiagentico de Desenvolvimento** para a demanda descri
 8. Contratos API/UI para toda troca front-back com `contractRequired: yes|no`
 9. Delegacao paralela em background:
    - Back-end -> `codex:codex-rescue` com `--effort medium`
-   - Front-end -> `cc-antigravity-plugin:antigravity-agent` (AGY com `gemini-3.1-pro-low` ou `gemini-3.5-flash-medium`)
+   - Front-end -> `cc-antigravity-plugin:antigravity-agent` (AGY sem especificar modelo ou modo)
 10. Monitoramento
 11. Integracao e resolucao de divergencias
 12. Review pos-implementacao
@@ -31,6 +31,10 @@ Inicia o **Orquestrador Multiagentico de Desenvolvimento** para a demanda descri
 Durante um workflow iniciado por `/orchestrator`, o Claude atua somente como orquestrador principal: mantem contexto, decide proximos passos, atualiza artefatos de coordenacao e delega implementacao para subagentes. Ele nao implementa codigo diretamente.
 
 Atividades paralelas de implementacao devem usar subagentes. Para back-end, banco, testes, ajustes pontuais, handoffs e recuperacao de falha operacional, use `codex:codex-rescue` com `--effort medium`. Reviews formais usam `codex:codex-rescue` com `--effort high`, sempre deixando o modelo no padrao disponivel na conta.
+
+O roteamento de implementacao segue a categoria da task. Toda task `FRONTEND_ONLY` deve ser delegada ao `cc-antigravity-plugin:antigravity-agent`, inclusive setup Vite/React, rotas, tipos TypeScript, servicos API e componentes simples. Codex so recebe front-end como fallback operacional registrado depois de falha/cota do AGY ou decisao explicita do usuario.
+
+Tasks de front-end devem ser delegadas ao Antigravity/AGY por categoria, sem passar `--model` ou qualquer seletor de modo. O AGY usa o padrao disponivel no proprio plugin/CLI.
 
 Politica de cota:
 
@@ -90,6 +94,8 @@ O JSON agora inclui `autoRemediation`. Se a permissao `Bash(node:*)` foi criada 
 ### Passo 4 - Conduzir o workflow
 
 Siga `SKILL.md` + `references/*.md`. Use `assets/*.md` para criar artefatos em `openspec/changes/<nome>/`.
+
+Depois de gerar `tasks-classification.md` e `waves.md`, rode `node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs" "openspec/changes/<nome>"` ou o caminho equivalente via `${CLAUDE_SKILL_DIR}`. Se falhar, corrija os artefatos antes de delegar.
 
 Antes de iniciar cada fase e antes de lancar ou redelegar subagentes, faca um gate operacional:
 

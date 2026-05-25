@@ -7,6 +7,7 @@ Plugin de Claude Code para conduzir um workflow de desenvolvimento multiagente c
 - preflight com `autoRemediation` para `Bash(node:*)`;
 - prompts Codex sem `--model`;
 - contratos obrigatorios para qualquer troca front-back;
+- roteamento por categoria: `FRONTEND_ONLY` vai para Antigravity/AGY, inclusive setup de front-end;
 - foco explicito em wire format, casing JSON e serializacao real;
 - fallback de review interno do orquestrador quando o Codex ficar sem quota no review;
 - bloqueio com decisao do usuario quando o Codex ficar sem quota em implementacao.
@@ -34,6 +35,16 @@ Use:
 - `codex:codex-rescue` com `--effort high` para review de plano e review pos-implementacao.
 
 O modelo fica no padrao disponivel na conta do usuario.
+
+## Roteamento de front-end
+
+O agente e escolhido pela categoria da task, nao pela aparencia do trabalho. Se a task for `FRONTEND_ONLY`, use `cc-antigravity-plugin:antigravity-agent` mesmo quando ela for setup Vite/React, React Router, tipos TypeScript, servicos `fetch` ou componentes simples.
+
+Codex so deve receber front-end como fallback operacional registrado depois de `QUOTA_EXHAUSTED`, falha de ferramenta/escrita do AGY ou decisao explicita do usuario.
+
+## AGY: delegacao front-end
+
+Tasks de front-end sao direcionadas ao Antigravity/AGY por categoria, sem especificar modelo ou modo. O AGY usa o padrao do proprio plugin/CLI.
 
 ## Preflight e auto-remediacao
 
@@ -143,4 +154,5 @@ node --check skills/orchestrator-multi-agent-development/scripts/preflight.mjs
 node scripts/preflight.mjs
 rg --line-number --fixed-strings -- '--model gpt-5.4-codex' commands skills
 rg --line-number --fixed-strings -- '--model gpt-5.5-codex' commands skills
+node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs openspec/changes/<nome>
 ```

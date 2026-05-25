@@ -19,11 +19,14 @@
 
 - **Categoria:** `<FULLSTACK | BACKEND_ONLY | FRONTEND_ONLY | ...>`
 - **contractRequired:** `<yes | no>`
+- **assignedAgent:** `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent | ambos>`
+- **Execucao:** `<Codex --effort medium/high | AGY sem --model>`
+- **Routing validado:** `<sim | nao | pendente>`
 - **Status:** `<PENDING>`
 - **Dependências:** `<nenhuma | lista>`
 - **Agentes:**
   - Back-end: `codex:codex-rescue` (Codex padrao da conta, `--effort medium`)
-  - Front-end: `cc-antigravity-plugin:antigravity-agent` (`gemini-3.1-pro-low` ou `gemini-3.5-flash-medium`)
+  - Front-end: `cc-antigravity-plugin:antigravity-agent` (AGY sem `--model`)
 - **Contrato:** `<contracts/T1.md | N/A>`
 - **Wire format validado:** `<sim | nao | pendente>`
 - **Riscos atuais:** `<texto>`

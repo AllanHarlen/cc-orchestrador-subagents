@@ -45,7 +45,7 @@
 - Effort: Medium
 
 ### Front-end
-- Modelo: AGY (`gemini-3.1-pro-low` ou `gemini-3.5-flash-medium`)
+- Agente: AGY (`cc-antigravity-plugin:antigravity-agent`, sem `--model`)
 
 ### Review pos-implementação
 - Modelo: Codex padrao da conta ou fallback interno do orquestrador
@@ -57,6 +57,9 @@ Para cada task:
 
 - categoria;
 - `contractRequired`;
+- `assignedAgent`;
+- execucao (`--effort` no Codex; AGY sem `--model`);
+- resultado de `validate-routing.mjs`;
 - status;
 - agentes;
 - arquivos alterados;
@@ -88,9 +91,9 @@ Para cada contrato:
 
 ## 11. Resumo dos subagentes
 
-| Task | Subagent type | Modelo | Status | Resumo | Riscos |
+| Task | Subagent type | Execucao | Status | Resumo | Riscos |
 |---|---|---|---|---|---|
-| `<T1>` | `codex:codex-rescue` | `Codex padrao da conta` | `<status>` | `<resumo>` | `<riscos>` |
+| `<T1>` | `codex:codex-rescue` | `<--effort medium/high | AGY sem --model>` | `<status>` | `<resumo>` | `<riscos>` |
 
 ## 12. Testes e validações
 

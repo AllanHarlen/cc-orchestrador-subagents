@@ -5,6 +5,7 @@ Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 ## Regras comuns
 
 - Para Codex, use o modelo padrao disponivel na conta e controle apenas `--effort medium` ou `--effort high`.
+- A categoria da task decide o agente. `FRONTEND_ONLY` sempre usa Antigravity/AGY como agente primario; Codex so pode receber front-end em fallback operacional registrado.
 - Se aparecer cota, rate limit, billing, resource exhausted, model capacity ou daily limit, retorne `Status: QUOTA_EXHAUSTED`.
 - Nao tente contornar cota com retries longos ou mudanca arbitraria de modelo.
 - Se o preflight indicar `checks.optional.mcp.context7.ok: true`, use Context7 antes de decidir sobre bibliotecas, frameworks, SDKs, APIs, CLIs ou cloud services.
@@ -126,22 +127,20 @@ Retorno:
 
 **Subagent type:** `cc-antigravity-plugin:antigravity-agent`
 
-### UI complexa
+**Parametros:**
 
 ```text
---model gemini-3.1-pro-low --dirs <DIRS>
+--dirs <DIRS>
 ```
 
-### UI simples
-
-```text
---model gemini-3.5-flash-medium --dirs <DIRS>
-```
+Nao passe `--model` nem qualquer seletor de modo para AGY.
 
 **Corpo do prompt:**
 
 ```text
 Voce e o subagente front-end desta task.
+
+Esta task foi roteada para AGY porque sua categoria e `FRONTEND_ONLY` ou a fatia front-end de `FULLSTACK`. Mesmo quando o trabalho for setup de projeto, roteamento, tipos TypeScript ou servico API, trate como front-end.
 
 Antes de implementar, liste as skills disponiveis no ambiente com `/skills` ou equivalente.
 Ignore todas as skills cujo nome comece com `openspec` ou `opsx`.

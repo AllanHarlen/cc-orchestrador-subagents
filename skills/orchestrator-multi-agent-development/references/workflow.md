@@ -147,7 +147,24 @@ Para cada task em `tasks.md`, registre em `tasks-classification.md`:
 - dependencias;
 - arquivos criticos;
 - complexidade;
-- `contractRequired: yes|no`.
+- `contractRequired: yes|no`;
+- `assignedAgent`;
+- `routingReason`.
+
+### Regra de roteamento por categoria
+
+A categoria da task e a fonte da verdade para escolher agente. Nao reclassifique pelo tipo de atividade interna. Setup de projeto front-end, rotas, servicos API em TypeScript, componentes, paginas, hooks, estado e UX continuam sendo `FRONTEND_ONLY` e vao para Antigravity/AGY.
+
+| Categoria | `assignedAgent` | Execucao |
+|---|---|---|
+| `BACKEND_ONLY` | `codex:codex-rescue` | `--effort medium` |
+| `DATABASE_ONLY` | `codex:codex-rescue` | `--effort medium` |
+| `TEST_ONLY` | `codex:codex-rescue` | `--effort medium` |
+| `REVIEW_ONLY` | `codex:codex-rescue` | `--effort high` |
+| `FRONTEND_ONLY` | `cc-antigravity-plugin:antigravity-agent` | AGY sem `--model` |
+| `FULLSTACK` | `codex:codex-rescue` + `cc-antigravity-plugin:antigravity-agent` | Codex para back-end; AGY sem `--model` para front-end |
+
+Se `FRONTEND_ONLY` aparecer com Codex como agente primario, corrija antes de montar waves. Codex so pode assumir front-end depois de `QUOTA_EXHAUSTED`, falha operacional de AGY ou decisao explicita do usuario, e isso deve ficar registrado em `monitoring.md`, `workflow-log.md` e `subagents-context.md`.
 
 ### Regra de `contractRequired`
 
@@ -162,6 +179,14 @@ Exemplos:
 ## Fase 7 - Ondas
 
 Agrupe tasks em `waves.md`.
+
+Cada entrada de `waves.md` deve repetir `assignedAgent` vindo de `tasks-classification.md`. Depois de montar as waves, rode:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" "openspec/changes/<nome>"
+```
+
+Se o validador falhar, corrija `tasks-classification.md` e `waves.md` antes de qualquer delegacao.
 
 Nao paralelize quando houver:
 
@@ -200,6 +225,8 @@ Quando houver DTO C# e consumidor TypeScript:
 
 ## Fase 9 - Delegacao paralela
 
+Antes de lancar subagentes, confirme que `validate-routing.mjs` passou. A delegacao precisa seguir `assignedAgent` dos artefatos validados.
+
 Para Codex:
 
 - implementacao, handoff e ajuste -> `--effort medium`;
@@ -208,8 +235,8 @@ Para Codex:
 
 Para Antigravity/AGY:
 
-- `gemini-3.1-pro-low` em UI complexa;
-- `gemini-3.5-flash-medium` em UI simples.
+- delegue ao `cc-antigravity-plugin:antigravity-agent`;
+- nao passe `--model` nem seletor de modo.
 
 Cada prompt deve incluir:
 

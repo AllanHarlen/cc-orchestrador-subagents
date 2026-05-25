@@ -38,15 +38,9 @@ O orquestrador atualmente depende do plugin `cc-gemini-plugin` (mantido por terc
 
 ---
 
-## 3. Mapeamento de Modelos
+## 3. Delegacao AGY
 
-| Antigo (Gemini CLI) | Novo (AGY) | Uso no Orquestrador |
-|---------------------|-----------|---------------------|
-| `gemini-3-pro` | `gemini-3.1-pro-low` | Front-end complexo (UI rica) |
-| `gemini-3-flash` | `gemini-3.5-flash-medium` | Front-end simples (CRUD, listagens) |
-| *(default)* | `gemini-3.5-flash-medium` | Fallback quando modelo não é especificado |
-
-> **Nota:** O AGY também suporta `gemini-3.5-flash-high` e modelos Claude (`claude-4.6-sonnet-thinking`, `claude-4.6-opus-thinking`). O orquestrador pode expandir a seleção futuramente.
+O orquestrador nao seleciona modelo ou modo no AGY. Tarefas de front-end sao roteadas para `cc-antigravity-plugin:antigravity-agent`, e o plugin/CLI usa o padrao disponivel.
 
 ---
 
@@ -63,21 +57,21 @@ O orquestrador atualmente depende do plugin `cc-gemini-plugin` (mantido por terc
 
 | Arquivo | Alterações |
 |---------|-----------|
-| `commands/orchestrator.md` | Substituir `cc-gemini-plugin:gemini-agent` → `cc-antigravity-plugin:antigravity-agent`; atualizar nomes de modelo; substituir "Gemini" → "Antigravity/AGY" nas descrições do workflow |
+| `commands/orchestrator.md` | Substituir `cc-gemini-plugin:gemini-agent` → `cc-antigravity-plugin:antigravity-agent`; substituir "Gemini" → "Antigravity/AGY" nas descrições do workflow; nao passar seletor de modelo ao AGY |
 
 ### 4.3 Skill Definition (1 arquivo)
 
 | Arquivo | Alterações |
 |---------|-----------|
-| `skills/orchestrator-multi-agent-development/SKILL.md` | Tabela de stack: `Gemini 3` → `AGY (gemini-3.1-pro-low)`; `Gemini 3 Flash` → `AGY (gemini-3.5-flash-medium)`; política de cota |
+| `skills/orchestrator-multi-agent-development/SKILL.md` | Tabela de stack: front-end → `AGY` sem seletor de modelo; política de cota |
 
 ### 4.4 Referências do Skill (4 arquivos)
 
 | Arquivo | Alterações |
 |---------|-----------|
-| `skills/.../references/agent-stack.md` | Coluna subagent_type: `cc-gemini-plugin:gemini-agent` → `cc-antigravity-plugin:antigravity-agent`; modelos; cota; referência Context7 |
-| `skills/.../references/subagent-prompts.md` | Seção 3 inteira: header "Front-end - Gemini" → "Front-end - Antigravity (AGY)"; subagent_type; flags de modelo (`--model gemini-3.1-pro-low --dirs <DIRS>`); prompt body |
-| `skills/.../references/workflow.md` | Fase 9: modelos; política de cota |
+| `skills/.../references/agent-stack.md` | Coluna subagent_type: `cc-gemini-plugin:gemini-agent` → `cc-antigravity-plugin:antigravity-agent`; cota; referência Context7 |
+| `skills/.../references/subagent-prompts.md` | Seção 3 inteira: header "Front-end - Gemini" → "Front-end - Antigravity (AGY)"; subagent_type; sem flag de modelo; prompt body |
+| `skills/.../references/workflow.md` | Fase 9: delegacao AGY sem seletor de modelo; política de cota |
 | `skills/.../references/parallelization.md` | "Gemini" → "Antigravity/AGY" nas regras de paralelização |
 
 ### 4.5 Templates de Assets (4 arquivos)
@@ -87,7 +81,7 @@ O orquestrador atualmente depende do plugin `cc-gemini-plugin` (mantido por terc
 | `skills/.../assets/subagents-context-template.md` | `cc-gemini-plugin:gemini-agent` → `cc-antigravity-plugin:antigravity-agent` |
 | `skills/.../assets/monitoring-template.md` | Subagent type; cota |
 | `skills/.../assets/workflow-log-template.md` | Subagent type na tabela |
-| `skills/.../assets/implementation-report-template.md` | Modelos: "Gemini 3" → "AGY (gemini-3.1-pro-low)" etc. |
+| `skills/.../assets/implementation-report-template.md` | Registrar AGY como agente front-end, sem seletor de modo pelo orquestrador |
 
 ### 4.6 Script de Preflight (1 arquivo — mudanças significativas)
 
@@ -190,13 +184,13 @@ Substituir todas as referências de identidade sem alterar comportamento. Isso �
 **Escopo:**
 1. `.claude-plugin/plugin.json` — dependency + description
 2. `.claude-plugin/marketplace.json` — cross-dep + description
-3. `commands/orchestrator.md` — subagent type + modelos
-4. Todos os `references/*.md` — subagent type + modelos
+3. `commands/orchestrator.md` — subagent type + delegacao AGY sem seletor de modelo
+4. Todos os `references/*.md` — subagent type + delegacao AGY sem seletor de modelo
 5. Todos os `assets/*-template.md` — subagent type
 6. `skills/.../SKILL.md` — stack table
 7. `README.md` — texto
 
-**Critério de aceite:** `grep -ri "gemini" --include="*.md" --include="*.json"` retorna 0 resultados (exceto menções a modelos Gemini no AGY como `gemini-3.5-flash-medium`).
+**Critério de aceite:** nao restam referencias ao plugin antigo em arquivos ativos; AGY e delegado sem seletor de modelo.
 
 ### Fase 2 — Preflight Script
 
@@ -217,7 +211,7 @@ Testar o fluxo completo do orquestrador com o novo plugin.
 **Escopo:**
 1. Executar `/orchestrator` com um projeto de teste
 2. Confirmar que subagentes front-end são delegados via `cc-antigravity-plugin:antigravity-agent`
-3. Confirmar que modelos são resolvidos corretamente
+3. Confirmar que o AGY e delegado sem seletor de modelo
 4. Confirmar que o streaming funciona (output aparece incrementalmente)
 5. Confirmar que o preflight detecta ausência de `agy` corretamente
 
@@ -236,7 +230,7 @@ Incorporar gradualmente as novas funcionalidades (seção 6):
 | Risco | Impacto | Mitigação |
 |-------|---------|-----------|
 | AGY CLI não disponível no ambiente do usuário | Preflight falha | Mensagens de remediação claras com URLs de instalação por plataforma |
-| Modelos Gemini renomeados no AGY | Subagente usa modelo errado ou falha | Mapeamento explícito na seção 3; `resolveAgyModel()` do bridge tem fallback para `gemini-3.5-flash-medium` |
+| Seletor de modelo enviado ao AGY | Subagente pode falhar porque o AGY nao aceita selecao pelo orquestrador | Nao passar `--model`; validar prompts e artefatos antes da delegacao |
 | Context7 paths diferem entre gemini-cli e AGY | Preflight reporta Context7 como ausente | Verificar paths reais antes de implementar Fase 2 |
 | Streaming muda o padrão de output do monitoring | Heartbeat/SLOW_CHECKIN detecta diferente | Testar pattern matching do monitoring com output streaming |
 | `--add-dir` conflita com `--dirs` inline | Arquivos duplicados no contexto | Usar um ou outro, não ambos. Documentar regra no subagent-prompts.md |

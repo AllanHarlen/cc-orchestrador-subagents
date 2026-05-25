@@ -18,9 +18,9 @@
 
 ## Linha do Tempo
 
-| Timestamp | Onda | Task | Subagent type | Modelo | Evento | Status |
+| Timestamp | Onda | Task | Subagent type | Execucao | Evento | Status |
 |---|---|---|---|---|---|---|
-| `<ts>` | `<wave>` | `<task>` | `<codex/antigravity>` | `<modelo>` | `<delegado/DONE/BLOCKED/...>` | `<status>` |
+| `<ts>` | `<wave>` | `<task>` | `<codex/antigravity>` | `<--effort medium/high | AGY sem --model>` | `<delegado/DONE/BLOCKED/...>` | `<status>` |
 
 ## Contexto por Subagente
 
@@ -29,7 +29,7 @@
 - **Onda:** `<wave>`
 - **Task:** `<ID e título>`
 - **Subagent type:** `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>`
-- **Modelo:** `<Codex padrao da conta | gemini-3.1-pro-low | gemini-3.5-flash-medium>`
+- **Execucao:** `<--effort medium/high | AGY sem --model>`
 - **Status final:** `<DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED | NEEDS_SYNC | PAUSED | CANCELLED>`
 - **Tokens usados:**
   - Input: `<N ou N/A>`

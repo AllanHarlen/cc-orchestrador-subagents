@@ -2,6 +2,8 @@
 
 ## Regra basica
 
+A categoria declarada em `tasks.md`/`tasks-classification.md` e a fonte da verdade. Nao mude o agente porque a task de front-end parece "setup", "infra" ou "simples para Codex".
+
 | Categoria | Agentes tipicos |
 |---|---|
 | `BACKEND_ONLY` | 1 Codex com `--effort medium` |
@@ -10,6 +12,8 @@
 | `DATABASE_ONLY` | 1 Codex com `--effort medium` |
 | `REVIEW_ONLY` | 1 Codex com `--effort high` |
 | `TEST_ONLY` | 1 Codex com `--effort medium` |
+
+Depois de gerar `waves.md`, rode `validate-routing.mjs`. Se uma task `FRONTEND_ONLY` estiver apontando para Codex como agente primario, a wave esta invalida.
 
 ## Nao paralelizar quando
 
