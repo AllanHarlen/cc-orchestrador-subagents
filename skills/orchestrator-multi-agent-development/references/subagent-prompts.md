@@ -135,10 +135,12 @@ Retorno:
 **Parametros:**
 
 ```text
---model <AGY_MODEL> --dirs <DIRS>
+--model <AGY_MODEL> [--parallel] [--subagent-model <SUBAGENT_MODEL>] --dirs <DIRS>
 ```
 
 Passe `--model <AGY_MODEL>` para o bridge do plugin. O bridge aplica o modelo via `~/.gemini/antigravity-cli/settings.json`, sem repassar a flag ao binario `agy`.
+
+Passe `--parallel` quando `agyParallel: yes` para a task. Se `agySubagentModel` for diferente de `inherit`, inclua tambem `--subagent-model <SUBAGENT_MODEL>`.
 
 **Corpo do prompt:**
 
@@ -180,6 +182,12 @@ Modelo AGY:
 Origem do modelo:
 <user|heuristic>
 
+Fan-out de subagentes:
+<COLAR: "agyParallel: yes — entregaveis independentes: <lista>" | "agyParallel: no">
+
+Modelo dos subagentes:
+<COLAR SUBAGENT_MODEL ou "inherit (omitir --subagent-model)">
+
 Context7 MCP:
 <MANTER SOMENTE SE DISPONIVEL>
 
@@ -195,6 +203,7 @@ Regras:
 - confira casing JSON esperado no contrato;
 - se a API vier de DTO C# ou mapper compartilhado, destaque qualquer dependencia de serializacao;
 - use o bridge com `--model <AGY_MODEL>`;
+- quando `agyParallel: yes`, decomponha os entregaveis listados em subtarefas Gemini nativas (`DefineSubagent`/`invoke_subagent`/`ManageSubagents`), execute-as concorrentemente e agregue os resultados; entregaveis dependentes ou que compartilhem estado ficam no subagente principal sem fan-out;
 - se houver cota, retorne `Status: QUOTA_EXAUSTED`;
 - se houver autenticacao pendente, retorne `Status: AUTH_REQUIRED`;
 - se o `agy` nao existir no PATH do ambiente, retorne `Status: AGY_MISSING`;
@@ -214,7 +223,9 @@ Retorno:
 8. Riscos
 9. Evidencia operacional
 10. Skills utilizadas: <lista das skills usadas ou "nenhuma">
-11. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+11. Subagentes Gemini nativos: <N | N/A>
+12. Conversation IDs dos subagentes: <lista | N/A>
+13. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
     (informe N/A se a plataforma nao expor o dado)
 ```
 

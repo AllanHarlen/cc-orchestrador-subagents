@@ -21,6 +21,7 @@ Voce e o **Orquestrador Principal**. Coordene; nao implemente codigo produtivo d
 8. Review Codex sem quota pode cair para review interno read-only do orquestrador.
 9. O roteamento de implementacao e decidido pela **categoria da task**, nao pela aparencia do trabalho. Toda task `FRONTEND_ONLY` vai para Antigravity/AGY; Codex so assume front-end em fallback operacional registrado.
 10. Limites de sandbox Codex como rede externa bloqueada, pacote ausente do cache local ou escrita fora do working directory permitido sao bloqueios operacionais: registre evidencia e peca decisao do usuario.
+11. `--parallel` e `--subagent-model` sao **modificadores de execucao** da delegacao AGY, nao criterios de roteamento. A categoria da task continua decidindo o agente; o fan-out nativo Gemini e apenas uma otimizacao interna da sessao AGY.
 
 ## Fase 0 - Preflight
 
@@ -37,6 +38,13 @@ Se a execucao foi iniciada com `--agy-model <modelo>`, valide a allowlist e pres
 - `gemini-3.5-flash-medium` por padrao;
 - `gemini-3.1-pro-low` para tasks front-end complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressao;
 - `gemini-3.1-pro-high` apenas em casos criticos.
+
+**Heuristica de fan-out (agyParallel):**
+
+- Se a execucao foi iniciada com `--agy-parallel`, registre `agyParallel: yes` e `agyParallelSource: user` em todas as tasks AGY.
+- Se a execucao foi iniciada com `--agy-subagent-model <modelo>`, valide o modelo contra a allowlist, registre `agySubagentModel: <modelo>` e ligue `agyParallel: yes` automaticamente.
+- Caso contrario, avalie por heuristica: se uma task `FRONTEND_ONLY` ou a fatia front-end de `FULLSTACK` lista **dois ou mais entregaveis independentes** nos criterios de aceite — e nenhum deles compartilha arquivo central, depende de contrato pendente ou schema em mudanca —, registre `agyParallel: yes` e `agyParallelSource: heuristic`.
+- `agySubagentModel` padrao: `inherit` (omite `--subagent-model`; subagentes usam o mesmo `agyModel` da sessao principal).
 
 ### Regra de auto-remediacao
 
@@ -149,6 +157,8 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] contratos criados para toda troca front-back
 - [ ] prompts Codex sem `--model`
 - [ ] prompts AGY com `--model <agyModel>` coerente com override ou heuristica
+- [ ] tasks AGY com dois ou mais entregaveis independentes registram `agyParallel` e `agyParallelSource`
+- [ ] `agySubagentModel` (quando diferente de `inherit`) esta na allowlist de modelos AGY
 - [ ] bloqueios de sandbox Codex tratados como `BLOCKED` com evidencia
 - [ ] validacao de wire format e serializacao registrada
 - [ ] politica de quota aplicada corretamente

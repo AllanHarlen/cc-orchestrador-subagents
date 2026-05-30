@@ -22,6 +22,23 @@ Depois de gerar `waves.md`, rode `validate-routing.mjs`. Se uma task `FRONTEND_O
 - schema ainda esta mudando;
 - autenticacao/seguranca ainda nao foi consolidada.
 
+Essa lista governa **ambos** os niveis de paralelismo descritos abaixo.
+
+## Paralelismo em dois niveis
+
+O orquestrador opera com dois niveis ortogonais de paralelismo:
+
+**(a) Nivel de onda** — o orquestrador lanca Codex e AGY como subagentes independentes ao mesmo tempo, dentro da mesma onda. Regido pelas regras de wave existentes.
+
+**(b) Nivel intra-AGY** — dentro de uma unica delegacao AGY (`FRONTEND_ONLY` ou fatia front-end de `FULLSTACK`), o bridge passa `--parallel` para o AGY, que usa `DefineSubagent`/`invoke_subagent`/`ManageSubagents` para decompor a task em subtarefas Gemini nativas, executa-as concorrentemente e agrega as saidas num resultado unico.
+
+Regras para o nivel intra-AGY:
+
+- Aplicar `--parallel` apenas quando a task lista **dois ou mais entregaveis independentes** nos criterios de aceite e nenhum deles viola as restricoes da lista "Nao paralelizar quando".
+- Continua sendo **1 task = 1 delegacao AGY**: o modelo de rastreamento em `monitoring.md`, `subagents-context.md` e `waves.md` nao muda.
+- `agySubagentModel: inherit` omite `--subagent-model`; os subagentes herdam o `agyModel` da sessao principal.
+- Entregaveis dependentes ou que compartilham estado permanecem no subagente AGY unico, sem `--parallel`.
+
 ## Regra de contrato
 
 Se existir troca de dados front-back, o contrato vem antes da onda. Isso vale para `FULLSTACK` e tambem para pares `BACKEND_ONLY` + `FRONTEND_ONLY` dependentes.

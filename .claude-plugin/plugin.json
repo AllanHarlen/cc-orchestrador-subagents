@@ -1,7 +1,7 @@
 {
   "name": "cc-orchestrador-subagents",
-  "version": "2.4.0",
-  "description": "Multi-agent development orchestrator for Claude Code. Coordinates OpenSpec, orchestrator-led planning, Codex review/back-end and Antigravity/AGY front-end subagents in parallel, supports autonomous /goal execution, then produces consolidated subagent context, an implementation report and business-level user instructions.",
+  "version": "2.5.0",
+  "description": "Multi-agent development orchestrator for Claude Code. Coordinates OpenSpec, orchestrator-led planning, Codex review/back-end and Antigravity/AGY front-end subagents in parallel (including native Gemini subagent fan-out via --agy-parallel/--agy-subagent-model), supports autonomous /goal execution, then produces consolidated subagent context, an implementation report and business-level user instructions.",
   "author": {
     "name": "allanharlen"
   },

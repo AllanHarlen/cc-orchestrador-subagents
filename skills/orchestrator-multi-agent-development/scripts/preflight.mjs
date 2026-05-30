@@ -29,7 +29,7 @@ const PLUGINS_CACHE = join(HOME, ".claude", "plugins", "cache");
 const SKILLS_DIR = join(HOME, ".claude", "skills");
 const PROJECT_CLAUDE_DIR = join(process.cwd(), ".claude");
 const PROJECT_SETTINGS_FILE = join(PROJECT_CLAUDE_DIR, "settings.json");
-const MIN_ANTIGRAVITY_PLUGIN_VERSION = "3.5.4";
+const MIN_ANTIGRAVITY_PLUGIN_VERSION = "3.6.0";
 
 function checkCli(cli) {
   try {
@@ -606,7 +606,7 @@ function remediationFor(f) {
         steps: [
           "Dentro do Claude Code:",
           "  claude plugin install AllanHarlen/cc-antigravity-plugin",
-          `Confirme que a versao instalada seja >= ${MIN_ANTIGRAVITY_PLUGIN_VERSION}.`,
+          `Confirme que a versao instalada seja >= ${MIN_ANTIGRAVITY_PLUGIN_VERSION} (requerido para --parallel e --subagent-model).`,
           "Valide que o plugin instalado contenha agents/antigravity-agent.md, commands/antigravity.md e scripts/antigravity-bridge.js.",
         ],
         docs: "https://github.com/AllanHarlen/cc-antigravity-plugin",

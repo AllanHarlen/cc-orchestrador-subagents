@@ -20,7 +20,7 @@
 
 | Timestamp | Onda | Task | Subagent type | Execucao | Evento | Status |
 |---|---|---|---|---|---|---|
-| `<ts>` | `<wave>` | `<task>` | `<codex/antigravity>` | `<--effort medium/high | AGY --model <agyModel>>` | `<delegado/DONE/BLOCKED/...>` | `<status>` |
+| `<ts>` | `<wave>` | `<task>` | `<codex/antigravity>` | `<--effort medium/high | AGY --model <agyModel> [--parallel] [--subagent-model <model>]>` | `<delegado/DONE/BLOCKED/...>` | `<status>` |
 
 ## Contexto por Subagente
 
@@ -29,7 +29,10 @@
 - **Onda:** `<wave>`
 - **Task:** `<ID e título>`
 - **Subagent type:** `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>`
-- **Execucao:** `<--effort medium/high | AGY --model <agyModel>>`
+- **Execucao:** `<--effort medium/high | AGY --model <agyModel> [--parallel] [--subagent-model <model>]>`
+- **Fan-out Gemini:** `<agyParallel: yes|no>`
+- **Subagentes Gemini nativos:** `<N | N/A>`
+- **Conversation IDs dos subagentes:** `<lista | N/A>`
 - **Status final:** `<DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED | QUOTA_EXAUSTED | AUTH_REQUIRED | AGY_MISSING | TIMEOUT | NEEDS_SYNC | PAUSED | CANCELLED>`
 - **Tokens usados:**
   - Input: `<N ou N/A>`

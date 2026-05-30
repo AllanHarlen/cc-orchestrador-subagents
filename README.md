@@ -4,6 +4,7 @@ Plugin de Claude Code para conduzir um workflow de desenvolvimento multiagente c
 
 ## O que mudou nesta versao
 
+- **fan-out nativo de subagentes Gemini** via `--agy-parallel` e `--agy-subagent-model` (requer `cc-antigravity-plugin >= 3.6.0`);
 - preflight com `autoRemediation` para `Bash(node:*)`;
 - prompts Codex sem `--model`;
 - contratos obrigatorios para qualquer troca front-back;
@@ -41,7 +42,7 @@ Este plugin depende do Codex plugin oficial para Claude Code: https://github.com
 
 O marketplace/dependency usado nos manifests e `openai-codex`, e o subagente esperado e `codex:codex-rescue`.
 
-Para front-end, o orquestrador espera `cc-antigravity-plugin >= 3.5.4`, com estes arquivos presentes no plugin instalado:
+Para front-end, o orquestrador espera `cc-antigravity-plugin >= 3.6.0` (obrigatorio para `--parallel`/`--subagent-model`), com estes arquivos presentes no plugin instalado:
 
 - `agents/antigravity-agent.md`
 - `commands/antigravity.md`
@@ -85,17 +86,58 @@ Politica padrao:
 - `gemini-3.1-pro-high` apenas em casos criticos;
 - override manual disponivel em `/orchestrator --agy-model <modelo> <demanda>`.
 
-Modelos aceitos em `--agy-model`:
+## AGY: fan-out nativo de subagentes Gemini
 
-- `gemini-3.5-flash-low`
-- `gemini-3.5-flash-medium`
-- `gemini-3.5-flash-high`
-- `gemini-3.1-pro-low`
-- `gemini-3.1-pro-high`
-- `claude-4.6-sonnet-thinking`
-- `claude-4.6-opus-thinking`
-- `gpt-oss-120b-medium`
-- `auto`
+Quando uma task front-end produz dois ou mais entregaveis independentes (ex.: tres componentes React, dois relatorios HTML), o orquestrador pode acionar o fan-out nativo do AGY via `DefineSubagent`/`invoke_subagent`/`ManageSubagents`. O AGY decide a contagem, executa concorrentemente e reporta um Conversation ID por subagente.
+
+O mecanismo e puramente intra-task: continua sendo 1 task = 1 delegacao AGY; `monitoring.md`, contratos e `validate-routing.mjs` ficam intactos.
+
+### Flags novas
+
+| Flag | Comportamento |
+|---|---|
+| `--agy-parallel` | Forca fan-out em todas as tasks AGY da execucao. O AGY decide a contagem. |
+| `--agy-subagent-model <modelo>` | Modelo dos subagentes Gemini. Implica `--agy-parallel`. Default: `inherit` (herda `agyModel`). |
+
+### Exemplos
+
+```text
+# Fan-out forcado pelo usuario
+/orchestrator --agy-parallel "Crie tres componentes React independentes: Header, Sidebar e Footer"
+
+# Planejador Pro coordenando subagentes Flash
+/orchestrator --agy-model gemini-3.1-pro-low --agy-subagent-model gemini-3.5-flash-medium \
+  "Gere dois relatorios HTML: impostos em carros eletricos e em carros a combustao"
+
+# Heuristica automatica (orquestrador decide)
+/orchestrator "Crie Header, Sidebar e Footer como componentes separados em src/components/"
+```
+
+### Quando o fan-out e usado por heuristica
+
+O orquestrador liga `--parallel` automaticamente quando uma task `FRONTEND_ONLY` (ou fatia front-end de `FULLSTACK`) lista dois ou mais entregaveis independentes nos criterios de aceite — e nenhum deles compartilha arquivo central, depende de contrato pendente ou schema em mudanca.
+
+Entregaveis dependentes ou que compartilham estado permanecem no subagente AGY unico, sem `--parallel`.
+
+### Campos novos em `tasks-classification.md` e `waves.md` (tasks AGY)
+
+- `agyParallel: yes|no`
+- `agyParallelSource: user|heuristic`
+- `agySubagentModel: <modelo>|inherit`
+
+Modelos aceitos em `--agy-model` e `--agy-subagent-model`:
+
+| Modelo | Tier |
+|---|---|
+| `gemini-3.5-flash-low` | Flash |
+| `gemini-3.5-flash-medium` | Flash |
+| `gemini-3.5-flash-high` | Flash |
+| `gemini-3.1-pro-low` | Pro |
+| `gemini-3.1-pro-high` | Pro |
+| `claude-4.6-sonnet-thinking` | Claude |
+| `claude-4.6-opus-thinking` | Claude |
+| `gpt-oss-120b-medium` | GPT |
+| `auto` | — |
 
 ## Preflight e auto-remediacao
 
@@ -116,7 +158,7 @@ O JSON agora inclui:
 O `preflight` agora tambem valida:
 
 - versao do `agy` encontrada no PATH;
-- `cc-antigravity-plugin >= 3.5.4`;
+- `cc-antigravity-plugin >= 3.6.0`;
 - presenca de `agents/antigravity-agent.md`, `commands/antigravity.md` e `scripts/antigravity-bridge.js` no plugin AGY instalado.
 
 ### Escopo da auto-remediacao
@@ -235,4 +277,5 @@ rg --line-number --fixed-strings -- '--model gpt-5.5-codex' commands skills
 node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs openspec/changes/<nome>
 rg --line-number --fixed-strings -- 'QUOTA_EXAUSTED' README.md commands skills
 rg --line-number --fixed-strings -- 'agyModelSource' README.md commands skills
+rg --line-number --fixed-strings -- 'agyParallel' README.md commands skills
 ```

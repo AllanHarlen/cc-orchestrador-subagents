@@ -166,6 +166,16 @@ A categoria da task e a fonte da verdade para escolher agente. Nao reclassifique
 
 Se `FRONTEND_ONLY` aparecer com Codex como agente primario, corrija antes de montar waves. Codex so pode assumir front-end depois de `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, falha operacional de AGY ou decisao explicita do usuario, e isso deve ficar registrado em `monitoring.md`, `workflow-log.md` e `subagents-context.md`.
 
+### Regra de `agyParallel`
+
+Para tasks `FRONTEND_ONLY` ou fatia front-end de `FULLSTACK`, avalie se ha dois ou mais entregaveis independentes nos criterios de aceite. Se sim, prefira **uma** task com `agyParallel: yes` em vez de N tasks AGY separadas. Registre em `tasks-classification.md`:
+
+- `agyParallel: yes|no`
+- `agyParallelSource: user|heuristic` (quando `yes`)
+- `agySubagentModel: <modelo>|inherit`
+
+Condicoes para `agyParallel: yes`: entregaveis listados nos criterios de aceite sao independentes, nenhum toca arquivo central compartilhado, contrato nao esta pendente, schema nao esta mudando.
+
 ### Regra de `contractRequired`
 
 Marque `yes` sempre que houver troca de dados front-back, mesmo que uma task esteja classificada como `BACKEND_ONLY` e outra como `FRONTEND_ONLY`.
@@ -240,6 +250,9 @@ Para Antigravity/AGY:
 - delegue ao `cc-antigravity-plugin:antigravity-agent`;
 - passe `--model <agyModel>` para o bridge do plugin;
 - registre `agyModelSource: user|heuristic`;
+- quando `agyParallel: yes`, passe tambem `--parallel` ao bridge; quando `agySubagentModel` for diferente de `inherit`, passe `--subagent-model <agySubagentModel>` (implica `--parallel`);
+- por padrao (`agySubagentModel: inherit`), omita `--subagent-model`; os subagentes herdam o modelo da sessao AGY principal;
+- `--agy-subagent-model` informado pelo usuario liga `--parallel` automaticamente;
 - nao trate isso como flag nativa do `agy`, porque o bridge aplica o modelo via `settings.json`.
 
 Cada prompt deve incluir:
@@ -373,7 +386,8 @@ O relatorio final deve citar:
 - quais contratos foram criados;
 - quais validacoes de wire format e serializacao foram feitas;
 - se houve fallback de review interno por `QUOTA_EXHAUSTED`;
-- contagem de tokens por agente (tabela consolidada em `implementation-report.md` secao 11a e em `subagents-context.md` secao "Uso de Tokens por Agente").
+- para cada delegacao AGY com `agyParallel: yes`: numero de subagentes Gemini nativos e Conversation IDs reportados pelo AGY;
+- contagem de tokens por agente (tabela consolidada em `implementation-report.md` secao 11a e em `subagents-context.md` secao "Uso de Tokens por Agente"; quando houver fan-out, os tokens reportados pelo AGY sao o agregado da sessao).
 
 ### Contagem de tokens
 

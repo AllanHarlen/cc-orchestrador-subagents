@@ -57,6 +57,12 @@ O prompt de qualquer agente envolvido precisa receber:
 
 Use AGY para qualquer task `FRONTEND_ONLY` e para a fatia front-end de `FULLSTACK`. Passe `--model <agyModel>` para o bridge do plugin, com escolha por override do usuario ou heuristica do orquestrador.
 
+Quando a task listar **dois ou mais entregaveis independentes** (ex.: dois relatorios HTML, tres componentes React sem dependencia mutua), passe tambem `--parallel` para ativar o fan-out nativo de subagentes Gemini. O AGY decide a contagem, executa concorrentemente e agrega os resultados. Ao final, reporte os Conversation IDs de cada subagente em `subagents-context.md`.
+
+Quando o usuario passar `--agy-subagent-model <modelo>`, repasse como `--subagent-model <modelo>` ao bridge (implica `--parallel`). Por padrao (`agySubagentModel: inherit`), omita `--subagent-model`; os subagentes usam o mesmo modelo da sessao AGY principal.
+
+Entregaveis dependentes ou que compartilham estado/arquivo central NAO devem usar `--parallel`; mantenha o subagente unico.
+
 ### Codex com `--effort medium`
 
 Use para:

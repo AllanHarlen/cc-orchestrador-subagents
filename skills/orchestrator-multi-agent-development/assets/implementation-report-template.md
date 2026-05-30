@@ -46,6 +46,7 @@
 
 ### Front-end
 - Agente: AGY (`cc-antigravity-plugin:antigravity-agent`, com `--model <agyModel>`)
+- Fan-out: `<agyParallel: yes|no>` — subagentes Gemini nativos: `<N | N/A>` | Conversation IDs: `<lista | N/A>`
 
 ### Review pos-implementação
 - Modelo: Codex padrao da conta ou fallback interno do orquestrador
@@ -98,9 +99,9 @@ Para cada contrato:
 
 ## 11. Resumo dos subagentes
 
-| Task | Subagent type | Execucao | Status | Resumo | Riscos |
-|---|---|---|---|---|---|
-| `<T1>` | `codex:codex-rescue` | `<--effort medium/high | AGY --model <agyModel>>` | `<status>` | `<resumo>` | `<riscos>` |
+| Task | Subagent type | Execucao | Fan-out | Status | Resumo | Riscos |
+|---|---|---|---|---|---|---|
+| `<T1>` | `codex:codex-rescue` | `<--effort medium/high \| AGY --model <agyModel> [--parallel]>` | `<N subagentes \| N/A>` | `<status>` | `<resumo>` | `<riscos>` |
 
 ## 12. Testes e validações
 

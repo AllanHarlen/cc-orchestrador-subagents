@@ -1,6 +1,6 @@
 ---
 description: Conduzir manualmente um workflow de desenvolvimento multiagentico, com suporte a execucao autonoma via /goal (OpenSpec + planejamento do orquestrador + Codex review + Codex/Antigravity execucao paralela + log de workflow + relatorio final + instrucoes de negocio)
-argument-hint: "[--agy-model <modelo>] <descricao da demanda - ex.: 'implemente o fluxo de reservas com listagem, criacao e cancelamento'>"
+argument-hint: "[--agy-model <modelo>] [--agy-parallel] [--agy-subagent-model <modelo>] <descricao da demanda - ex.: 'implemente o fluxo de reservas com listagem, criacao e cancelamento'>"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
 
@@ -18,7 +18,7 @@ Inicia o **Orquestrador Multiagentico de Desenvolvimento** para a demanda descri
 8. Contratos API/UI para toda troca front-back com `contractRequired: yes|no`
 9. Delegacao paralela em background:
    - Back-end -> `codex:codex-rescue` com `--effort medium`
-   - Front-end -> `cc-antigravity-plugin:antigravity-agent` com `--model` escolhido por heuristica ou override do usuario
+   - Front-end -> `cc-antigravity-plugin:antigravity-agent` com `--model` escolhido por heuristica ou override do usuario; quando `agyParallel: yes`, passa `--parallel` ao bridge para fan-out nativo de subagentes Gemini; quando `agySubagentModel` for diferente de `inherit`, passa tambem `--subagent-model`
 10. Monitoramento
 11. Integracao e resolucao de divergencias
 12. Review pos-implementacao
@@ -44,7 +44,14 @@ Selecao de modelo AGY:
   - tasks front-end complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou alto risco de regressao: `gemini-3.1-pro-low`;
   - tasks criticas ou explicitamente pesadas: `gemini-3.1-pro-high`.
 
-Modelos permitidos para `--agy-model`:
+Fan-out de subagentes AGY:
+
+- `--agy-parallel`: quando presente em `$ARGUMENTS`, registre `agyParallel: yes` e `agyParallelSource: user` em todas as tasks AGY, independente de heuristica.
+- `--agy-subagent-model <modelo>`: valide contra a allowlist de modelos AGY; registre `agySubagentModel: <modelo>` e ligue `agyParallel: yes` automaticamente (`--agy-subagent-model` implica `--agy-parallel`). Modelo sera passado como `--subagent-model <modelo>` ao bridge.
+- Sem override de usuario, o orquestrador avalia por heuristica: tasks com dois ou mais entregaveis independentes recebem `agyParallel: yes` e `agyParallelSource: heuristic`.
+- Default: `agySubagentModel: inherit` (omite `--subagent-model`; subagentes herdam `agyModel`).
+
+Modelos permitidos para `--agy-model` e `--agy-subagent-model`:
 
 - `gemini-3.5-flash-low`
 - `gemini-3.5-flash-medium`
@@ -73,7 +80,11 @@ Politica de sandbox Codex:
 
 ## Argumento
 
-`$ARGUMENTS` - descricao da demanda em linguagem natural. Pode ser frase unica ou paragrafo com contexto. Opcionalmente pode comecar com `--agy-model <modelo>`.
+`$ARGUMENTS` - descricao da demanda em linguagem natural. Pode ser frase unica ou paragrafo com contexto. Opcionalmente pode comecar com um ou mais dos seguintes overrides (em qualquer ordem):
+
+- `--agy-model <modelo>` — modelo AGY principal
+- `--agy-parallel` — forca fan-out de subagentes Gemini em todas as tasks AGY
+- `--agy-subagent-model <modelo>` — modelo dos subagentes Gemini (implica `--agy-parallel`)
 
 ## Execucao autonoma com `/goal`
 
@@ -112,7 +123,7 @@ Parse o JSON retornado:
 
 O JSON agora inclui `autoRemediation`. Se a permissao `Bash(node:*)` foi criada ou ajustada em `.claude/settings.json`, reporte isso ao usuario junto com o status final e diga se a correcao foi revalidada.
 
-O preflight tambem deve validar `cc-antigravity-plugin >= 3.5.4`, a presenca de `agents/antigravity-agent.md`, `commands/antigravity.md` e `scripts/antigravity-bridge.js`, alem da versao detectada de `agy`.
+O preflight tambem deve validar `cc-antigravity-plugin >= 3.6.0` (requerido para `--parallel`/`--subagent-model`), a presenca de `agents/antigravity-agent.md`, `commands/antigravity.md` e `scripts/antigravity-bridge.js`, alem da versao detectada de `agy`.
 
 ### Passo 2 - Carregar a skill
 
@@ -120,7 +131,13 @@ O preflight tambem deve validar `cc-antigravity-plugin >= 3.5.4`, a presenca de 
 
 ### Passo 3 - Validacoes leves antes da Fase 1
 
-Antes dessas validacoes, parseie `--agy-model <modelo>` quando presente no inicio de `$ARGUMENTS`. Remova o prefixo da descricao da demanda, valide o modelo contra a allowlist e registre a escolha como `agyModelSource: user`. Se nao houver override, registre a politica heuristica como `agyModelSource: heuristic`.
+Antes dessas validacoes, parseie as flags de override no inicio de `$ARGUMENTS` (em qualquer ordem):
+
+- `--agy-model <modelo>`: valide e registre `agyModelSource: user`.
+- `--agy-parallel`: registre `agyParallelSource: user` para todas as tasks AGY.
+- `--agy-subagent-model <modelo>`: valide contra a allowlist, registre `agySubagentModel: <modelo>`, ligue `agyParallel: yes` automaticamente.
+
+Remova todos os prefixos reconhecidos da descricao da demanda. Se nao houver override de modelo, registre `agyModelSource: heuristic`. Se nao houver override de `--agy-parallel`, o orquestrador avalia por heuristica task a task.
 
 - Se a demanda e trivial (typo, padding, rename) -> avise que o orquestrador e overkill e ofereca executar direto.
 - Se o repositorio atual nao tem `openspec/` -> ofereca `/openspec-onboard` antes de continuar.

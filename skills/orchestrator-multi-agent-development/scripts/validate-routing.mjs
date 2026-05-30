@@ -27,6 +27,7 @@ const CODEX_MEDIUM_RE = /--effort\s+medium/i;
 const CODEX_HIGH_RE = /--effort\s+high/i;
 const AGY_MODEL_RE = /(?:^|\b)(?:agyModel(?!Source)\b|--agy-model\b|--model\b)\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
 const AGY_MODEL_SOURCE_RE = /agyModelSource\s*[:=]?\s*`?(user|heuristic)`?/i;
+const AGY_SUBAGENT_MODEL_RE = /agySubagentModel\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
 const ALLOWED_AGY_MODELS = new Set([
   "gemini-3.5-flash-low",
   "gemini-3.5-flash-medium",
@@ -80,6 +81,11 @@ function extractAgyModel(text) {
 
 function hasAgyModelSource(text) {
   return AGY_MODEL_SOURCE_RE.test(text);
+}
+
+function extractAgySubagentModel(text) {
+  const match = text.match(AGY_SUBAGENT_MODEL_RE);
+  return match?.[1] ?? null;
 }
 
 function extractBlocks(content) {
@@ -146,6 +152,11 @@ function validateBlock(source, block, categoryByTask) {
 
     if (frontend && agyModel && !ALLOWED_AGY_MODELS.has(agyModel)) {
       errors.push(`${source}: ${id} usa agyModel invalido (${agyModel}). Use um modelo da allowlist.`);
+    }
+
+    const agySubagentModel = extractAgySubagentModel(block.text);
+    if (agySubagentModel && agySubagentModel !== "inherit" && !ALLOWED_AGY_MODELS.has(agySubagentModel)) {
+      errors.push(`${source}: ${id} usa agySubagentModel invalido (${agySubagentModel}). Use um modelo da allowlist ou "inherit".`);
     }
 
     if (frontend && !hasAgyModelSource(block.text)) {
