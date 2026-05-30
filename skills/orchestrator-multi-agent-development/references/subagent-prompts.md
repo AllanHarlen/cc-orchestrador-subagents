@@ -6,7 +6,8 @@ Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 
 - Para Codex, use o modelo padrao disponivel na conta e controle apenas `--effort medium` ou `--effort high`.
 - A categoria da task decide o agente. `FRONTEND_ONLY` sempre usa Antigravity/AGY como agente primario; Codex so pode receber front-end em fallback operacional registrado.
-- Se aparecer cota, rate limit, billing, resource exhausted, model capacity ou daily limit, retorne `Status: QUOTA_EXHAUSTED`.
+- Se aparecer cota, rate limit, billing, resource exhausted, model capacity ou daily limit no Codex, retorne `Status: QUOTA_EXHAUSTED`.
+- Se aparecer cota, rate limit, billing, resource exhausted, model capacity ou daily limit no AGY, preserve o status cru `Status: QUOTA_EXAUSTED`.
 - Nao tente contornar cota com retries longos ou mudanca arbitraria de modelo.
 - Se o preflight indicar `checks.optional.mcp.context7.ok: true`, use Context7 antes de decidir sobre bibliotecas, frameworks, SDKs, APIs, CLIs ou cloud services.
 - Se existir contrato API/UI, siga o contrato como fonte da verdade.
@@ -134,10 +135,10 @@ Retorno:
 **Parametros:**
 
 ```text
---dirs <DIRS>
+--model <AGY_MODEL> --dirs <DIRS>
 ```
 
-Nao passe `--model` nem qualquer seletor de modo para AGY.
+Passe `--model <AGY_MODEL>` para o bridge do plugin. O bridge aplica o modelo via `~/.gemini/antigravity-cli/settings.json`, sem repassar a flag ao binario `agy`.
 
 **Corpo do prompt:**
 
@@ -173,6 +174,12 @@ Fora do escopo:
 Stack:
 <STACK FRONT-END>
 
+Modelo AGY:
+<COLAR AGYMODEL>
+
+Origem do modelo:
+<user|heuristic>
+
 Context7 MCP:
 <MANTER SOMENTE SE DISPONIVEL>
 
@@ -187,12 +194,16 @@ Regras:
 - valide consumo do payload real;
 - confira casing JSON esperado no contrato;
 - se a API vier de DTO C# ou mapper compartilhado, destaque qualquer dependencia de serializacao;
-- se houver cota, retorne `Status: QUOTA_EXHAUSTED`;
+- use o bridge com `--model <AGY_MODEL>`;
+- se houver cota, retorne `Status: QUOTA_EXAUSTED`;
+- se houver autenticacao pendente, retorne `Status: AUTH_REQUIRED`;
+- se o `agy` nao existir no PATH do ambiente, retorne `Status: AGY_MISSING`;
+- se houver timeout do bridge, retorne `Status: TIMEOUT`;
 - se houver falha de escrita ou tools, pare e devolva ao orquestrador;
 - se receber `SLOW_CHECKIN`, responda com progresso real, arquivos tocados, bloqueios, riscos e ETA.
 
 Retorno:
-0. Status: DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED
+0. Status: DONE | BLOCKED | FAILED | QUOTA_EXAUSTED | AUTH_REQUIRED | AGY_MISSING | TIMEOUT
 1. Resumo do que foi implementado
 2. Arquivos alterados
 3. Decisoes de UI/UX

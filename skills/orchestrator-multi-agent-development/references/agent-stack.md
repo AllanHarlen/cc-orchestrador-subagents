@@ -7,7 +7,7 @@
 | Orquestrador | Claude Sonnet 4.6 | voce mesmo | Medium | coordena e consolida |
 | Review de plano | Codex padrao da conta | `codex:codex-rescue` | High | read-only |
 | Back-end | Codex padrao da conta | `codex:codex-rescue` | Medium | implementacao |
-| Front-end | AGY padrao do plugin/CLI | `cc-antigravity-plugin:antigravity-agent` | - | sem `--model` ou seletor de modo |
+| Front-end | AGY definido por override ou heuristica | `cc-antigravity-plugin:antigravity-agent` | - | usar `--model <agyModel>` no bridge |
 | Review pos-implementacao | Codex padrao da conta | `codex:codex-rescue` | High | read-only |
 
 ## Invariante de roteamento
@@ -31,7 +31,7 @@ Exemplos que continuam sendo `FRONTEND_ONLY` e devem ir para AGY:
 - criar servicos `fetch`/client API;
 - criar layout, paginas, componentes, hooks, estado e UX.
 
-Codex so assume front-end como fallback operacional depois de `QUOTA_EXHAUSTED`, falha de ferramenta/escrita do AGY ou decisao explicita do usuario. Registre o motivo e o handoff nos artefatos de monitoramento.
+Codex so assume front-end como fallback operacional depois de `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, falha de ferramenta/escrita do AGY ou decisao explicita do usuario. Registre o motivo e o handoff nos artefatos de monitoramento.
 
 ## Regra para Codex
 
@@ -55,7 +55,7 @@ O prompt de qualquer agente envolvido precisa receber:
 
 ### Antigravity/AGY
 
-Use AGY para qualquer task `FRONTEND_ONLY` e para a fatia front-end de `FULLSTACK`. Nao passe `--model` nem seletor de modo; o plugin/CLI decide o padrao.
+Use AGY para qualquer task `FRONTEND_ONLY` e para a fatia front-end de `FULLSTACK`. Passe `--model <agyModel>` para o bridge do plugin, com escolha por override do usuario ou heuristica do orquestrador.
 
 ### Codex com `--effort medium`
 
@@ -84,7 +84,8 @@ Use para:
 
 - `QUOTA_EXHAUSTED` em implementacao Codex: bloquear e pedir decisao ao usuario.
 - `QUOTA_EXHAUSTED` em review Codex: fazer fallback de review interno read-only do orquestrador e salvar em `review-final.md`.
-- `QUOTA_EXHAUSTED` em Antigravity/AGY: seguir a politica de fallback descrita em `workflow.md`.
+- `QUOTA_EXAUSTED` em Antigravity/AGY: seguir a politica de fallback descrita em `workflow.md`.
+- `AUTH_REQUIRED`, `AGY_MISSING` e `TIMEOUT` em Antigravity/AGY: tratar como bloqueios operacionais e registrar evidencia.
 
 ## Politica de sandbox
 

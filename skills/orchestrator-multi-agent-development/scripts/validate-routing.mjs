@@ -23,9 +23,21 @@ const CATEGORIES = [
 const TASK_RE = /\bT\d+\b/g;
 const FRONTEND_AGENT_RE = /\b(cc-antigravity-plugin:antigravity-agent|antigravity|agy)\b/i;
 const CODEX_AGENT_RE = /\b(codex:codex-rescue|codex)\b/i;
-const AGY_MODE_SELECTOR_RE = /(?:--model\b|\b[A-Z0-9_]*MODEL[A-Z0-9_]*\b|\bgemini-\S+)/i;
 const CODEX_MEDIUM_RE = /--effort\s+medium/i;
 const CODEX_HIGH_RE = /--effort\s+high/i;
+const AGY_MODEL_RE = /(?:^|\b)(?:agyModel(?!Source)\b|--agy-model\b|--model\b)\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
+const AGY_MODEL_SOURCE_RE = /agyModelSource\s*[:=]?\s*`?(user|heuristic)`?/i;
+const ALLOWED_AGY_MODELS = new Set([
+  "gemini-3.5-flash-low",
+  "gemini-3.5-flash-medium",
+  "gemini-3.5-flash-high",
+  "gemini-3.1-pro-low",
+  "gemini-3.1-pro-high",
+  "claude-4.6-sonnet-thinking",
+  "claude-4.6-opus-thinking",
+  "gpt-oss-120b-medium",
+  "auto",
+]);
 
 const targetDir = resolve(process.argv[2] ?? process.cwd());
 const requiredFiles = [
@@ -59,6 +71,15 @@ function hasFrontendAgent(text) {
 
 function hasCodexAgent(text) {
   return CODEX_AGENT_RE.test(text) || CODEX_MEDIUM_RE.test(text) || CODEX_HIGH_RE.test(text);
+}
+
+function extractAgyModel(text) {
+  const match = text.match(AGY_MODEL_RE);
+  return match?.[1] ?? null;
+}
+
+function hasAgyModelSource(text) {
+  return AGY_MODEL_SOURCE_RE.test(text);
 }
 
 function extractBlocks(content) {
@@ -117,8 +138,18 @@ function validateBlock(source, block, categoryByTask) {
     const frontend = hasFrontendAgent(block.text);
     const codex = hasCodexAgent(block.text);
 
-    if (frontend && AGY_MODE_SELECTOR_RE.test(block.text)) {
-      errors.push(`${source}: ${id} aponta para AGY, mas tenta especificar modelo ou modo. Remova seletores de modelo/modo.`);
+    const agyModel = extractAgyModel(block.text);
+
+    if (frontend && !agyModel) {
+      errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModel/--agy-model/--model.`);
+    }
+
+    if (frontend && agyModel && !ALLOWED_AGY_MODELS.has(agyModel)) {
+      errors.push(`${source}: ${id} usa agyModel invalido (${agyModel}). Use um modelo da allowlist.`);
+    }
+
+    if (frontend && !hasAgyModelSource(block.text)) {
+      errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModelSource=user|heuristic.`);
     }
 
     if (taskCategory === "FRONTEND_ONLY") {
@@ -133,6 +164,9 @@ function validateBlock(source, block, categoryByTask) {
     if (taskCategory === "FULLSTACK") {
       if (!frontend || !codex) {
         errors.push(`${source}: ${id} e FULLSTACK, mas nao declara Codex + Antigravity/AGY.`);
+      }
+      if (frontend && !agyModel) {
+        errors.push(`${source}: ${id} e FULLSTACK, mas a fatia front-end nao registra agyModel.`);
       }
     }
 

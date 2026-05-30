@@ -8,6 +8,7 @@ Plugin de Claude Code para conduzir um workflow de desenvolvimento multiagente c
 - prompts Codex sem `--model`;
 - contratos obrigatorios para qualquer troca front-back;
 - roteamento por categoria: `FRONTEND_ONLY` vai para Antigravity/AGY, inclusive setup de front-end;
+- selecao de modelo AGY por heuristica, com override opcional via `--agy-model`;
 - foco explicito em wire format, casing JSON e serializacao real;
 - fallback de review interno do orquestrador quando o Codex ficar sem quota no review;
 - bloqueio com decisao do usuario quando o Codex ficar sem quota em implementacao;
@@ -29,7 +30,7 @@ O orquestrador:
 
 ## Dependencias oficiais
 
-Este plugin depende do Codex plugin oficial para Claude Code:
+Este plugin depende do Codex plugin oficial para Claude Code: https://github.com/openai/codex-plugin-cc.
 
 ```text
 /plugin marketplace add openai/codex-plugin-cc
@@ -39,6 +40,12 @@ Este plugin depende do Codex plugin oficial para Claude Code:
 ```
 
 O marketplace/dependency usado nos manifests e `openai-codex`, e o subagente esperado e `codex:codex-rescue`.
+
+Para front-end, o orquestrador espera `cc-antigravity-plugin >= 3.5.4`, com estes arquivos presentes no plugin instalado:
+
+- `agents/antigravity-agent.md`
+- `commands/antigravity.md`
+- `scripts/antigravity-bridge.js`
 
 ## Codex: modelo e effort
 
@@ -65,11 +72,30 @@ Nesses casos o subagente deve parar, registrar evidencia e retornar `Status: BLO
 
 O agente e escolhido pela categoria da task, nao pela aparencia do trabalho. Se a task for `FRONTEND_ONLY`, use `cc-antigravity-plugin:antigravity-agent` mesmo quando ela for setup Vite/React, React Router, tipos TypeScript, servicos `fetch` ou componentes simples.
 
-Codex so deve receber front-end como fallback operacional registrado depois de `QUOTA_EXHAUSTED`, falha de ferramenta/escrita do AGY ou decisao explicita do usuario.
+Codex so deve receber front-end como fallback operacional registrado depois de `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, falha de ferramenta/escrita do AGY ou decisao explicita do usuario.
 
 ## AGY: delegacao front-end
 
-Tasks de front-end sao direcionadas ao Antigravity/AGY por categoria, sem especificar modelo ou modo. O AGY usa o padrao do proprio plugin/CLI.
+Tasks de front-end sao direcionadas ao Antigravity/AGY por categoria, passando `--model <agyModel>` para o bridge do plugin.
+
+Politica padrao:
+
+- `gemini-3.5-flash-medium` para a maioria das tasks;
+- `gemini-3.1-pro-low` para tasks complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressao;
+- `gemini-3.1-pro-high` apenas em casos criticos;
+- override manual disponivel em `/orchestrator --agy-model <modelo> <demanda>`.
+
+Modelos aceitos em `--agy-model`:
+
+- `gemini-3.5-flash-low`
+- `gemini-3.5-flash-medium`
+- `gemini-3.5-flash-high`
+- `gemini-3.1-pro-low`
+- `gemini-3.1-pro-high`
+- `claude-4.6-sonnet-thinking`
+- `claude-4.6-opus-thinking`
+- `gpt-oss-120b-medium`
+- `auto`
 
 ## Preflight e auto-remediacao
 
@@ -86,6 +112,12 @@ O JSON agora inclui:
 - `failed`
 - `remediation`
 - `autoRemediation`
+
+O `preflight` agora tambem valida:
+
+- versao do `agy` encontrada no PATH;
+- `cc-antigravity-plugin >= 3.5.4`;
+- presenca de `agents/antigravity-agent.md`, `commands/antigravity.md` e `scripts/antigravity-bridge.js` no plugin AGY instalado.
 
 ### Escopo da auto-remediacao
 
@@ -131,6 +163,15 @@ Se houver `QUOTA_EXHAUSTED`:
 
 Antigravity/AGY continua com fallback controlado para Codex apenas quando for seguro.
 
+O bridge do plugin retorna status cru:
+
+- `QUOTA_EXAUSTED`
+- `AUTH_REQUIRED`
+- `TIMEOUT`
+- `AGY_MISSING`
+
+O orquestrador deve registrar esses valores como vierem do bridge.
+
 ## Contratos obrigatorios
 
 Contrato e obrigatorio sempre que houver troca de dados entre front-end e back-end.
@@ -141,6 +182,18 @@ Isso vale para:
 - pares dependentes `BACKEND_ONLY` + `FRONTEND_ONLY`.
 
 Na Fase 6, cada task deve registrar `contractRequired: yes|no`.
+
+Para tasks `FRONTEND_ONLY` e para a fatia front-end de `FULLSTACK`, registre tambem:
+
+- `agyModel`
+- `agyModelSource: user|heuristic`
+
+O validador de roteamento passa a exigir esses campos nas tasks AGY e falha se:
+
+- uma task AGY nao registrar `agyModel`;
+- `agyModelSource` estiver ausente;
+- o modelo estiver fora da allowlist;
+- `FRONTEND_ONLY` estiver apontando para Codex como agente primario.
 
 Na Fase 8, o orquestrador cria `contracts/*.md` para todo item com `contractRequired: yes`.
 
@@ -180,4 +233,6 @@ node scripts/preflight.mjs
 rg --line-number --fixed-strings -- '--model gpt-5.4-codex' commands skills
 rg --line-number --fixed-strings -- '--model gpt-5.5-codex' commands skills
 node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs openspec/changes/<nome>
+rg --line-number --fixed-strings -- 'QUOTA_EXAUSTED' README.md commands skills
+rg --line-number --fixed-strings -- 'agyModelSource' README.md commands skills
 ```

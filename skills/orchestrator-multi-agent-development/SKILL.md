@@ -16,7 +16,7 @@ Voce e o **Orquestrador Principal**. Coordene; nao implemente codigo produtivo d
 3. Planejamento OpenSpec e artefatos de coordenacao ficam com o orquestrador.
 4. Implementacao, handoff, testes produtivos e ajustes pontuais vao para subagentes.
 5. Codex usa o modelo padrao disponivel na conta; controle apenas `--effort medium` ou `--effort high`.
-6. AGY nao recebe modelo nem modo; delegue pelo subagent type e deixe o plugin/CLI usar o padrao.
+6. AGY recebe `--model <agyModel>` no bridge do plugin; o bridge aplica isso via `~/.gemini/antigravity-cli/settings.json` sem repassar a flag para o binario `agy`.
 7. Contrato e obrigatorio sempre que houver troca de dados front-back.
 8. Review Codex sem quota pode cair para review interno read-only do orquestrador.
 9. O roteamento de implementacao e decidido pela **categoria da task**, nao pela aparencia do trabalho. Toda task `FRONTEND_ONLY` vai para Antigravity/AGY; Codex so assume front-end em fallback operacional registrado.
@@ -31,6 +31,12 @@ node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
 ```
 
 Use o JSON retornado como fonte da verdade.
+
+Se a execucao foi iniciada com `--agy-model <modelo>`, valide a allowlist e preserve a escolha como override do usuario. Caso contrario, o orquestrador deve atribuir `agyModel` por heuristica:
+
+- `gemini-3.5-flash-medium` por padrao;
+- `gemini-3.1-pro-low` para tasks front-end complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressao;
+- `gemini-3.1-pro-high` apenas em casos criticos.
 
 ### Regra de auto-remediacao
 
@@ -47,7 +53,7 @@ Se `.claude/settings.json` existir com JSON invalido, nao sobrescreva. Falhe com
 
 - review de plano -> `codex:codex-rescue` com `--effort high`
 - back-end, banco, testes, handoff e ajuste -> `codex:codex-rescue` com `--effort medium`
-- front-end, incluindo setup Vite/React, rotas, servicos API, tipos TypeScript, componentes e UX -> AGY sem `--model`
+- front-end, incluindo setup Vite/React, rotas, servicos API, tipos TypeScript, componentes e UX -> AGY com `--model <agyModel>` escolhido por override do usuario ou heuristica
 - review pos-implementacao -> `codex:codex-rescue` com `--effort high`
 
 ## Politica de sandbox Codex
@@ -62,10 +68,21 @@ Nao tente contornar o sandbox com retries longos, troca arbitraria de ferramenta
 
 ## Politica de quota
 
-- `QUOTA_EXHAUSTED` no Antigravity/AGY:
+- `QUOTA_EXAUSTED` no Antigravity/AGY:
   - registre o estado parcial;
   - faca fallback para Codex apenas quando for seguro;
   - peca decisao do usuario se o fallback mudar muito a natureza da task.
+- `AUTH_REQUIRED` no Antigravity/AGY:
+  - marque bloqueio operacional;
+  - oriente o usuario a rodar `agy` interativamente uma vez;
+  - mantenha a evidencia em `monitoring.md`.
+- `AGY_MISSING` no Antigravity/AGY:
+  - marque bloqueio operacional;
+  - registre a remediacao de instalacao;
+  - nao redelegue sem decisao consciente.
+- `TIMEOUT` no Antigravity/AGY:
+  - registre evidencia operacional;
+  - ajuste timeout, escopo ou decomposicao da task antes de repetir.
 
 - `QUOTA_EXHAUSTED` no Codex em implementacao, ajuste pontual ou handoff:
   - marque `BLOCKED`;
@@ -131,13 +148,14 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] `validate-routing.mjs` executado antes da delegacao
 - [ ] contratos criados para toda troca front-back
 - [ ] prompts Codex sem `--model`
-- [ ] prompts AGY sem `--model`
+- [ ] prompts AGY com `--model <agyModel>` coerente com override ou heuristica
 - [ ] bloqueios de sandbox Codex tratados como `BLOCKED` com evidencia
 - [ ] validacao de wire format e serializacao registrada
 - [ ] politica de quota aplicada corretamente
 - [ ] `review-final.md` criado, inclusive em fallback interno
 - [ ] entregaveis finais preenchidos na raiz de execucao
 - [ ] contagem de tokens por agente consolidada em `implementation-report.md` e `subagents-context.md`
+- [ ] `tasks-classification.md` e `waves.md` registram `agyModel` e `agyModelSource` nas tasks AGY
 
 ## Arquivos de apoio
 

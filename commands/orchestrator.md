@@ -1,6 +1,6 @@
 ---
 description: Conduzir manualmente um workflow de desenvolvimento multiagentico, com suporte a execucao autonoma via /goal (OpenSpec + planejamento do orquestrador + Codex review + Codex/Antigravity execucao paralela + log de workflow + relatorio final + instrucoes de negocio)
-argument-hint: "<descricao da demanda - ex.: 'implemente o fluxo de reservas com listagem, criacao e cancelamento'>"
+argument-hint: "[--agy-model <modelo>] <descricao da demanda - ex.: 'implemente o fluxo de reservas com listagem, criacao e cancelamento'>"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
 
@@ -18,7 +18,7 @@ Inicia o **Orquestrador Multiagentico de Desenvolvimento** para a demanda descri
 8. Contratos API/UI para toda troca front-back com `contractRequired: yes|no`
 9. Delegacao paralela em background:
    - Back-end -> `codex:codex-rescue` com `--effort medium`
-   - Front-end -> `cc-antigravity-plugin:antigravity-agent` (AGY sem especificar modelo ou modo)
+   - Front-end -> `cc-antigravity-plugin:antigravity-agent` com `--model` escolhido por heuristica ou override do usuario
 10. Monitoramento
 11. Integracao e resolucao de divergencias
 12. Review pos-implementacao
@@ -34,12 +34,36 @@ Atividades paralelas de implementacao devem usar subagentes. Para back-end, banc
 
 O roteamento de implementacao segue a categoria da task. Toda task `FRONTEND_ONLY` deve ser delegada ao `cc-antigravity-plugin:antigravity-agent`, inclusive setup Vite/React, rotas, tipos TypeScript, servicos API e componentes simples. Codex so recebe front-end como fallback operacional registrado depois de falha/cota do AGY ou decisao explicita do usuario.
 
-Tasks de front-end devem ser delegadas ao Antigravity/AGY por categoria, sem passar `--model` ou qualquer seletor de modo. O AGY usa o padrao disponivel no proprio plugin/CLI.
+Tasks de front-end devem ser delegadas ao Antigravity/AGY por categoria, chamando o bridge do plugin com `--model <agyModel>`. O bridge aplica o modelo via `~/.gemini/antigravity-cli/settings.json`, sem repassar `--model` como flag nativa do `agy`.
+
+Selecao de modelo AGY:
+
+- se o usuario invocar `/orchestrator --agy-model <modelo> <demanda>`, preserve o override em todo o workflow;
+- se nao houver override, escolha por dificuldade:
+  - padrao: `gemini-3.5-flash-medium`;
+  - tasks front-end complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou alto risco de regressao: `gemini-3.1-pro-low`;
+  - tasks criticas ou explicitamente pesadas: `gemini-3.1-pro-high`.
+
+Modelos permitidos para `--agy-model`:
+
+- `gemini-3.5-flash-low`
+- `gemini-3.5-flash-medium`
+- `gemini-3.5-flash-high`
+- `gemini-3.1-pro-low`
+- `gemini-3.1-pro-high`
+- `claude-4.6-sonnet-thinking`
+- `claude-4.6-opus-thinking`
+- `gpt-oss-120b-medium`
+- `auto`
 
 Politica de cota:
 
 - `QUOTA_EXHAUSTED` em implementacao, ajuste pontual ou handoff via Codex: marque `BLOCKED`, registre evidencia e peca decisao ao usuario.
 - `QUOTA_EXHAUSTED` em review Codex: faca fallback de review read-only pelo proprio orquestrador, sem editar codigo produtivo, e salve o resultado em `review-final.md`.
+- `QUOTA_EXAUSTED` no Antigravity/AGY: registre o status cru retornado pelo bridge, o `reason`, o `model` e o retry sugerido `--continue`; avalie fallback para Codex apenas quando for seguro e documente o handoff.
+- `AUTH_REQUIRED` no Antigravity/AGY: marque bloqueio operacional e oriente o usuario a rodar `agy` interativamente uma vez.
+- `AGY_MISSING` no Antigravity/AGY: marque bloqueio operacional e mostre a remediacao de instalacao.
+- `TIMEOUT` no Antigravity/AGY: registre evidencia e decida entre aumentar timeout, reduzir escopo ou quebrar a task.
 
 Politica de sandbox Codex:
 
@@ -49,7 +73,7 @@ Politica de sandbox Codex:
 
 ## Argumento
 
-`$ARGUMENTS` - descricao da demanda em linguagem natural. Pode ser frase unica ou paragrafo com contexto.
+`$ARGUMENTS` - descricao da demanda em linguagem natural. Pode ser frase unica ou paragrafo com contexto. Opcionalmente pode comecar com `--agy-model <modelo>`.
 
 ## Execucao autonoma com `/goal`
 
@@ -88,11 +112,15 @@ Parse o JSON retornado:
 
 O JSON agora inclui `autoRemediation`. Se a permissao `Bash(node:*)` foi criada ou ajustada em `.claude/settings.json`, reporte isso ao usuario junto com o status final e diga se a correcao foi revalidada.
 
+O preflight tambem deve validar `cc-antigravity-plugin >= 3.5.4`, a presenca de `agents/antigravity-agent.md`, `commands/antigravity.md` e `scripts/antigravity-bridge.js`, alem da versao detectada de `agy`.
+
 ### Passo 2 - Carregar a skill
 
 `Skill(skill="cc-orchestrador-subagents:orchestrator-multi-agent-development")`.
 
 ### Passo 3 - Validacoes leves antes da Fase 1
+
+Antes dessas validacoes, parseie `--agy-model <modelo>` quando presente no inicio de `$ARGUMENTS`. Remova o prefixo da descricao da demanda, valide o modelo contra a allowlist e registre a escolha como `agyModelSource: user`. Se nao houver override, registre a politica heuristica como `agyModelSource: heuristic`.
 
 - Se a demanda e trivial (typo, padding, rename) -> avise que o orquestrador e overkill e ofereca executar direto.
 - Se o repositorio atual nao tem `openspec/` -> ofereca `/openspec-onboard` antes de continuar.
@@ -102,6 +130,8 @@ O JSON agora inclui `autoRemediation`. Se a permissao `Bash(node:*)` foi criada 
 Siga `SKILL.md` + `references/*.md`. Use `assets/*.md` para criar artefatos em `openspec/changes/<nome>/`.
 
 Depois de gerar `tasks-classification.md` e `waves.md`, rode `node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs" "openspec/changes/<nome>"` ou o caminho equivalente via `${CLAUDE_SKILL_DIR}`. Se falhar, corrija os artefatos antes de delegar.
+
+As tasks `FRONTEND_ONLY` e a fatia front-end de `FULLSTACK` devem registrar `agyModel` e `agyModelSource: user|heuristic` em `tasks-classification.md` e `waves.md`.
 
 Antes de iniciar cada fase e antes de lancar ou redelegar subagentes, faca um gate operacional:
 

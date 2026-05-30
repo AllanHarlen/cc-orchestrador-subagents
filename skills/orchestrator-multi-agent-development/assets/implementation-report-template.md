@@ -45,7 +45,7 @@
 - Effort: Medium
 
 ### Front-end
-- Agente: AGY (`cc-antigravity-plugin:antigravity-agent`, sem `--model`)
+- Agente: AGY (`cc-antigravity-plugin:antigravity-agent`, com `--model <agyModel>`)
 
 ### Review pos-implementação
 - Modelo: Codex padrao da conta ou fallback interno do orquestrador
@@ -58,7 +58,7 @@ Para cada task:
 - categoria;
 - `contractRequired`;
 - `assignedAgent`;
-- execucao (`--effort` no Codex; AGY sem `--model`);
+- execucao (`--effort` no Codex; AGY com `--model <agyModel>`);
 - resultado de `validate-routing.mjs`;
 - status;
 - agentes;
@@ -100,7 +100,7 @@ Para cada contrato:
 
 | Task | Subagent type | Execucao | Status | Resumo | Riscos |
 |---|---|---|---|---|---|
-| `<T1>` | `codex:codex-rescue` | `<--effort medium/high | AGY sem --model>` | `<status>` | `<resumo>` | `<riscos>` |
+| `<T1>` | `codex:codex-rescue` | `<--effort medium/high | AGY --model <agyModel>>` | `<status>` | `<resumo>` | `<riscos>` |
 
 ## 12. Testes e validações
 

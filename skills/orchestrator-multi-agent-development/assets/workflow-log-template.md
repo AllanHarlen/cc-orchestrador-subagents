@@ -54,7 +54,7 @@
 
 | Onda | Task | Subagent type | Execucao | Status final | Link/contexto |
 |---|---|---|---|---|---|
-| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>` | `<--effort medium/high | AGY sem --model>` | `<status>` | `subagents-context.md#<secao>` |
+| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>` | `<--effort medium/high | AGY --model <agyModel>>` | `<status>` | `subagents-context.md#<secao>` |
 
 ## 5. Falhas Possíveis Monitoradas
 
@@ -65,7 +65,8 @@
 | Task bloqueada | `9-11` | subagente retorna `BLOCKED` | registrar evidência, atualizar `monitoring.md`, pedir decisão ou redelegar com escopo restrito |
 | Divergencia de contrato | `10-11` | nomes/tipos/endpoints diferentes entre back-end e front-end | marcar `NEEDS_SYNC`, decidir fonte da verdade e redelegar ajuste |
 | Falha de subagente | `9-11` | subagente retorna `FAILED` ou nao entrega artefatos | registrar causa, impacto e proxima acao antes de continuar |
-| Cota esgotada | `9-11` | `quota exceeded`, `rate limit`, `resource exhausted`, `daily limit` ou similar | marcar `QUOTA_EXHAUSTED` e aplicar fallback permitido |
+| Cota esgotada AGY | `9-11` | `quota exceeded`, `rate limit`, `resource exhausted`, `daily limit` ou similar no bridge AGY | marcar `QUOTA_EXAUSTED` e aplicar fallback permitido |
+| Cota esgotada Codex | `9-11` | `quota exceeded`, `rate limit`, `resource exhausted`, `daily limit` ou similar no Codex | marcar `QUOTA_EXHAUSTED` e aplicar fallback permitido |
 | Falha de escrita/tool | `9-11` | erro de tool, terminal, escrita ou criação de arquivo | parar agente afetado, registrar parciais e handoff para Codex se seguro |
 | Sandbox Codex bloqueado | `9-11` | `NU1301`, registry externo inacessivel, pacote ausente no cache local ou `UnauthorizedAccessException` fora do working directory | marcar `BLOCKED`, registrar evidencia e pedir decisao do usuario |
 | Pausa/cancelamento | qualquer | mensagem do usuário ou gate operacional | marcar `PAUSED`/`CANCELLED`, não lançar novos agentes e preservar artefatos |

@@ -12,7 +12,8 @@
 | `NEEDS_SYNC` | contrato divergiu |
 | `DONE` | agente concluiu |
 | `FAILED` | agente falhou |
-| `QUOTA_EXHAUSTED` | agente parou por quota/rate limit/capacidade |
+| `QUOTA_EXHAUSTED` | agente Codex parou por quota/rate limit/capacidade |
+| `QUOTA_EXAUSTED` | AGY parou por quota/rate limit/capacidade |
 | `REVIEWED` | passou pelo review final |
 
 ## Task <ID> - <TÍTULO>
@@ -20,13 +21,13 @@
 - **Categoria:** `<FULLSTACK | BACKEND_ONLY | FRONTEND_ONLY | ...>`
 - **contractRequired:** `<yes | no>`
 - **assignedAgent:** `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent | ambos>`
-- **Execucao:** `<Codex --effort medium/high | AGY sem --model>`
+- **Execucao:** `<Codex --effort medium/high | AGY --model <agyModel>>`
 - **Routing validado:** `<sim | nao | pendente>`
 - **Status:** `<PENDING>`
 - **Dependências:** `<nenhuma | lista>`
 - **Agentes:**
   - Back-end: `codex:codex-rescue` (Codex padrao da conta, `--effort medium`)
-  - Front-end: `cc-antigravity-plugin:antigravity-agent` (AGY sem `--model`)
+  - Front-end: `cc-antigravity-plugin:antigravity-agent` (AGY com `--model <agyModel>`)
 - **Contrato:** `<contracts/T1.md | N/A>`
 - **Wire format validado:** `<sim | nao | pendente>`
 - **Riscos atuais:** `<texto>`
@@ -40,7 +41,8 @@
 
 ## Política de quota
 
-- `QUOTA_EXHAUSTED` no Antigravity/AGY: registrar evidência e avaliar fallback para Codex.
+- `QUOTA_EXAUSTED` no Antigravity/AGY: registrar evidência e avaliar fallback para Codex.
+- `AUTH_REQUIRED`, `AGY_MISSING` e `TIMEOUT` no Antigravity/AGY: registrar evidência, marcar bloqueio operacional e definir a próxima ação.
 - `QUOTA_EXHAUSTED` no Codex em implementação ou ajuste: marcar `BLOCKED` e pedir decisão.
 - `QUOTA_EXHAUSTED` no Codex em review: registrar fallback de review interno read-only do orquestrador em `review-final.md`.
 
@@ -57,7 +59,8 @@
 |---|---|---|
 | `<ts>` | `<T1>` | delegado |
 | `<ts>` | `<T1>` | SLOW_CHECKIN |
-| `<ts>` | `<T1>` | QUOTA_EXHAUSTED - agente: `<antigravity|codex>`; fallback: `<acao>` |
+| `<ts>` | `<T1>` | QUOTA_EXAUSTED - agente: `<antigravity>`; model: `<agyModel>`; retry: `<--continue|n/a>`; fallback: `<acao>` |
+| `<ts>` | `<T1>` | QUOTA_EXHAUSTED - agente: `<codex>`; fallback: `<acao>` |
 | `<ts>` | `<T1>` | BLOCKED - sandbox Codex: `<rede externa | pacote ausente | escrita fora do working directory>` |
 | `<ts>` | `<T1>` | NEEDS_SYNC - contrato atualizado |
 | `<ts>` | `<T1>` | DONE |

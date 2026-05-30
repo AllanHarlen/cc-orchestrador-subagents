@@ -29,6 +29,7 @@ const PLUGINS_CACHE = join(HOME, ".claude", "plugins", "cache");
 const SKILLS_DIR = join(HOME, ".claude", "skills");
 const PROJECT_CLAUDE_DIR = join(process.cwd(), ".claude");
 const PROJECT_SETTINGS_FILE = join(PROJECT_CLAUDE_DIR, "settings.json");
+const MIN_ANTIGRAVITY_PLUGIN_VERSION = "3.5.4";
 
 function checkCli(cli) {
   try {
@@ -44,7 +45,24 @@ function checkCli(cli) {
   }
 }
 
-function checkPlugin(marketplace, pluginName) {
+function parseSemver(version) {
+  const match = /^\d+\.\d+\.\d+$/.test(version) ? version : null;
+  if (!match) return null;
+  return version.split(".").map((part) => Number(part));
+}
+
+function compareSemver(left, right) {
+  const a = parseSemver(left);
+  const b = parseSemver(right);
+  if (!a || !b) return null;
+
+  for (let i = 0; i < 3; i += 1) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return 0;
+}
+
+function checkPlugin(marketplace, pluginName, options = {}) {
   const dir = join(PLUGINS_CACHE, marketplace, pluginName);
   if (!existsSync(dir)) {
     return { ok: false, error: `missing ${dir}` };
@@ -61,8 +79,49 @@ function checkPlugin(marketplace, pluginName) {
     return { ok: false, error: `no versions installed in ${dir}` };
   }
 
-  versions.sort();
-  return { ok: true, version: versions[versions.length - 1], path: dir };
+  versions.sort((left, right) => {
+    const semverComparison = compareSemver(left, right);
+    if (semverComparison != null) return semverComparison;
+    return left.localeCompare(right);
+  });
+
+  const version = versions[versions.length - 1];
+  const versionDir = join(dir, version);
+  const requiredFiles = options.requiredFiles ?? [];
+  const missingFiles = requiredFiles.filter((file) => !existsSync(join(versionDir, file)));
+
+  if (options.minVersion) {
+    const semverComparison = compareSemver(version, options.minVersion);
+    if (semverComparison == null) {
+      return {
+        ok: false,
+        error: `latest installed version ${version} is not a valid semver for ${pluginName}`,
+        version,
+        path: versionDir,
+      };
+    }
+    if (semverComparison < 0) {
+      return {
+        ok: false,
+        error: `installed version ${version} is older than required ${options.minVersion}`,
+        version,
+        minVersion: options.minVersion,
+        path: versionDir,
+      };
+    }
+  }
+
+  if (missingFiles.length > 0) {
+    return {
+      ok: false,
+      error: `plugin ${pluginName} ${version} is missing required files: ${missingFiles.join(", ")}`,
+      version,
+      path: versionDir,
+      missingFiles,
+    };
+  }
+
+  return { ok: true, version, path: versionDir };
 }
 
 function checkOpenSpecSkills() {
@@ -444,7 +503,14 @@ const checks = {
     openspec: checkCli("openspec"),
   },
   plugins: {
-    "cc-antigravity-plugin": checkPlugin("cc-antigravity-plugin", "cc-antigravity-plugin"),
+    "cc-antigravity-plugin": checkPlugin("cc-antigravity-plugin", "cc-antigravity-plugin", {
+      minVersion: MIN_ANTIGRAVITY_PLUGIN_VERSION,
+      requiredFiles: [
+        "agents/antigravity-agent.md",
+        "commands/antigravity.md",
+        "scripts/antigravity-bridge.js",
+      ],
+    }),
     "openai-codex": checkPlugin("openai-codex", "codex"),
   },
   skills: {
@@ -540,6 +606,8 @@ function remediationFor(f) {
         steps: [
           "Dentro do Claude Code:",
           "  claude plugin install AllanHarlen/cc-antigravity-plugin",
+          `Confirme que a versao instalada seja >= ${MIN_ANTIGRAVITY_PLUGIN_VERSION}.`,
+          "Valide que o plugin instalado contenha agents/antigravity-agent.md, commands/antigravity.md e scripts/antigravity-bridge.js.",
         ],
         docs: "https://github.com/AllanHarlen/cc-antigravity-plugin",
       };

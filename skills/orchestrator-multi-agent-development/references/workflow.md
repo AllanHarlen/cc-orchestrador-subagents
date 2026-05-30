@@ -161,10 +161,10 @@ A categoria da task e a fonte da verdade para escolher agente. Nao reclassifique
 | `DATABASE_ONLY` | `codex:codex-rescue` | `--effort medium` |
 | `TEST_ONLY` | `codex:codex-rescue` | `--effort medium` |
 | `REVIEW_ONLY` | `codex:codex-rescue` | `--effort high` |
-| `FRONTEND_ONLY` | `cc-antigravity-plugin:antigravity-agent` | AGY sem `--model` |
-| `FULLSTACK` | `codex:codex-rescue` + `cc-antigravity-plugin:antigravity-agent` | Codex para back-end; AGY sem `--model` para front-end |
+| `FRONTEND_ONLY` | `cc-antigravity-plugin:antigravity-agent` | AGY com `--model <agyModel>` |
+| `FULLSTACK` | `codex:codex-rescue` + `cc-antigravity-plugin:antigravity-agent` | Codex para back-end; AGY com `--model <agyModel>` para front-end |
 
-Se `FRONTEND_ONLY` aparecer com Codex como agente primario, corrija antes de montar waves. Codex so pode assumir front-end depois de `QUOTA_EXHAUSTED`, falha operacional de AGY ou decisao explicita do usuario, e isso deve ficar registrado em `monitoring.md`, `workflow-log.md` e `subagents-context.md`.
+Se `FRONTEND_ONLY` aparecer com Codex como agente primario, corrija antes de montar waves. Codex so pode assumir front-end depois de `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, falha operacional de AGY ou decisao explicita do usuario, e isso deve ficar registrado em `monitoring.md`, `workflow-log.md` e `subagents-context.md`.
 
 ### Regra de `contractRequired`
 
@@ -238,7 +238,9 @@ Para Codex:
 Para Antigravity/AGY:
 
 - delegue ao `cc-antigravity-plugin:antigravity-agent`;
-- nao passe `--model` nem seletor de modo.
+- passe `--model <agyModel>` para o bridge do plugin;
+- registre `agyModelSource: user|heuristic`;
+- nao trate isso como flag nativa do `agy`, porque o bridge aplica o modelo via `settings.json`.
 
 Cada prompt deve incluir:
 
@@ -272,7 +274,7 @@ Status validos:
 - `NEEDS_SYNC`
 - `DONE`
 - `FAILED`
-- `QUOTA_EXHAUSTED`
+- `QUOTA_EXAUSTED`
 - `REVIEWED`
 
 ### Politica de quota
@@ -281,6 +283,20 @@ Status validos:
   - registre evidencia;
   - se o fallback for seguro, redelegue para Codex com `--effort medium`;
   - se mudar muito a natureza da entrega, peca confirmacao do usuario.
+
+- `AUTH_REQUIRED` no Antigravity/AGY:
+  - marque `BLOCKED`;
+  - registre evidencia;
+  - oriente o usuario a rodar `agy` interativamente uma vez.
+
+- `AGY_MISSING` no Antigravity/AGY:
+  - marque `BLOCKED`;
+  - registre evidencia;
+  - publique os passos de instalacao.
+
+- `TIMEOUT` no Antigravity/AGY:
+  - registre evidencia;
+  - aumente timeout, reduza escopo ou quebre a task antes de insistir.
 
 - `QUOTA_EXHAUSTED` no Codex durante implementacao, ajuste pontual ou handoff:
   - nao tente trocar modelo fixo;
