@@ -149,6 +149,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 
 - [ ] preflight executado
 - [ ] `/opsx:explore` executado e resultado incorporado ao entendimento
+- [ ] duvidas pendentes do `/opsx:explore` resolvidas via `AskUserQuestion` antes de avancar para 1.2
 - [ ] `autoRemediation` verificado
 - [ ] duvidas do Codex (fase 2) resolvidas via `AskUserQuestion` antes de avancar
 - [ ] hipoteses nao verificaveis dos Ajustes Obrigatorios (fase 2) investigadas no repositorio (Read/Grep) antes de escrever `design.md`

@@ -36,6 +36,19 @@ O `/opsx:explore` e o modo "thinking partner" do OpenSpec: ele investiga o proje
 
 O resultado do `/opsx:explore` e insumo direto para as etapas seguintes desta fase — nao pule mesmo que o projeto pareca simples.
 
+### 1.1.1 Resolver duvidas do `/opsx:explore` antes de prosseguir
+
+Ao receber o resultado do `/opsx:explore`, verifique se ele retornou duvidas de planejamento pendentes (perguntas sobre escopo, ambiguidades de requisito, decisoes de arquitetura em aberto ou conflitos com specs existentes).
+
+Para cada duvida pendente, o orquestrador **nao avanca para 1.2** antes de usar `AskUserQuestion` para levar a questao ao usuario e registrar a resposta.
+
+**Quando acionar `AskUserQuestion`:**
+- o `/opsx:explore` identificou ambiguidade de escopo ou requisito que bloqueia o entendimento;
+- ha conflito entre a demanda atual e specs ou mudancas anteriores em `openspec/`;
+- uma decisao de arquitetura em aberto impede mapear o impacto corretamente.
+
+Registre cada resposta do usuario no entendimento antes de continuar com 1.2.
+
 ### 1.2 Interpretar a demanda
 
 Com o contexto do OpenSpec em maos, analise o argumento passado para `/orchestrador`:
