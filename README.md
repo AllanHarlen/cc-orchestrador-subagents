@@ -1,3 +1,5 @@
+![cc-orchestrador-subagents](banner.png)
+
 # cc-orchestrador-subagents
 
 Plugin de Claude Code para conduzir um workflow de desenvolvimento multiagente com OpenSpec, Codex, Antigravity/AGY e artefatos de auditoria.
