@@ -115,6 +115,27 @@ Qual voce prefere?
 
 Apos a resposta do usuario, registre a decisao e o motivo em `review-entendimento.md` na secao **Decisoes do usuario**. Somente entao o orquestrador avanca para a Fase 3.
 
+### Regra de investigacao de hipoteses nao verificaveis
+
+Ao processar "Ajustes Obrigatorios" do Codex, identifique itens que usam linguagem como:
+
+- "hipotese nao verificavel sem inspecionar o repositorio"
+- "nao foi possivel confirmar sem ler o codigo"
+- "assume X sem evidencia"
+- "risco de incompatibilidade nao verificado"
+- "exige inspecao do servico/controller/contrato"
+
+Para cada item desse tipo, o orquestrador **nao avanca para Fase 3** antes de:
+
+1. identificar os arquivos relevantes para verificar a hipotese (ex.: servicos, controllers, contratos, schemas);
+2. ler esses arquivos com `Read` ou `Grep`;
+3. confirmar ou descartar a hipotese com base no codigo real;
+4. registrar a conclusao em `review-entendimento.md` com o arquivo lido, o trecho relevante e a decisao tomada.
+
+Somente apos essa investigacao o orquestrador reclassifica o ajuste como confirmado ou descartado e avanca.
+
+> Hipoteses nao verificadas travadas como verdade no `design.md` causam cascata de implementacao errada que so e detectada no review pos-implementacao — como o caso de assumir que um servico funciona de forma anonima sem confirmar o contrato real do codigo.
+
 ## Fase 3 - Criar mudanca OpenSpec
 
 ```

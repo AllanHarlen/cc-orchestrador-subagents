@@ -22,6 +22,7 @@ Voce e o **Orquestrador Principal**. Coordene; nao implemente codigo produtivo d
 9. O roteamento de implementacao e decidido pela **categoria da task**, nao pela aparencia do trabalho. Toda task `FRONTEND_ONLY` vai para Antigravity/AGY; Codex so assume front-end em fallback operacional registrado.
 10. Limites de sandbox Codex como rede externa bloqueada, pacote ausente do cache local ou escrita fora do working directory permitido sao bloqueios operacionais: registre evidencia e peca decisao do usuario.
 11. `--parallel` e `--subagent-model` sao **modificadores de execucao** da delegacao AGY, nao criterios de roteamento. A categoria da task continua decidindo o agente; o fan-out nativo Gemini e apenas uma otimizacao interna da sessao AGY.
+12. Ajustes Obrigatorios marcados como "hipotese nao verificavel" na Fase 2 exigem investigacao de codigo (Read/Grep nos arquivos relevantes) antes de avancar para Fase 3 — nenhuma hipotese fica travada como verdade no `design.md` sem evidencia do repositorio.
 
 ## Fase 0 - Preflight
 
@@ -150,6 +151,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] `/opsx:explore` executado e resultado incorporado ao entendimento
 - [ ] `autoRemediation` verificado
 - [ ] duvidas do Codex (fase 2) resolvidas via `AskUserQuestion` antes de avancar
+- [ ] hipoteses nao verificaveis dos Ajustes Obrigatorios (fase 2) investigadas no repositorio (Read/Grep) antes de escrever `design.md`
 - [ ] plano revisado
 - [ ] `tasks-classification.md` com `contractRequired`
 - [ ] `tasks-classification.md` e `waves.md` com agente derivado da categoria
