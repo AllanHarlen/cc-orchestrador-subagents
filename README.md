@@ -16,7 +16,8 @@ Plugin de Claude Code para conduzir um workflow de desenvolvimento multiagente c
 - politica operacional para limites de sandbox Codex: rede externa bloqueada para pacotes/restore e escrita fora do working directory permitido;
 - reforco de que UI sem dependencia de rede deve permanecer com Antigravity/AGY, registrando fallback para Codex apenas quando for seguro;
 - **resolucao de duvidas do `/opsx:explore` via `AskUserQuestion`** antes de avancar para 1.2 — ambiguidades de escopo, conflitos com specs existentes e decisoes de arquitetura em aberto sao resolvidas com o usuario antes de qualquer planejamento;
-- **investigacao obrigatoria de hipoteses nao verificaveis** sinalizadas nos Ajustes Obrigatorios do review Codex (Fase 2) — o orquestrador le os arquivos relevantes e confirma ou descarta a hipotese no repositorio antes de escrever `design.md`.
+- **investigacao obrigatoria de hipoteses nao verificaveis** sinalizadas nos Ajustes Obrigatorios do review Codex (Fase 2) — o orquestrador le os arquivos relevantes e confirma ou descarta a hipotese no repositorio antes de escrever `design.md`;
+- **divisao automatica de tasks AGY acima de 28.000 chars** — limitacao do CLI do AGY no Windows: o Node.js codifica o prompt na linha de comando e aspas/barras invertidas inflam ~14% o tamanho raw, causando `ENAMETOOLONG` acima desse threshold; tasks que excedem o limite sao divididas em subtasks por entregaveis antes da delegacao.
 
 ## Visao geral
 
@@ -194,6 +195,29 @@ Situacoes que disparam `AskUserQuestion`:
 - decisao de arquitetura em aberto que impede mapear o impacto arquitetural corretamente.
 
 O orquestrador nao avanca para 1.2 com duvidas pendentes do `/opsx:explore` sem registro da resposta do usuario.
+
+## Limite de prompt AGY — limitacao do CLI no Windows
+
+O CLI do AGY e invocado via `child_process` pelo bridge do plugin. No Windows, o Node.js passa o prompt como argumento de linha de comando, aplicando quoting automatico: cada `"` vira `\"` e cada `\` antes de `"` dobra. Isso infla o tamanho codificado em ~14% acima do tamanho raw do texto.
+
+Resultado dos testes empiricos:
+
+| Tipo de conteudo | Prompt maximo | Break point |
+|---|---|---|
+| Texto puro (xxx...) | 32.694 chars | 32.695 → `ENAMETOOLONG` |
+| Prompt real (aspas, `\`, XML, `\n`) | ~28.520 chars | ~29.140 → `ENAMETOOLONG` |
+
+**Threshold conservador adotado: 28.000 chars.**
+
+Antes de delegar qualquer task para AGY, o orquestrador monta o prompt completo e conta os caracteres. Se exceder 28.000 chars:
+
+1. Divide os entregaveis da task em dois grupos independentes (A e B).
+2. Cria subtasks `<ID>-a` e `<ID>-b`, cada uma cobrindo um grupo.
+3. Atualiza `tasks-classification.md` e `waves.md`.
+4. Remonta os dois prompts e valida que cada um esta abaixo do limite.
+5. Registra a divisao em `monitoring.md` e `workflow-log.md` com o tamanho original e o motivo.
+
+Se a task for monolitica e indivisivel por entregaveis, o orquestrador tenta reduzir `Arquivos e modulos relevantes` e, como ultimo recurso, registra `promptOverflow: true` e pede decisao ao usuario.
 
 ## Hipoteses nao verificaveis no review Codex (Fase 2)
 
