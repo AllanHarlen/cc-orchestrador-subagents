@@ -14,7 +14,9 @@ Plugin de Claude Code para conduzir um workflow de desenvolvimento multiagente c
 - fallback de review interno do orquestrador quando o Codex ficar sem quota no review;
 - bloqueio com decisao do usuario quando o Codex ficar sem quota em implementacao;
 - politica operacional para limites de sandbox Codex: rede externa bloqueada para pacotes/restore e escrita fora do working directory permitido;
-- reforco de que UI sem dependencia de rede deve permanecer com Antigravity/AGY, registrando fallback para Codex apenas quando for seguro.
+- reforco de que UI sem dependencia de rede deve permanecer com Antigravity/AGY, registrando fallback para Codex apenas quando for seguro;
+- **resolucao de duvidas do `/opsx:explore` via `AskUserQuestion`** antes de avancar para 1.2 — ambiguidades de escopo, conflitos com specs existentes e decisoes de arquitetura em aberto sao resolvidas com o usuario antes de qualquer planejamento;
+- **investigacao obrigatoria de hipoteses nao verificaveis** sinalizadas nos Ajustes Obrigatorios do review Codex (Fase 2) — o orquestrador le os arquivos relevantes e confirma ou descarta a hipotese no repositorio antes de escrever `design.md`.
 
 ## Visao geral
 
@@ -180,6 +182,31 @@ Exemplo de baseline minimo:
   }
 }
 ```
+
+## Duvidas do `/opsx:explore` (Fase 1)
+
+Apos executar `/opsx:explore` na Fase 1, o orquestrador verifica se ha duvidas de planejamento pendentes no resultado. Se houver, usa `AskUserQuestion` para resolvê-las com o usuario antes de avancar para 1.2.
+
+Situacoes que disparam `AskUserQuestion`:
+
+- ambiguidade de escopo ou requisito que bloqueia o entendimento da demanda;
+- conflito entre a demanda atual e specs ou mudancas anteriores em `openspec/`;
+- decisao de arquitetura em aberto que impede mapear o impacto arquitetural corretamente.
+
+O orquestrador nao avanca para 1.2 com duvidas pendentes do `/opsx:explore` sem registro da resposta do usuario.
+
+## Hipoteses nao verificaveis no review Codex (Fase 2)
+
+Ao processar os Ajustes Obrigatorios retornados pelo Codex na Fase 2, o orquestrador identifica itens que usam linguagem como "hipotese nao verificavel sem inspecionar o repositorio", "nao confirmado sem ler o codigo", "assume sem evidencia" ou similar.
+
+Para cada item desse tipo, o orquestrador **nao escreve `design.md`** antes de:
+
+1. identificar os arquivos relevantes para verificar a hipotese;
+2. ler esses arquivos com `Read` ou `Grep`;
+3. confirmar ou descartar a hipotese com base no codigo real;
+4. registrar a conclusao em `review-entendimento.md` com o arquivo lido, o trecho relevante e a decisao tomada.
+
+Hipoteses nao verificadas travadas como verdade no `design.md` causam cascata de implementacao errada detectada so no review pos-implementacao.
 
 ## Politica de quota
 

@@ -271,6 +271,31 @@ Quando houver DTO C# e consumidor TypeScript:
 
 Antes de lancar subagentes, confirme que `validate-routing.mjs` passou. A delegacao precisa seguir `assignedAgent` dos artefatos validados.
 
+### Regra de limite de prompt AGY (28.000 chars)
+
+Antes de delegar qualquer task para AGY, monte o prompt completo seguindo o template de `subagent-prompts.md` e conte os caracteres do texto montado.
+
+**Threshold:** 28.000 chars. Prompts reais com aspas, barras invertidas, XML e quebras de linha inflariam ~14% na linha de comando codificada pelo Node.js no Windows, causando `ENAMETOOLONG`. O threshold conservador garante margem segura.
+
+Se o prompt montado **exceder 28.000 chars**:
+
+1. Identifique os entregaveis listados nos criterios de aceite da task original.
+2. Divida os entregaveis em dois grupos independentes (A e B), priorizando que cada grupo seja coeso e nao dependa do outro para executar.
+3. Crie duas subtasks derivadas da original:
+   - **Task `<ID>-a`**: herda todos os metadados da task original (categoria, agente, contrato, stack, escopo); `Descricao` e criterios de aceite cobrem apenas o Grupo A.
+   - **Task `<ID>-b`**: mesmo metadados; `Descricao` e criterios de aceite cobrem apenas o Grupo B.
+4. Atualize `tasks-classification.md` e `waves.md` substituindo a task original pelas duas subtasks; mantenha a mesma wave se forem independentes.
+5. Remonte os dois prompts e confirme que cada um esta abaixo de 28.000 chars. Se ainda exceder, repita a divisao.
+6. Registre a divisao em `monitoring.md` e `workflow-log.md` com:
+   - task original e motivo (prompt excedeu N chars);
+   - subtasks geradas e criterios de aceite de cada uma.
+
+**Quando a task nao pode ser dividida por entregaveis** (descricao monolitica indivisivel):
+
+- Reduza `Arquivos e modulos relevantes` ao minimo critico para esta task; mova arquivos secundarios para `Fora do escopo`.
+- Se ainda exceder, troque o modelo AGY para `gemini-3.5-flash-low` e registre o motivo em `tasks-classification.md`.
+- Se persistir, registre `promptOverflow: true` em `tasks-classification.md` e peca decisao ao usuario antes de delegar.
+
 Para Codex:
 
 - implementacao, handoff e ajuste -> `--effort medium`;

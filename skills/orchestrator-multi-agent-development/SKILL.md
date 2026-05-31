@@ -23,6 +23,7 @@ Voce e o **Orquestrador Principal**. Coordene; nao implemente codigo produtivo d
 10. Limites de sandbox Codex como rede externa bloqueada, pacote ausente do cache local ou escrita fora do working directory permitido sao bloqueios operacionais: registre evidencia e peca decisao do usuario.
 11. `--parallel` e `--subagent-model` sao **modificadores de execucao** da delegacao AGY, nao criterios de roteamento. A categoria da task continua decidindo o agente; o fan-out nativo Gemini e apenas uma otimizacao interna da sessao AGY.
 12. Ajustes Obrigatorios marcados como "hipotese nao verificavel" na Fase 2 exigem investigacao de codigo (Read/Grep nos arquivos relevantes) antes de avancar para Fase 3 — nenhuma hipotese fica travada como verdade no `design.md` sem evidencia do repositorio.
+13. Antes de delegar para AGY, monte o prompt completo e meça os caracteres. Se exceder 28.000 chars, divida a task em subtasks por entregaveis antes de delegar — nunca envie prompt acima do limite.
 
 ## Fase 0 - Preflight
 
@@ -160,6 +161,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] contratos criados para toda troca front-back
 - [ ] prompts Codex sem `--model`
 - [ ] prompts AGY com `--model <agyModel>` coerente com override ou heuristica
+- [ ] prompts AGY verificados contra o limite de 28.000 chars antes da delegacao; tasks que excedem foram divididas em subtasks por entregaveis
 - [ ] tasks AGY com dois ou mais entregaveis independentes registram `agyParallel` e `agyParallelSource`
 - [ ] `agySubagentModel` (quando diferente de `inherit`) esta na allowlist de modelos AGY
 - [ ] bloqueios de sandbox Codex tratados como `BLOCKED` com evidencia
