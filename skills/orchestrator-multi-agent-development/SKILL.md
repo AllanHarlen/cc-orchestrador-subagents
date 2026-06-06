@@ -24,6 +24,7 @@ Voce e o **Orquestrador Principal**. Coordene; nao implemente codigo produtivo d
 11. `--parallel` e `--subagent-model` sao **modificadores de execucao** da delegacao AGY, nao criterios de roteamento. A categoria da task continua decidindo o agente; o fan-out nativo Gemini e apenas uma otimizacao interna da sessao AGY.
 12. Ajustes Obrigatorios marcados como "hipotese nao verificavel" na Fase 2 exigem investigacao de codigo (Read/Grep nos arquivos relevantes) antes de avancar para Fase 3 — nenhuma hipotese fica travada como verdade no `design.md` sem evidencia do repositorio.
 13. Antes de delegar para AGY, monte o prompt completo e meça os caracteres. Se exceder 28.000 chars, divida a task em subtasks por entregaveis antes de delegar — nunca envie prompt acima do limite.
+14. Quando toda a atividade for `FRONTEND_ONLY` (todas as tasks classificadas como tal), o Codex nao participa do fluxo: a Fase 2 e substituida por review interno do orquestrador e a Fase 12 nao delega para Codex — o orquestrador faz review interno read-only diretamente.
 
 ## Fase 0 - Preflight
 
@@ -152,8 +153,9 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] `/opsx:explore` executado e resultado incorporado ao entendimento
 - [ ] duvidas pendentes do `/opsx:explore` resolvidas via `AskUserQuestion` antes de avancar para 1.2
 - [ ] `autoRemediation` verificado
-- [ ] duvidas do Codex (fase 2) resolvidas via `AskUserQuestion` antes de avancar
-- [ ] hipoteses nao verificaveis dos Ajustes Obrigatorios (fase 2) investigadas no repositorio (Read/Grep) antes de escrever `design.md`
+- [ ] atividade classificada como FRONTEND_ONLY na Fase 1 → Codex excluido do fluxo (fases 2 e 12 com review interno); caso contrario, seguir fluxo normal com Codex
+- [ ] duvidas do Codex (fase 2) resolvidas via `AskUserQuestion` antes de avancar (N/A se FRONTEND_ONLY)
+- [ ] hipoteses nao verificaveis dos Ajustes Obrigatorios (fase 2) investigadas no repositorio (Read/Grep) antes de escrever `design.md` (N/A se FRONTEND_ONLY)
 - [ ] plano revisado
 - [ ] `tasks-classification.md` com `contractRequired`
 - [ ] `tasks-classification.md` e `waves.md` com agente derivado da categoria

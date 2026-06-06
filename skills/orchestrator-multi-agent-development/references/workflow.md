@@ -78,6 +78,8 @@ Explicite o que entra *e o que fica fora* (com motivo). Esse limite e o que gara
 
 ## Fase 2 - Review do entendimento com Codex
 
+> **Excecao FRONTEND_ONLY:** Se o orquestrador determinar na Fase 1 que toda a atividade e `FRONTEND_ONLY` (nenhuma task de back-end, banco de dados ou teste de API), **nao delegue ao Codex**. Execute um review interno do orquestrador, salve o resultado em `review-entendimento.md` com a nota `"Codex ausente: atividade FRONTEND_ONLY"` e avance diretamente para a Fase 3.
+
 Com o entendimento da demanda formado (fases 1.1 a 1.5), o orquestrador delega uma revisao critica ao Codex **antes de criar qualquer artefato OpenSpec**:
 
 **Subagente:** `codex:codex-rescue` com `--effort high`
@@ -410,6 +412,8 @@ Valide:
 Se precisar ajuste, delegue para Codex com `--effort medium`.
 
 ## Fase 12 - Review pos-implementacao
+
+> **Excecao FRONTEND_ONLY:** Se toda a atividade for `FRONTEND_ONLY`, **nao delegue ao Codex**. O orquestrador faz review interno read-only, salva o resultado em `review-final.md` com a nota `"Codex ausente: atividade FRONTEND_ONLY"` e avanca para a Fase 13.
 
 Fluxo principal:
 
