@@ -19,6 +19,23 @@ Regras:
 
 ## Fase 1 - Entendimento da demanda
 
+### 1.0 Detectar plano pre-definido
+
+Antes de interpretar a demanda como um pedido aberto, verifique se o usuario ja entregou um plano de execucao, uma lista de tasks, um desenho tecnico, uma sequencia de fases, um conjunto de decisoes arquiteturais ou um escopo aprovado.
+
+Classifique a execucao como `PREDEFINED_PLAN=yes` quando o input inicial tiver pelo menos dois destes sinais:
+
+- objetivos ou entregaveis ja definidos;
+- tasks, fases, milestones ou ordem de implementacao proposta;
+- decisoes tecnicas ja tomadas (arquitetura, bibliotecas, endpoints, telas, contratos, migrations);
+- restricoes explicitas de escopo, prazo, agente, tecnologia ou arquivo;
+- criterios de aceite, testes esperados ou validacoes obrigatorias;
+- contexto de negocio suficiente para orientar a implementacao sem discovery aberto.
+
+Nao classifique como `PREDEFINED_PLAN` quando o usuario trouxe apenas uma ideia, um bug report curto, uma feature desejada ou uma preferencia solta sem estrutura operacional.
+
+Quando `PREDEFINED_PLAN=yes`, a Fase 1 muda de "descobrir o que fazer" para "normalizar, validar e enriquecer o plano recebido". O conhecimento inicial do usuario vira insumo primario e deve ser preservado como fonte de verdade, sem ser simplificado ou replanejado sem motivo.
+
 ### 1.1 Executar `/opsx:explore`
 
 Antes de criar qualquer artefato, execute:
@@ -36,6 +53,8 @@ O `/opsx:explore` e o modo "thinking partner" do OpenSpec: ele investiga o proje
 
 O resultado do `/opsx:explore` e insumo direto para as etapas seguintes desta fase — nao pule mesmo que o projeto pareca simples.
 
+Se `PREDEFINED_PLAN=yes`, use o `/opsx:explore` para confrontar o plano recebido com o estado real do projeto, nao para substituir o plano. Registre divergencias entre o plano e o codebase como riscos, lacunas ou perguntas em aberto.
+
 ### 1.1.1 Resolver duvidas do `/opsx:explore` antes de prosseguir
 
 Ao receber o resultado do `/opsx:explore`, verifique se ele retornou duvidas de planejamento pendentes (perguntas sobre escopo, ambiguidades de requisito, decisoes de arquitetura em aberto ou conflitos com specs existentes).
@@ -51,11 +70,24 @@ Registre cada resposta do usuario no entendimento antes de continuar com 1.2.
 
 ### 1.2 Interpretar a demanda
 
-Com o contexto do OpenSpec em maos, analise o argumento passado para `/orchestrador`:
+Com o contexto do OpenSpec em maos, analise o argumento passado para `/orchestrador`.
+
+Quando `PREDEFINED_PLAN=no`, identifique:
 
 - problema real a resolver (nao apenas o pedido literal);
 - contexto de negocio e estado atual do sistema;
 - stakeholders impactados.
+
+Quando `PREDEFINED_PLAN=yes`, extraia e normalize:
+
+- objetivo final do plano;
+- entregaveis ja definidos;
+- ordem ou dependencias entre fases/tasks;
+- decisoes tecnicas firmes;
+- restricoes impostas pelo usuario;
+- criterios de aceite e validacoes esperadas;
+- hipoteses do plano que ainda precisam ser verificadas no codebase;
+- pontos em que o plano conflita com specs, codigo existente ou limites operacionais.
 
 ### 1.3 Mapear impacto arquitetural
 
@@ -76,11 +108,47 @@ Explicite o que entra *e o que fica fora* (com motivo). Esse limite e o que gara
 - Riscos tecnicos antecipados (probabilidade, impacto, mitigacao)
 - Perguntas que precisam ser resolvidas com o usuario antes de prosseguir
 
+### 1.6 Expandir plano pre-definido
+
+Aplicavel somente quando `PREDEFINED_PLAN=yes`.
+
+Antes de pular a Fase 2, o orquestrador deve ampliar o entendimento com base no conhecimento passado inicialmente pelo usuario. Essa ampliacao e obrigatoria porque o review externo de entendimento sera ignorado neste fluxo.
+
+Crie um **Resumo expandido do plano recebido** no entendimento da Fase 1 contendo:
+
+- **Fonte do plano:** trechos ou itens do input inicial que definem o plano;
+- **Objetivo consolidado:** o resultado final esperado, em linguagem mensuravel;
+- **Mapa de entregaveis:** cada item planejado, seu resultado esperado e criterios de aceite;
+- **Decisoes preservadas:** escolhas que vieram do usuario e nao devem ser redesenhadas sem aprovacao;
+- **Dependencias e sequenciamento:** o que precisa acontecer antes/depois e por que;
+- **Impacto arquitetural:** backend, frontend, banco, auth, integracoes, testes e operacao;
+- **Lacunas preenchidas pelo `/opsx:explore`:** informacoes do projeto que completam o plano;
+- **Conflitos detectados:** divergencias entre plano, specs existentes e codigo real;
+- **Riscos remanescentes:** riscos que devem voltar no `design.md` e no review final;
+- **Perguntas bloqueantes:** somente o que impede transformar o plano em artefatos OpenSpec.
+
+Se houver contradicao estrutural no plano, dependencia desconhecida que mude a ordem de execucao, ou decisao ausente que altere escopo/arquitetura, use `AskUserQuestion` antes de prosseguir. Depois da resposta, registre a decisao no resumo expandido.
+
+Ao final de 1.6, o orquestrador deve conseguir transformar o plano recebido em `proposal.md`, `design.md` e `tasks.md` sem pedir ao Codex para revisar o entendimento.
+
 ## Fase 2 - Review do entendimento com Codex
+
+> **Excecao PREDEFINED_PLAN:** Se a Fase 1 marcou `PREDEFINED_PLAN=yes` e a etapa 1.6 foi concluida sem perguntas bloqueantes, ignore a revisao com Codex nesta fase. O usuario ja forneceu informacao estruturada suficiente e o orquestrador deve avancar diretamente para a Fase 3.
+
+Neste caso, salve `review-entendimento.md` com:
+
+- nota `"Codex ausente: plano pre-definido informado pelo usuario"`;
+- classificacao `PREDEFINED_PLAN=yes`;
+- resumo expandido produzido na Fase 1.6;
+- perguntas feitas ao usuario e respostas, quando houver;
+- riscos e hipoteses que devem ser reavaliados na Fase 12;
+- motivo do bypass da Fase 2.
+
+Se o plano pre-definido estiver incompleto a ponto de impedir a criacao segura dos artefatos OpenSpec, nao use esta excecao ainda: resolva as perguntas bloqueantes na Fase 1.6 e so entao pule a Fase 2.
 
 > **Excecao FRONTEND_ONLY:** Se o orquestrador determinar na Fase 1 que toda a atividade e `FRONTEND_ONLY` (nenhuma task de back-end, banco de dados ou teste de API), **nao delegue ao Codex**. Execute um review interno do orquestrador, salve o resultado em `review-entendimento.md` com a nota `"Codex ausente: atividade FRONTEND_ONLY"` e avance diretamente para a Fase 3.
 
-Com o entendimento da demanda formado (fases 1.1 a 1.5), o orquestrador delega uma revisao critica ao Codex **antes de criar qualquer artefato OpenSpec**:
+Com o entendimento da demanda formado (fases 1.0 a 1.5, e 1.6 quando aplicavel), o orquestrador delega uma revisao critica ao Codex **antes de criar qualquer artefato OpenSpec**:
 
 **Subagente:** `codex:codex-rescue` com `--effort high`
 **Modo:** somente leitura — o Codex nao modifica arquivos
@@ -169,11 +237,13 @@ O orquestrador escreve os tres artefatos diretamente — sem delegar:
 
 ### Gate de suficiencia (Fase 4.5) — `plan-sufficiency-check.md`
 
+Quando `PREDEFINED_PLAN=yes`, estes artefatos devem traduzir o plano recebido e enriquecido na Fase 1.6, nao substitui-lo por um plano novo. Preserve IDs, nomes de fases, entregaveis e decisoes do usuario quando forem uteis para rastreabilidade. Ajustes so devem ser feitos para compatibilizar o plano com OpenSpec, com o codebase real ou com riscos explicitamente registrados.
+
 Antes de consolidar, o orquestrador preenche um checklist minimo que valida se o plano esta maduro. Plano insuficiente nao avanca.
 
 ## Fase 5 - Consolidar o plano
 
-O orquestrador revisita o entendimento aprovado na Fase 2 e garante que os artefatos da Fase 4 estao alinhados. Atualiza `proposal.md`, `design.md` e `tasks.md` se necessario. O plano consolidado e a fonte da verdade para todo o restante do workflow.
+O orquestrador revisita o entendimento aprovado na Fase 2 e garante que os artefatos da Fase 4 estao alinhados. Quando `PREDEFINED_PLAN=yes`, revisita o resumo expandido da Fase 1.6 e o `review-entendimento.md` de bypass. Atualiza `proposal.md`, `design.md` e `tasks.md` se necessario. O plano consolidado e a fonte da verdade para todo o restante do workflow.
 
 ## Fase 6 - Classificacao das tasks
 
@@ -413,17 +483,78 @@ Se precisar ajuste, delegue para Codex com `--effort medium`.
 
 ## Fase 12 - Review pos-implementacao
 
-> **Excecao FRONTEND_ONLY:** Se toda a atividade for `FRONTEND_ONLY`, **nao delegue ao Codex**. O orquestrador faz review interno read-only, salva o resultado em `review-final.md` com a nota `"Codex ausente: atividade FRONTEND_ONLY"` e avanca para a Fase 13.
+> **Excecao FRONTEND_ONLY:** Se toda a atividade for `FRONTEND_ONLY`, **nao delegue ao Codex**. O orquestrador faz review interno read-only seguindo as secoes 12.1, 12.3 quando aplicavel e 12.5; salva o resultado em `review-final.md` com a nota `"Codex ausente: atividade FRONTEND_ONLY"` e so avanca para a Fase 13 quando a decisao permitir.
 
-Fluxo principal:
+Objetivo da fase: validar a implementacao final contra a demanda original, o plano consolidado, os contratos, as tasks executadas e os retornos dos subagentes. Esta fase e read-only: nao edite codigo durante o review. Se houver defeitos, volte para Fase 11 para integrar ajustes ou redelegar correcao.
+
+### 12.1 Preparar pacote de review
+
+Antes de delegar ao Codex ou fazer review interno, monte um pacote de contexto com:
+
+- demanda original do usuario;
+- classificacao `PREDEFINED_PLAN=yes|no`;
+- se `PREDEFINED_PLAN=yes`, o plano inicial recebido e o resumo expandido da Fase 1.6;
+- `review-entendimento.md`;
+- `proposal.md`, `design.md`, `tasks.md`, `tasks-classification.md`, `waves.md` e contratos em `contracts/*.md`;
+- `monitoring.md`, `workflow-log.md` e `subagents-context.md`;
+- resumo dos arquivos alterados;
+- comandos de build, testes e validacoes executadas;
+- falhas, bloqueios, fallbacks e decisoes do usuario durante a execucao.
+
+### 12.2 Fluxo principal
 
 - delegue ao Codex com `--effort high`;
+- informe que o review e somente leitura;
+- exija achados com severidade, arquivo/trecho quando aplicavel, impacto e correcao esperada;
 - salve o resultado em `review-final.md`.
 
-Fluxo de fallback:
+O prompt do review deve pedir verificacao explicita de:
+
+- aderencia ao objetivo original e ao escopo incluido/excluido;
+- aderencia a cada task e criterio de aceite em `tasks.md`;
+- diferencas entre implementacao real e `design.md`;
+- contratos API/UI, wire format, status codes, casing JSON e serializacao real;
+- integracao entre entregas de subagentes diferentes;
+- auth/autorizacao, validacoes, tratamento de erro e estados de UI;
+- migrations, persistencia, indices e integridade referencial quando houver banco;
+- testes executados, lacunas de teste e builds pendentes;
+- arquivos alterados fora do escopo;
+- regressao potencial em fluxos existentes;
+- qualidade do handoff final para Fase 13.
+
+### 12.3 Regra especial para plano pre-definido
+
+Quando `PREDEFINED_PLAN=yes`, a Fase 12 compensa o bypass da Fase 2. O review final deve ser mais critico e comparar a implementacao com o plano inicial do usuario, nao apenas com os artefatos OpenSpec derivados.
+
+`review-final.md` deve conter uma secao obrigatoria **Comparacao com plano pre-definido** com:
+
+- cada objetivo, fase, task ou entregavel do plano inicial;
+- status: `IMPLEMENTADO`, `PARCIAL`, `NAO_IMPLEMENTADO`, `ALTERADO_COM_JUSTIFICATIVA` ou `FORA_DO_ESCOPO`;
+- evidencia da implementacao ou motivo da divergencia;
+- decisao: aceitar, corrigir antes da Fase 13, ou pedir decisao ao usuario.
+
+Qualquer divergencia nao aprovada que mude escopo, comportamento, contrato, ordem de entrega ou decisao tecnica do usuario deve ser tratada como achado de alta severidade. O orquestrador nao avanca para Fase 13 enquanto essa divergencia nao for corrigida, justificada no plano consolidado, ou aprovada pelo usuario.
+
+### 12.4 Fluxo de fallback
 
 - se o review Codex vier com `QUOTA_EXHAUSTED`, o orquestrador faz review interno read-only;
-- registre no proprio `review-final.md` que o review foi fallback interno do orquestrador por indisponibilidade de quota do Codex.
+- registre no proprio `review-final.md` que o review foi fallback interno do orquestrador por indisponibilidade de quota do Codex;
+- mantenha as mesmas secoes obrigatorias do fluxo principal, incluindo a comparacao com plano pre-definido quando aplicavel.
+
+### 12.5 Resultado e loop de correcao
+
+`review-final.md` deve terminar com uma decisao:
+
+- `APROVADO`: pode seguir para Fase 13;
+- `APROVADO_COM_RESSALVAS`: pode seguir somente se as ressalvas forem documentadas como nao bloqueantes;
+- `REPROVADO`: nao avance; volte para Fase 11 ou redelegue ajustes.
+
+Se houver achados bloqueantes:
+
+1. registre os achados em `monitoring.md` e `workflow-log.md`;
+2. crie ou atualize tasks de correcao com agente responsavel;
+3. execute a correcao pela Fase 11;
+4. repita a Fase 12 focando nas areas alteradas e nos achados anteriores.
 
 ## Fase 13 - Verificacao OpenSpec
 
