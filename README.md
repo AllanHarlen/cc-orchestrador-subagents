@@ -2,59 +2,61 @@
 
 # cc-orchestrador-subagents
 
-Plugin de Claude Code para conduzir um workflow de desenvolvimento multiagente com OpenSpec, Codex, Antigravity/AGY e artefatos de auditoria.
+Claude Code plugin to conduct a multi-agent development workflow with OpenSpec, Codex, Antigravity/AGY and audit artifacts.
 
-## Visao geral
+**[Leia em Português](README.pt-BR.md)** — Portuguese version available.
 
-O `cc-orchestrador-subagents` organiza o desenvolvimento como um **Orchestrador de Harness** para Claude CLI/Claude Code. O Claude atua como **Orchestrador Principal**: mantem contexto, conduz OpenSpec, toma decisoes de roteamento, prepara artefatos de coordenacao, monta prompts, monitora execucao e consolida resultados. Ele nao deve implementar codigo produtivo diretamente durante o workflow orquestrado.
+## Overview
 
-Codex e Antigravity/AGY entram como subagentes especializados:
+The `cc-orchestrador-subagents` organizes development as a **Harness Orchestrator** for Claude CLI/Claude Code. Claude acts as the **Main Orchestrator**: maintains context, conducts OpenSpec, contracts, waves, validations, logs and user decisions.
 
-| Papel | Executor | Responsabilidade |
+Codex and Antigravity/AGY enter as specialized sub-agents:
+
+| Role | Executor | Responsibility |
 |---|---|---|
-| Orchestrador de Harness | Claude CLI / Claude Code | Coordena o workflow, OpenSpec, contratos, ondas, validacoes, logs e decisoes do usuario. |
-| Review de entendimento e plano | Codex (`codex:codex-rescue`) | Faz revisao critica read-only com `--effort high`. |
-| Implementacao back-end, banco, testes e ajustes | Codex (`codex:codex-rescue`) | Executa tasks nao front-end com `--effort medium`, sem fixar `--model`. |
-| Implementacao front-end e UX | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`) | Executa tasks `FRONTEND_ONLY` e fatias front-end de `FULLSTACK`, incluindo setup Vite/React, rotas, tipos TypeScript, clients API, componentes, hooks, estado e UX. |
-| Review pos-implementacao | Codex (`codex:codex-rescue`) | Revisa a entrega final com `--effort high` ou cai para review interno read-only do orquestrador quando faltar quota. |
+| Harness Orchestrator | Claude CLI / Claude Code | Coordinates workflow, OpenSpec, contracts, waves, validations, logs and user decisions. |
+| Understanding review and plan | Codex (`codex:codex-rescue`) | Performs critical read-only review with `--effort high`. |
+| Back-end implementation, database, tests and adjustments | Codex (`codex:codex-rescue`) | Executes non-front-end tasks with `--effort medium`, without fixing `--model`. |
+| Front-end implementation and UX | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`) | Executes `FRONTEND_ONLY` tasks and front-end slices of `FULLSTACK`, including Vite/React setup, routing, and UI implementation. |
+| Post-implementation review | Codex (`codex:codex-rescue`) | Reviews final delivery with `--effort high` or falls back to orchestrator's internal read-only review when quota is exhausted. |
 
-### Workflow completo
+### Complete Workflow
 
-- **Fase 0 - Preflight:** executa `node scripts/preflight.mjs`, valida dependencias, Codex, AGY, permissao `Bash(node:*)` e registra `autoRemediation` quando `.claude/settings.json` puder ser criado ou atualizado com seguranca.
-- **Fase 1 - Entendimento da demanda:** roda `/opsx:explore`, le o estado do projeto, specs existentes e mudancas anteriores. Duvidas de escopo, conflito com specs ou decisoes arquiteturais abertas sao resolvidas com `AskUserQuestion` antes de avancar.
-- **Fase 2 - Review do entendimento com Codex:** delega uma revisao read-only para Codex com `--effort high`, salva `review-entendimento.md` e resolve duvidas ou ajustes obrigatorios antes de criar artefatos OpenSpec. Hipoteses nao verificaveis exigem leitura dos arquivos relevantes antes de virar decisao no `design.md`.
-- **Fase 3 - Criacao da mudanca OpenSpec:** cria `openspec/changes/<nome>/` via `/openspec-new-change <nome>`.
-- **Fase 4 - Planejamento:** o Orchestrador Principal escreve diretamente `proposal.md`, `design.md` e `tasks.md`, com objetivo, escopo, impacto arquitetural, riscos, estrategia de testes e criterios de aceite.
-- **Fase 4.5 - Gate de suficiencia do plano:** preenche `plan-sufficiency-check.md`; plano insuficiente nao segue para delegacao.
-- **Fase 5 - Consolidacao do plano:** revisita o entendimento aprovado, aplica ajustes e torna `proposal.md`, `design.md` e `tasks.md` a fonte da verdade do restante do workflow.
-- **Fase 6 - Classificacao das tasks:** gera `tasks-classification.md` com categoria, dependencias, arquivos criticos, complexidade, `contractRequired`, `assignedAgent` e `routingReason`. A categoria decide o agente: `FRONTEND_ONLY` vai para AGY; back-end, banco, testes e reviews vao para Codex; `FULLSTACK` divide back-end para Codex e front-end para AGY.
-- **Fase 7 - Ondas de execucao:** monta `waves.md`, respeitando dependencias, contratos pendentes, schemas em mudanca e arquivos centrais compartilhados. Depois roda `validate-routing.mjs` e corrige qualquer divergencia antes de delegar.
-- **Fase 8 - Contratos API/UI:** cria `contracts/*.md` para toda troca front-back, incluindo endpoint, metodo, wire format, casing JSON, exemplos completos, status codes, estados de UI, permissoes, validacoes e comprovacao de serializacao real contra TypeScript.
-- **Fase 9 - Delegacao paralela:** envia tasks aos subagentes conforme `waves.md`. Codex recebe prompts sem `--model`; AGY recebe `--model <agyModel>`. Se uma task AGY tiver dois ou mais entregaveis independentes, o Orchestrador pode usar fan-out nativo Gemini via `--agy-parallel` e `--agy-subagent-model`.
-- **Fase 10 - Monitoramento:** acompanha `PENDING`, `RUNNING`, `BLOCKED`, `DONE`, `FAILED`, `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT` e outros estados, registrando evidencias em `monitoring.md`, `workflow-log.md` e `subagents-context.md`.
-- **Fase 11 - Integracao:** valida aderencia a `tasks.md`, contratos, wire format, casing JSON, serializacao real, escopo de arquivos, testes e build. Ajustes pontuais voltam para Codex com `--effort medium`.
-- **Fase 12 - Review pos-implementacao:** delega review final read-only ao Codex com `--effort high` e salva `review-final.md`. Se Codex ficar sem quota em review, o proprio Orchestrador faz review interno read-only e registra o fallback.
-- **Fase 13 - Verificacao OpenSpec:** executa `/openspec-verify-change <nome>`, `/openspec-sync-specs <nome>` e `/openspec-archive-change <nome>` quando aplicavel.
-- **Fase 14 - Relatorios finais:** cria `workflow-log.md`, `subagents-context.md` e `implementation-report.md`, consolidando timeline, contratos, validacoes, subagentes, Conversation IDs do AGY e tokens por agente.
-- **Fase 15 - Entrega ao usuario:** publica o resumo final, caminhos dos artefatos, validacoes executadas, bloqueios restantes e instrucoes de negocio.
+- **Phase 0 - Preflight:** runs `node scripts/preflight.mjs`, validates dependencies, Codex, AGY, `Bash(node:*)` permission and registers `autoRemediation` when `.claude/settings.json` can be created.
+- **Phase 1 - Demand understanding:** runs `/opsx:explore`, reads project state, existing specs and previous changes. Scope doubts, conflicts with specs or open architectural decisions are resolved before advancing.
+- **Phase 2 - Understanding review with Codex:** delegates read-only review to Codex with `--effort high`, saves `review-entendimento.md` and resolves doubts or mandatory adjustments before creating the change.
+- **Phase 3 - OpenSpec change creation:** creates `openspec/changes/<name>/` via `/openspec-new-change <name>`.
+- **Phase 4 - Planning:** Main Orchestrator directly writes `proposal.md`, `design.md` and `tasks.md`, with objective, scope, architectural impact, risks, testing strategy and acceptance criteria.
+- **Phase 4.5 - Plan sufficiency gate:** fills `plan-sufficiency-check.md`; insufficient plan does not proceed to delegation.
+- **Phase 5 - Plan consolidation:** revisits approved understanding, applies adjustments and makes `proposal.md`, `design.md` and `tasks.md` the source of truth for the rest of the workflow.
+- **Phase 6 - Task classification:** generates `tasks-classification.md` with category, dependencies, critical files, complexity, `contractRequired`, `assignedAgent` and `routingReason`.
+- **Phase 7 - Execution waves:** assembles `waves.md`, respecting dependencies, pending contracts, changing schemas and shared central files. Then runs `validate-routing.mjs` and corrects routing errors.
+- **Phase 8 - API/UI contracts:** creates `contracts/*.md` for every front-back exchange, including endpoint, method, wire format, JSON casing, complete examples, status codes, UI states, permissions and error scenarios.
+- **Phase 9 - Parallel delegation:** sends tasks to sub-agents according to `waves.md`. Codex receives prompts without `--model`; AGY receives `--model <agyModel>`. If an AGY task has two or more independent deliverables, fan-out is activated.
+- **Phase 10 - Monitoring:** tracks `PENDING`, `RUNNING`, `BLOCKED`, `DONE`, `FAILED`, `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT` and other states, recording evidence in `monitoring.md`.
+- **Phase 11 - Integration:** validates adherence to `tasks.md`, contracts, wire format, JSON casing, real serialization, file scope, tests and build. Point adjustments go back to Codex with `--effort medium`.
+- **Phase 12 - Post-implementation review:** delegates final read-only review to Codex with `--effort high` and saves `review-final.md`. If Codex runs out of quota on review, the Orchestrator itself does internal review.
+- **Phase 13 - OpenSpec verification:** runs `/openspec-verify-change <name>`, `/openspec-sync-specs <name>` and `/openspec-archive-change <name>` when applicable.
+- **Phase 14 - Final reports:** creates `workflow-log.md`, `subagents-context.md` and `implementation-report.md`, consolidating timeline, contracts, validations, sub-agents, AGY Conversation IDs and delivery status.
+- **Phase 15 - User delivery:** publishes final summary, artifact paths, executed validations, remaining blockers and business instructions.
 
-### Regras operacionais principais
+### Main Operational Rules
 
-- **Fan-out AGY:** `--agy-parallel` e `--agy-subagent-model` ativam subagentes Gemini nativos dentro da task AGY. Requer `cc-antigravity-plugin >= 3.6.0`.
-- **Modelo AGY:** sem override, o Orchestrador escolhe `agyModel` por heuristica; o usuario pode forcar com `/orchestrator --agy-model <modelo> <demanda>`.
-- **Prompts Codex:** nao fixam `--model`; usam apenas `--effort medium` para implementacao/handoff/ajustes e `--effort high` para reviews.
-- **Contratos obrigatorios:** qualquer troca front-back exige contrato antes de paralelizar.
-- **Wire format:** todo contrato precisa explicitar casing JSON, nomes de campos, exemplos completos e validacao de serializacao real.
-- **Roteamento por categoria:** `FRONTEND_ONLY` fica com Antigravity/AGY, inclusive setup front-end; Codex so assume front-end como fallback operacional registrado.
-- **Quota Codex:** falta de quota em implementacao bloqueia e pede decisao do usuario; falta de quota em review aciona review interno read-only do Orchestrador.
-- **Sandbox Codex:** rede externa bloqueada para pacotes/restore, pacote ausente no cache local ou escrita fora do working directory permitido viram `BLOCKED` com evidencia.
-- **Duvidas do `/opsx:explore`:** ambiguidades de escopo, conflitos com specs e decisoes arquiteturais abertas sao resolvidas antes do planejamento.
-- **Hipoteses nao verificaveis:** ajustes obrigatorios do review Codex que dependem de inspecao do repositorio precisam ser confirmados ou descartados com leitura real de arquivos.
-- **Limite AGY no Windows:** prompts AGY acima de 28.000 chars sao divididos em subtasks por entregaveis antes da delegacao para evitar `ENAMETOOLONG`.
+- **AGY Fan-out:** `--agy-parallel` and `--agy-subagent-model` activate native Gemini sub-agents within the AGY task. Requires `cc-antigravity-plugin >= 3.6.0`.
+- **AGY Model:** without override, the Orchestrator chooses `agyModel` by heuristic; the user can force with `/orchestrator --agy-model <model> <demand>`.
+- **Codex Prompts:** do not fix `--model`; use only `--effort medium` for implementation/handoff/adjustments and `--effort high` for reviews.
+- **Mandatory contracts:** any front-back exchange requires contract before parallelizing.
+- **Wire format:** every contract must explicitly state JSON casing, field names, complete examples and real serialization validation.
+- **Routing by category:** `FRONTEND_ONLY` goes to Antigravity/AGY, including front-end setup; Codex only assumes front-end as a registered operational fallback.
+- **Codex Quota:** lack of quota on implementation blocks and requests user decision; lack of quota on review triggers orchestrator's internal read-only review.
+- **Codex Sandbox:** external network blocked for packages/restore, missing package in local cache or write outside allowed working directory becomes `BLOCKED` with evidence.
+- **AGY Doubts from `/opsx:explore`:** scope ambiguities, conflicts with specs and open architectural decisions are resolved before planning.
+- **Non-verifiable hypotheses:** mandatory Codex review adjustments that depend on repository inspection need to be confirmed or discarded with real file reading.
+- **AGY Limit on Windows:** AGY prompts above 28,000 chars are divided into subtasks by deliverables before delegation to avoid `ENAMETOOLONG`.
 
-## Dependencias oficiais
+## Official Dependencies
 
-Este plugin depende do Codex plugin oficial para Claude Code: https://github.com/openai/codex-plugin-cc.
+This plugin depends on the official Codex plugin for Claude Code: https://github.com/openai/codex-plugin-cc.
 
 ```text
 /plugin marketplace add openai/codex-plugin-cc
@@ -63,94 +65,94 @@ Este plugin depende do Codex plugin oficial para Claude Code: https://github.com
 /codex:setup
 ```
 
-O marketplace/dependency usado nos manifests e `openai-codex`, e o subagente esperado e `codex:codex-rescue`.
+The marketplace/dependency used in manifests is `openai-codex`, and the expected sub-agent is `codex:codex-rescue`.
 
-Para front-end, o orquestrador espera `cc-antigravity-plugin >= 3.6.0` (obrigatorio para `--parallel`/`--subagent-model`), com estes arquivos presentes no plugin instalado:
+For front-end, the orchestrator expects `cc-antigravity-plugin >= 3.6.0` (mandatory for `--parallel`/`--subagent-model`), with these files present in the installed plugin:
 
 - `agents/antigravity-agent.md`
 - `commands/antigravity.md`
 - `scripts/antigravity-bridge.js`
 
-## Codex: modelo e effort
+## Codex: Model and Effort
 
-O workflow nao fixa mais modelos Codex como `gpt-5.4` ou `gpt-5.5`.
+The workflow no longer fixes Codex models like `gpt-5.4` or `gpt-5.5`.
 
 Use:
 
-- `codex:codex-rescue` com `--effort medium` para implementacao, handoff e ajustes;
-- `codex:codex-rescue` com `--effort high` para review de plano e review pos-implementacao.
+- `codex:codex-rescue` with `--effort medium` for implementation, handoff and adjustments;
+- `codex:codex-rescue` with `--effort high` for plan review and post-implementation review.
 
-O modelo fica no padrao disponivel na conta do usuario.
+The model defaults to what is available in the user's account.
 
-## Codex: limites de sandbox
+## Codex: Sandbox Limits
 
-Quando o Codex estiver em ambiente sandboxado, trate como bloqueio operacional:
+When Codex is in a sandboxed environment, treat as operational blocker:
 
-- falha de rede externa para pacotes, restore ou registries, como `NU1301` ao acessar `https://api.nuget.org/v3/index.json`;
-- pacote necessario ausente do cache local;
-- `UnauthorizedAccessException` ou erro equivalente ao tentar criar/editar arquivos fora do working directory permitido.
+- external network failure for packages, restore or registries, like `NU1301` accessing `https://api.nuget.org/v3/index.json`;
+- required package missing from local cache;
+- `UnauthorizedAccessException` or equivalent error when trying to create/edit files outside allowed working directory.
 
-Nesses casos o subagente deve parar, registrar evidencia e retornar `Status: BLOCKED`, sem insistir em retries longos nem tentar contornar o sandbox. O orquestrador pede decisao do usuario ou ajusta o handoff. Para tasks de UI sem dependencia de rede, mantenha o roteamento primario para Antigravity/AGY.
+In these cases the sub-agent must stop, record evidence and return `Status: BLOCKED`, without insisting on long retries or trying to bypass the sandbox.
 
-## Roteamento de front-end
+## Front-end Routing
 
-O agente e escolhido pela categoria da task, nao pela aparencia do trabalho. Se a task for `FRONTEND_ONLY`, use `cc-antigravity-plugin:antigravity-agent` mesmo quando ela for setup Vite/React, React Router, tipos TypeScript, servicos `fetch` ou componentes simples.
+The agent is chosen by task category, not by work appearance. If the task is `FRONTEND_ONLY`, use `cc-antigravity-plugin:antigravity-agent` even when it is Vite/React setup, React routing, or other front-end infrastructure.
 
-Codex so deve receber front-end como fallback operacional registrado depois de `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, falha de ferramenta/escrita do AGY ou decisao explicita do usuario.
+Codex should only receive front-end as a registered operational fallback after `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, AGY tool/write failure or explicit decision.
 
-## AGY: delegacao front-end
+## AGY: Front-end Delegation
 
-Tasks de front-end sao direcionadas ao Antigravity/AGY por categoria, passando `--model <agyModel>` para o bridge do plugin.
+Front-end tasks are routed to Antigravity/AGY by category, passing `--model <agyModel>` to the plugin bridge.
 
-Politica padrao:
+Default policy:
 
-- `gemini-3.5-flash-medium` para a maioria das tasks;
-- `gemini-3.1-pro-low` para tasks complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressao;
-- `gemini-3.1-pro-high` apenas em casos criticos;
-- override manual disponivel em `/orchestrator --agy-model <modelo> <demanda>`.
+- `gemini-3.5-flash-medium` for most tasks;
+- `gemini-3.1-pro-low` for complex tasks, multi-route, multi-file, with delicate API/UI contract or high regression risk;
+- `gemini-3.1-pro-high` only in critical cases;
+- manual override available via `/orchestrator --agy-model <model> <demand>`.
 
-## AGY: fan-out nativo de subagentes Gemini
+## AGY: Native Gemini Sub-agent Fan-out
 
-Quando uma task front-end produz dois ou mais entregaveis independentes (ex.: tres componentes React, dois relatorios HTML), o orquestrador pode acionar o fan-out nativo do AGY via `DefineSubagent`/`invoke_subagent`/`ManageSubagents`. O AGY decide a contagem, executa concorrentemente e reporta um Conversation ID por subagente.
+When a front-end task produces two or more independent deliverables (e.g., three React components, two HTML reports), the orchestrator can activate AGY's native fan-out via `DefineSubagent` inside the prompt.
 
-O mecanismo e puramente intra-task: continua sendo 1 task = 1 delegacao AGY; `monitoring.md`, contratos e `validate-routing.mjs` ficam intactos.
+The mechanism is purely intra-task: it remains 1 task = 1 AGY delegation; `monitoring.md`, contracts and `validate-routing.mjs` remain intact.
 
-### Flags novas
+### New Flags
 
-| Flag | Comportamento |
+| Flag | Behavior |
 |---|---|
-| `--agy-parallel` | Forca fan-out em todas as tasks AGY da execucao. O AGY decide a contagem. |
-| `--agy-subagent-model <modelo>` | Modelo dos subagentes Gemini. Implica `--agy-parallel`. Default: `inherit` (herda `agyModel`). |
+| `--agy-parallel` | Forces fan-out on all AGY tasks in the execution. AGY decides the count. |
+| `--agy-subagent-model <model>` | Model of Gemini sub-agents. Implies `--agy-parallel`. Default: `inherit` (inherits `agyModel`). |
 
-### Exemplos
+### Examples
 
 ```text
-# Fan-out forcado pelo usuario
-/orchestrator --agy-parallel "Crie tres componentes React independentes: Header, Sidebar e Footer"
+# Fan-out forced by user
+/orchestrator --agy-parallel "Create three independent React components: Header, Sidebar and Footer"
 
-# Planejador Pro coordenando subagentes Flash
+# Pro Planner coordinating Flash sub-agents
 /orchestrator --agy-model gemini-3.1-pro-low --agy-subagent-model gemini-3.5-flash-medium \
-  "Gere dois relatorios HTML: impostos em carros eletricos e em carros a combustao"
+  "Generate two HTML reports: taxes on electric cars and combustion cars"
 
-# Heuristica automatica (orquestrador decide)
-/orchestrator "Crie Header, Sidebar e Footer como componentes separados em src/components/"
+# Automatic heuristic (orchestrator decides)
+/orchestrator "Create Header, Sidebar and Footer as separate components in src/components/"
 ```
 
-### Quando o fan-out e usado por heuristica
+### When Fan-out is Used by Heuristic
 
-O orquestrador liga `--parallel` automaticamente quando uma task `FRONTEND_ONLY` (ou fatia front-end de `FULLSTACK`) lista dois ou mais entregaveis independentes nos criterios de aceite — e nenhum deles compartilha arquivo central, depende de contrato pendente ou schema em mudanca.
+The orchestrator turns on `--parallel` automatically when a `FRONTEND_ONLY` task (or front-end slice of `FULLSTACK`) lists two or more independent deliverables in acceptance criteria — and the task logic is not shared between them.
 
-Entregaveis dependentes ou que compartilham estado permanecem no subagente AGY unico, sem `--parallel`.
+Dependent deliverables or those sharing state remain in the single AGY sub-agent, without `--parallel`.
 
-### Campos novos em `tasks-classification.md` e `waves.md` (tasks AGY)
+### New Fields in `tasks-classification.md` and `waves.md` (AGY Tasks)
 
 - `agyParallel: yes|no`
 - `agyParallelSource: user|heuristic`
-- `agySubagentModel: <modelo>|inherit`
+- `agySubagentModel: <model>|inherit`
 
-Modelos aceitos em `--agy-model` e `--agy-subagent-model`:
+Models accepted in `--agy-model` and `--agy-subagent-model`:
 
-| Modelo | Tier |
+| Model | Tier |
 |---|---|
 | `gemini-3.5-flash-low` | Flash |
 | `gemini-3.5-flash-medium` | Flash |
@@ -162,15 +164,15 @@ Modelos aceitos em `--agy-model` e `--agy-subagent-model`:
 | `gpt-oss-120b-medium` | GPT |
 | `auto` | — |
 
-## Preflight e auto-remediacao
+## Preflight and Auto-remediation
 
-Rode:
+Run:
 
 ```bash
 node scripts/preflight.mjs
 ```
 
-O JSON agora inclui:
+The JSON now includes:
 
 - `status`
 - `checks`
@@ -178,21 +180,21 @@ O JSON agora inclui:
 - `remediation`
 - `autoRemediation`
 
-O `preflight` agora tambem valida:
+Preflight also validates:
 
-- versao do `agy` encontrada no PATH;
+- version of `agy` found in PATH;
 - `cc-antigravity-plugin >= 3.6.0`;
-- presenca de `agents/antigravity-agent.md`, `commands/antigravity.md` e `scripts/antigravity-bridge.js` no plugin AGY instalado.
+- presence of `agents/antigravity-agent.md`, `commands/antigravity.md` and `scripts/antigravity-bridge.js` in installed AGY plugin.
 
-### Escopo da auto-remediacao
+### Auto-remediation Scope
 
-So existe auto-correcao para `codex-companion-bash`:
+Auto-correction only exists for `codex-companion-bash`:
 
-- se `.claude/settings.json` nao existir, ele pode ser criado;
-- se existir com JSON valido, `permissions.allow` recebe `Bash(node:*)`;
-- se existir com JSON invalido, o arquivo nao e sobrescrito.
+- if `.claude/settings.json` does not exist, it can be created;
+- if it exists with valid JSON, `permissions.allow` receives `Bash(node:*)`;
+- if it exists with invalid JSON, the file is not overwritten.
 
-Exemplo de baseline minimo:
+Example of minimum baseline:
 
 ```json
 {
@@ -204,129 +206,129 @@ Exemplo de baseline minimo:
 }
 ```
 
-## Duvidas do `/opsx:explore` (Fase 1)
+## `/opsx:explore` Doubts (Phase 1)
 
-Apos executar `/opsx:explore` na Fase 1, o orquestrador verifica se ha duvidas de planejamento pendentes no resultado. Se houver, usa `AskUserQuestion` para resolvê-las com o usuario antes de avancar para 1.2.
+After running `/opsx:explore` in Phase 1, the orchestrator checks if there are pending planning doubts in the result. If so, uses `AskUserQuestion` to resolve them with the user before advancing.
 
-Situacoes que disparam `AskUserQuestion`:
+Situations that trigger `AskUserQuestion`:
 
-- ambiguidade de escopo ou requisito que bloqueia o entendimento da demanda;
-- conflito entre a demanda atual e specs ou mudancas anteriores em `openspec/`;
-- decisao de arquitetura em aberto que impede mapear o impacto arquitetural corretamente.
+- scope ambiguity or requirement that blocks understanding of the demand;
+- conflict between current demand and specs or previous changes in `openspec/`;
+- open architectural decision that prevents mapping architectural impact correctly.
 
-O orquestrador nao avanca para 1.2 com duvidas pendentes do `/opsx:explore` sem registro da resposta do usuario.
+The orchestrator does not advance to Phase 1.2 with pending `/opsx:explore` doubts without recording user's answer.
 
-## Limite de prompt AGY — limitacao do CLI no Windows
+## AGY Prompt Limit — CLI Limitation on Windows
 
-O CLI do AGY e invocado via `child_process` pelo bridge do plugin. No Windows, o Node.js passa o prompt como argumento de linha de comando, aplicando quoting automatico: cada `"` vira `\"` e cada `\` antes de `"` dobra. Isso infla o tamanho codificado em ~14% acima do tamanho raw do texto.
+The AGY CLI is invoked via `child_process` by the plugin bridge. On Windows, Node.js passes the prompt as a command-line argument, applying automatic quoting: each `"` becomes `\"` and each `\` doubles.
 
-Resultado dos testes empiricos:
+Results from empirical tests:
 
-| Tipo de conteudo | Prompt maximo | Break point |
+| Content Type | Max Prompt | Break Point |
 |---|---|---|
-| Texto puro (xxx...) | 32.694 chars | 32.695 → `ENAMETOOLONG` |
-| Prompt real (aspas, `\`, XML, `\n`) | ~28.520 chars | ~29.140 → `ENAMETOOLONG` |
+| Plain text (xxx...) | 32,694 chars | 32,695 → `ENAMETOOLONG` |
+| Real prompt (quotes, `\`, XML, `\n`) | ~28,520 chars | ~29,140 → `ENAMETOOLONG` |
 
-**Threshold conservador adotado: 28.000 chars.**
+**Conservative threshold adopted: 28,000 chars.**
 
-Antes de delegar qualquer task para AGY, o orquestrador monta o prompt completo e conta os caracteres. Se exceder 28.000 chars:
+Before delegating any task to AGY, the orchestrator assembles the complete prompt and counts the characters. If it exceeds 28,000 chars:
 
-1. Divide os entregaveis da task em dois grupos independentes (A e B).
-2. Cria subtasks `<ID>-a` e `<ID>-b`, cada uma cobrindo um grupo.
-3. Atualiza `tasks-classification.md` e `waves.md`.
-4. Remonta os dois prompts e valida que cada um esta abaixo do limite.
-5. Registra a divisao em `monitoring.md` e `workflow-log.md` com o tamanho original e o motivo.
+1. Divides the task's deliverables into two independent groups (A and B).
+2. Creates subtasks `<ID>-a` and `<ID>-b`, each covering one group.
+3. Updates `tasks-classification.md` and `waves.md`.
+4. Reassembles the two prompts and validates that each is below the limit.
+5. Records the split in `monitoring.md` and `workflow-log.md` with original size and reason.
 
-Se a task for monolitica e indivisivel por entregaveis, o orquestrador tenta reduzir `Arquivos e modulos relevantes` e, como ultimo recurso, registra `promptOverflow: true` e pede decisao ao usuario.
+If the task is monolithic and indivisible by deliverables, the orchestrator tries to reduce `Relevant files and modules` and, as a last resort, records `promptOverflow: true` and requests user decision.
 
-## Hipoteses nao verificaveis no review Codex (Fase 2)
+## Non-verifiable Hypotheses in Codex Review (Phase 2)
 
-Ao processar os Ajustes Obrigatorios retornados pelo Codex na Fase 2, o orquestrador identifica itens que usam linguagem como "hipotese nao verificavel sem inspecionar o repositorio", "nao confirmado sem ler o codigo", "assume sem evidencia" ou similar.
+When processing Mandatory Adjustments returned by Codex in Phase 2, the orchestrator identifies items using language like "non-verifiable hypothesis without inspecting the repository", "not confirmed without reading code", etc.
 
-Para cada item desse tipo, o orquestrador **nao escreve `design.md`** antes de:
+For each such item, the orchestrator **does not write `design.md`** before:
 
-1. identificar os arquivos relevantes para verificar a hipotese;
-2. ler esses arquivos com `Read` ou `Grep`;
-3. confirmar ou descartar a hipotese com base no codigo real;
-4. registrar a conclusao em `review-entendimento.md` com o arquivo lido, o trecho relevante e a decisao tomada.
+1. identifying relevant files to verify the hypothesis;
+2. reading those files with `Read` or `Grep`;
+3. confirming or discarding the hypothesis based on actual code;
+4. recording the conclusion in `review-entendimento.md` with the file read, relevant snippet and decision made.
 
-Hipoteses nao verificadas travadas como verdade no `design.md` causam cascata de implementacao errada detectada so no review pos-implementacao.
+Unverified hypotheses locked as truth in `design.md` cause implementation cascade detected only in post-implementation review.
 
-## Politica de quota
+## Quota Policy
 
-### Codex em implementacao, ajuste ou handoff
+### Codex on Implementation, Adjustment or Handoff
 
-Se houver `QUOTA_EXHAUSTED`:
+If `QUOTA_EXHAUSTED`:
 
-- marcar `BLOCKED`;
-- registrar evidencia;
-- pedir decisao ao usuario.
+- mark `BLOCKED`;
+- record evidence;
+- request user decision.
 
-O orquestrador nao continua editando codigo produtivo por conta propria.
+The orchestrator does not continue editing productive code on its own.
 
-### Codex em review
+### Codex on Review
 
-Se houver `QUOTA_EXHAUSTED`:
+If `QUOTA_EXHAUSTED`:
 
-- o orquestrador faz review interno read-only;
-- salva o resultado em `review-final.md`;
-- nao edita codigo produtivo.
+- the orchestrator does internal read-only review;
+- saves the result in `review-final.md`;
+- does not edit productive code.
 
 ### Antigravity/AGY
 
-Antigravity/AGY continua com fallback controlado para Codex apenas quando for seguro.
+Antigravity/AGY continues with controlled fallback to Codex only when safe.
 
-O bridge do plugin retorna status cru:
+The plugin bridge returns raw status:
 
 - `QUOTA_EXAUSTED`
 - `AUTH_REQUIRED`
 - `TIMEOUT`
 - `AGY_MISSING`
 
-O orquestrador deve registrar esses valores como vierem do bridge.
+The orchestrator must record these values as they come from the bridge.
 
-## Contratos obrigatorios
+## Mandatory Contracts
 
-Contrato e obrigatorio sempre que houver troca de dados entre front-end e back-end.
+Contract is mandatory whenever there is data exchange between front-end and back-end.
 
-Isso vale para:
+This applies to:
 
-- tasks `FULLSTACK`;
-- pares dependentes `BACKEND_ONLY` + `FRONTEND_ONLY`.
+- `FULLSTACK` tasks;
+- dependent pairs `BACKEND_ONLY` + `FRONTEND_ONLY`.
 
-Na Fase 6, cada task deve registrar `contractRequired: yes|no`.
+In Phase 6, each task must register `contractRequired: yes|no`.
 
-Para tasks `FRONTEND_ONLY` e para a fatia front-end de `FULLSTACK`, registre tambem:
+For `FRONTEND_ONLY` tasks and front-end slice of `FULLSTACK`, also register:
 
 - `agyModel`
 - `agyModelSource: user|heuristic`
 
-O validador de roteamento passa a exigir esses campos nas tasks AGY e falha se:
+The routing validator now requires these fields on AGY tasks and fails if:
 
-- uma task AGY nao registrar `agyModel`;
-- `agyModelSource` estiver ausente;
-- o modelo estiver fora da allowlist;
-- `FRONTEND_ONLY` estiver apontando para Codex como agente primario.
+- an AGY task does not register `agyModel`;
+- `agyModelSource` is missing;
+- the model is outside the allowlist;
+- `FRONTEND_ONLY` points to Codex as primary agent.
 
-Na Fase 8, o orquestrador cria `contracts/*.md` para todo item com `contractRequired: yes`.
+In Phase 8, the orchestrator creates `contracts/*.md` for every item with `contractRequired: yes`.
 
-## Wire format e serializacao
+## Wire Format and Serialization
 
-Todo contrato deve documentar:
+Every contract must document:
 
-- casing JSON esperado;
-- nomes exatos dos campos;
-- exemplos completos de request e response;
-- serializer global ou atributos de serializacao quando houver;
-- validacao da serializacao real contra o TypeScript consumidor.
+- expected JSON casing;
+- exact field names;
+- complete request and response examples;
+- global serializer or serialization attributes when present;
+- validation of real serialization against the TypeScript consumer.
 
-Em especial para C# + TypeScript:
+Especially for C# + TypeScript:
 
-- DTO interno em `PascalCase` nao basta;
-- payload JSON esperado em `camelCase` precisa estar documentado;
-- a compatibilidade deve ser validada no payload real, nao apenas em tipos TypeScript.
+- internal DTO in `PascalCase` is not enough;
+- expected JSON payload in `camelCase` must be documented;
+- compatibility must be validated on actual payload, not just TypeScript types.
 
-## Arquivos principais
+## Main Files
 
 - `commands/orchestrator.md`
 - `skills/orchestrator-multi-agent-development/SKILL.md`
@@ -338,14 +340,14 @@ Em especial para C# + TypeScript:
 - `skills/orchestrator-multi-agent-development/assets/monitoring-template.md`
 - `skills/orchestrator-multi-agent-development/assets/implementation-report-template.md`
 
-## Validacao recomendada
+## Recommended Validation
 
 ```bash
 node --check skills/orchestrator-multi-agent-development/scripts/preflight.mjs
 node scripts/preflight.mjs
 rg --line-number --fixed-strings -- '--model gpt-5.4-codex' commands skills
 rg --line-number --fixed-strings -- '--model gpt-5.5-codex' commands skills
-node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs openspec/changes/<nome>
+node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs openspec/changes/<name>
 rg --line-number --fixed-strings -- 'QUOTA_EXAUSTED' README.md commands skills
 rg --line-number --fixed-strings -- 'agyModelSource' README.md commands skills
 rg --line-number --fixed-strings -- 'agyParallel' README.md commands skills
