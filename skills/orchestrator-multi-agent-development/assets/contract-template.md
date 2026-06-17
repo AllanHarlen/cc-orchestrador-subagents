@@ -1,6 +1,6 @@
 # Contrato API/UI - <TASK ID OU PAR> - <TITULO>
 
-> Salve em `openspec/changes/<nome>/contracts/<task-id-ou-par>.md`.
+> Salve em `orchestration/<nome>/contracts/<task-id-ou-par>.md`.
 
 ## Contract Metadata
 

@@ -5,14 +5,14 @@ Contrato e obrigatorio sempre que houver troca de dados entre front-end e back-e
 ## Onde salvar
 
 ```text
-openspec/changes/<nome>/contracts/<task-id-ou-par>.md
+orchestration/<nome>/contracts/<task-id-ou-par>.md
 ```
 
 Use um arquivo por task `FULLSTACK` ou por par dependente front-back quando a classificacao estiver separada.
 
 ## Quando `contractRequired` deve ser `yes`
 
-Marque `contractRequired: yes` em `tasks-classification.md` quando houver qualquer um destes casos:
+Marque `contractRequired: yes` em `tasks-classification.md` (Fase 2) quando houver qualquer um destes casos:
 
 - endpoint novo ou alterado;
 - resposta JSON consumida por tela, hook, store, form ou componente;

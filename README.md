@@ -2,56 +2,55 @@
 
 # cc-orchestrador-subagents
 
-Claude Code plugin to conduct a multi-agent development workflow with OpenSpec, Codex, Antigravity/AGY and audit artifacts.
+Claude Code plugin to conduct a multi-agent development workflow from an existing PRD/spec, with Codex, Antigravity/AGY and audit artifacts.
 
 **[Leia em Português](README.pt-BR.md)** — Portuguese version available.
 
 ## Overview
 
-The `cc-orchestrador-subagents` organizes development as a **Harness Orchestrator** for Claude CLI/Claude Code. Claude acts as the **Main Orchestrator**: maintains context, conducts OpenSpec, contracts, waves, validations, logs and user decisions.
+The `cc-orchestrador-subagents` organizes development as a **Harness Orchestrator** for Claude CLI/Claude Code. Claude acts as the **Main Orchestrator**: its only goal is to **orchestrate the agents' work**. It does not do demand discovery or planning — it works exclusively on projects that already have a **PRD or pre-established specs**.
+
+The user provides the specification via file mention (`@docs/prd.md`) or by sending the PRD/spec file. That document is the **source of truth**: the orchestrator ingests it, classifies tasks, builds waves, generates contracts, delegates, monitors, integrates and reviews.
 
 Codex and Antigravity/AGY enter as specialized sub-agents:
 
 | Role | Executor | Responsibility |
 |---|---|---|
-| Harness Orchestrator | Claude CLI / Claude Code | Coordinates workflow, OpenSpec, contracts, waves, validations, logs and user decisions. |
-| Understanding review and plan | Codex (`codex:codex-rescue`) | Performs critical read-only review with `--effort high`. |
+| Harness Orchestrator | Claude CLI / Claude Code | Ingests the PRD/spec and coordinates workflow, contracts, waves, validations, logs and user decisions. |
 | Back-end implementation, database, tests and adjustments | Codex (`codex:codex-rescue`) | Executes non-front-end tasks with `--effort medium`, without fixing `--model`. |
 | Front-end implementation and UX | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`) | Executes `FRONTEND_ONLY` tasks and front-end slices of `FULLSTACK`, including Vite/React setup, routing, and UI implementation. |
-| Post-implementation review | Codex (`codex:codex-rescue`) | Reviews final delivery with `--effort high` or falls back to orchestrator's internal read-only review when quota is exhausted. |
+| Back-end post-implementation review | Codex (`codex:codex-rescue`) | Reviews **back-end only** with `--effort high` or falls back to orchestrator's internal read-only review when quota is exhausted. |
+| Front-end post-implementation review | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--model gemini-3.1-pro-high`) | Reviews **front-end only** read-only or falls back to orchestrator's internal review when AGY is unavailable. |
 
 ### Complete Workflow
 
 - **Phase 0 - Preflight:** runs `node scripts/preflight.mjs`, validates dependencies, Codex, AGY, `Bash(node:*)` permission and registers `autoRemediation` when `.claude/settings.json` can be created.
-- **Phase 1 - Demand understanding:** runs `/opsx:explore`, reads project state, existing specs and previous changes. Scope doubts, conflicts with specs or open architectural decisions are resolved before advancing.
-- **Phase 2 - Understanding review with Codex:** delegates read-only review to Codex with `--effort high`, saves `review-entendimento.md` and resolves doubts or mandatory adjustments before creating the change.
-- **Phase 3 - OpenSpec change creation:** creates `openspec/changes/<name>/` via `/openspec-new-change <name>`.
-- **Phase 4 - Planning:** Main Orchestrator directly writes `proposal.md`, `design.md` and `tasks.md`, with objective, scope, architectural impact, risks, testing strategy and acceptance criteria.
-- **Phase 4.5 - Plan sufficiency gate:** fills `plan-sufficiency-check.md`; insufficient plan does not proceed to delegation.
-- **Phase 5 - Plan consolidation:** revisits approved understanding, applies adjustments and makes `proposal.md`, `design.md` and `tasks.md` the source of truth for the rest of the workflow.
-- **Phase 6 - Task classification:** generates `tasks-classification.md` with category, dependencies, critical files, complexity, `contractRequired`, `assignedAgent` and `routingReason`.
-- **Phase 7 - Execution waves:** assembles `waves.md`, respecting dependencies, pending contracts, changing schemas and shared central files. Then runs `validate-routing.mjs` and corrects routing errors.
-- **Phase 8 - API/UI contracts:** creates `contracts/*.md` for every front-back exchange, including endpoint, method, wire format, JSON casing, complete examples, status codes, UI states, permissions and error scenarios.
-- **Phase 9 - Parallel delegation:** sends tasks to sub-agents according to `waves.md`. Codex receives prompts without `--model`; AGY receives `--model <agyModel>`. If an AGY task has two or more independent deliverables, fan-out is activated.
-- **Phase 10 - Monitoring:** tracks `PENDING`, `RUNNING`, `BLOCKED`, `DONE`, `FAILED`, `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT` and other states, recording evidence in `monitoring.md`.
-- **Phase 11 - Integration:** validates adherence to `tasks.md`, contracts, wire format, JSON casing, real serialization, file scope, tests and build. Point adjustments go back to Codex with `--effort medium`.
-- **Phase 12 - Post-implementation review:** delegates final read-only review to Codex with `--effort high` and saves `review-final.md`. If Codex runs out of quota on review, the Orchestrator itself does internal review.
-- **Phase 13 - OpenSpec verification:** runs `/openspec-verify-change <name>`, `/openspec-sync-specs <name>` and `/openspec-archive-change <name>` when applicable.
-- **Phase 14 - Final reports:** creates `workflow-log.md`, `subagents-context.md` and `implementation-report.md`, consolidating timeline, contracts, validations, sub-agents, AGY Conversation IDs and delivery status.
-- **Phase 15 - User delivery:** publishes final summary, artifact paths, executed validations, remaining blockers and business instructions.
+- **Phase 1 - Spec ingestion:** reads the user-provided PRD/spec (file mention or sent file) and treats it as the source of truth. Extracts deliverables, tasks, technical decisions and acceptance criteria, without reopening the understanding. Blocking gaps are resolved with `AskUserQuestion` in a targeted way.
+- **Phase 2 - Task classification:** generates `tasks-classification.md` with category, dependencies, critical files, complexity, `contractRequired`, `assignedAgent` and `routingReason`.
+- **Phase 3 - Execution waves:** assembles `waves.md`, respecting dependencies, pending contracts, changing schemas and shared central files. Then runs `validate-routing.mjs` and corrects routing errors.
+- **Phase 4 - API/UI contracts:** creates `contracts/*.md` for every front-back exchange, including endpoint, method, wire format, JSON casing, complete examples, status codes, UI states, permissions and error scenarios.
+- **Phase 5 - Parallel delegation:** sends tasks to sub-agents according to `waves.md`. Codex receives prompts without `--model`; AGY receives `--model <agyModel>`. If an AGY task has two or more independent deliverables, fan-out is activated.
+- **Phase 6 - Monitoring:** tracks `PENDING`, `RUNNING`, `BLOCKED`, `DONE`, `FAILED`, `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT` and other states, recording evidence in `monitoring.md`.
+- **Phase 7 - Integration:** validates adherence to the PRD/spec, contracts, wire format, JSON casing, real serialization, file scope, tests and build. Point adjustments go back to Codex (back-end) or AGY (front-end) by category.
+- **Phase 8 - Back-end post-implementation review:** delegates final read-only review to Codex with `--effort high`, **back-end only**, and saves `review-final.md`. If Codex runs out of quota, the Orchestrator itself does internal review. Skipped when there is no back-end.
+- **Phase 9 - Front-end post-implementation review:** delegates final read-only review to AGY with `--model gemini-3.1-pro-high`, **front-end only**, and saves `review-frontend.md`. If AGY is unavailable, the Orchestrator does internal review. **Skipped when there is no front-end task.**
+- **Phase 10 - Final reports:** creates `workflow-log.md`, `subagents-context.md` and `implementation-report.md`, consolidating timeline, contracts, validations, sub-agents, AGY Conversation IDs and delivery status.
+- **Phase 11 - User delivery:** publishes final summary, artifact paths, executed validations, remaining blockers and business instructions.
+
+Coordination artifacts live under `orchestration/<name>/`; final reports live at the agent's execution root.
 
 ### Main Operational Rules
 
+- **Usage premise:** the orchestrator only works with a ready PRD/spec. It does not do discovery, planning, or reinterpret the demand.
+- **Codex reviews back-end only;** AGY (`gemini-3.1-pro-high`) reviews front-end only.
 - **AGY Fan-out:** `--agy-parallel` and `--agy-subagent-model` activate native Gemini sub-agents within the AGY task. Requires `cc-antigravity-plugin >= 3.6.0`.
-- **AGY Model:** without override, the Orchestrator chooses `agyModel` by heuristic; the user can force with `/orchestrator --agy-model <model> <demand>`.
-- **Codex Prompts:** do not fix `--model`; use only `--effort medium` for implementation/handoff/adjustments and `--effort high` for reviews.
+- **AGY Model:** without override, the Orchestrator chooses `agyModel` by heuristic; the user can force with `/orchestrator --agy-model <model> <demand>`. The front-end review always uses `gemini-3.1-pro-high`.
+- **Codex Prompts:** do not fix `--model`; use only `--effort medium` for implementation/handoff/adjustments and `--effort high` for back-end review.
 - **Mandatory contracts:** any front-back exchange requires contract before parallelizing.
 - **Wire format:** every contract must explicitly state JSON casing, field names, complete examples and real serialization validation.
 - **Routing by category:** `FRONTEND_ONLY` goes to Antigravity/AGY, including front-end setup; Codex only assumes front-end as a registered operational fallback.
-- **Codex Quota:** lack of quota on implementation blocks and requests user decision; lack of quota on review triggers orchestrator's internal read-only review.
+- **Codex Quota:** lack of quota on implementation blocks and requests user decision; lack of quota on back-end review triggers orchestrator's internal read-only review.
 - **Codex Sandbox:** external network blocked for packages/restore, missing package in local cache or write outside allowed working directory becomes `BLOCKED` with evidence.
-- **AGY Doubts from `/opsx:explore`:** scope ambiguities, conflicts with specs and open architectural decisions are resolved before planning.
-- **Non-verifiable hypotheses:** mandatory Codex review adjustments that depend on repository inspection need to be confirmed or discarded with real file reading.
 - **AGY Limit on Windows:** AGY prompts above 28,000 chars are divided into subtasks by deliverables before delegation to avoid `ENAMETOOLONG`.
 
 ## Official Dependencies
@@ -73,6 +72,23 @@ For front-end, the orchestrator expects `cc-antigravity-plugin >= 3.6.0` (mandat
 - `commands/antigravity.md`
 - `scripts/antigravity-bridge.js`
 
+## How to provide the specification
+
+The orchestrator does not invent the demand. Provide the PRD/spec in one of these ways:
+
+```text
+# File mention
+/orchestrator @docs/prd-reservations.md
+
+# Spec pasted directly into the argument
+/orchestrator "Implement the reservations flow per: <paste the complete specification here>"
+
+# With AGY model override
+/orchestrator --agy-model gemini-3.1-pro-low @docs/prd-reservations.md
+```
+
+If no PRD/spec is provided, the orchestrator asks for the specification before continuing.
+
 ## Codex: Model and Effort
 
 The workflow no longer fixes Codex models like `gpt-5.4` or `gpt-5.5`.
@@ -80,9 +96,9 @@ The workflow no longer fixes Codex models like `gpt-5.4` or `gpt-5.5`.
 Use:
 
 - `codex:codex-rescue` with `--effort medium` for implementation, handoff and adjustments;
-- `codex:codex-rescue` with `--effort high` for plan review and post-implementation review.
+- `codex:codex-rescue` with `--effort high` for back-end post-implementation review.
 
-The model defaults to what is available in the user's account.
+The model defaults to what is available in the user's account. Codex never reviews front-end.
 
 ## Codex: Sandbox Limits
 
@@ -104,12 +120,14 @@ Codex should only receive front-end as a registered operational fallback after `
 
 Front-end tasks are routed to Antigravity/AGY by category, passing `--model <agyModel>` to the plugin bridge.
 
-Default policy:
+Default policy (implementation):
 
 - `gemini-3.5-flash-medium` for most tasks;
 - `gemini-3.1-pro-low` for complex tasks, multi-route, multi-file, with delicate API/UI contract or high regression risk;
 - `gemini-3.1-pro-high` only in critical cases;
 - manual override available via `/orchestrator --agy-model <model> <demand>`.
+
+The **front-end review (Phase 9)** always uses `gemini-3.1-pro-high`, regardless of the implementation `agyModel`.
 
 ## AGY: Native Gemini Sub-agent Fan-out
 
@@ -172,7 +190,7 @@ Run:
 node scripts/preflight.mjs
 ```
 
-The JSON now includes:
+The JSON includes:
 
 - `status`
 - `checks`
@@ -180,11 +198,15 @@ The JSON now includes:
 - `remediation`
 - `autoRemediation`
 
-Preflight also validates:
+Preflight validates:
 
 - version of `agy` found in PATH;
-- `cc-antigravity-plugin >= 3.6.0`;
-- presence of `agents/antigravity-agent.md`, `commands/antigravity.md` and `scripts/antigravity-bridge.js` in installed AGY plugin.
+- Codex CLI in PATH;
+- `cc-antigravity-plugin >= 3.6.0` and the `openai-codex` plugin;
+- presence of `agents/antigravity-agent.md`, `commands/antigravity.md` and `scripts/antigravity-bridge.js` in the installed AGY plugin;
+- `Bash(node:*)` permission for the Codex companion.
+
+> As of version 3.0.0, preflight no longer requires the OpenSpec CLI or `openspec-*` skills, because OpenSpec is no longer part of the flow.
 
 ### Auto-remediation Scope
 
@@ -205,18 +227,6 @@ Example of minimum baseline:
   }
 }
 ```
-
-## `/opsx:explore` Doubts (Phase 1)
-
-After running `/opsx:explore` in Phase 1, the orchestrator checks if there are pending planning doubts in the result. If so, uses `AskUserQuestion` to resolve them with the user before advancing.
-
-Situations that trigger `AskUserQuestion`:
-
-- scope ambiguity or requirement that blocks understanding of the demand;
-- conflict between current demand and specs or previous changes in `openspec/`;
-- open architectural decision that prevents mapping architectural impact correctly.
-
-The orchestrator does not advance to Phase 1.2 with pending `/opsx:explore` doubts without recording user's answer.
 
 ## AGY Prompt Limit — CLI Limitation on Windows
 
@@ -241,19 +251,6 @@ Before delegating any task to AGY, the orchestrator assembles the complete promp
 
 If the task is monolithic and indivisible by deliverables, the orchestrator tries to reduce `Relevant files and modules` and, as a last resort, records `promptOverflow: true` and requests user decision.
 
-## Non-verifiable Hypotheses in Codex Review (Phase 2)
-
-When processing Mandatory Adjustments returned by Codex in Phase 2, the orchestrator identifies items using language like "non-verifiable hypothesis without inspecting the repository", "not confirmed without reading code", etc.
-
-For each such item, the orchestrator **does not write `design.md`** before:
-
-1. identifying relevant files to verify the hypothesis;
-2. reading those files with `Read` or `Grep`;
-3. confirming or discarding the hypothesis based on actual code;
-4. recording the conclusion in `review-entendimento.md` with the file read, relevant snippet and decision made.
-
-Unverified hypotheses locked as truth in `design.md` cause implementation cascade detected only in post-implementation review.
-
 ## Quota Policy
 
 ### Codex on Implementation, Adjustment or Handoff
@@ -266,7 +263,7 @@ If `QUOTA_EXHAUSTED`:
 
 The orchestrator does not continue editing productive code on its own.
 
-### Codex on Review
+### Codex on Back-end Review
 
 If `QUOTA_EXHAUSTED`:
 
@@ -274,11 +271,17 @@ If `QUOTA_EXHAUSTED`:
 - saves the result in `review-final.md`;
 - does not edit productive code.
 
-### Antigravity/AGY
+### AGY on Front-end Review
 
-Antigravity/AGY continues with controlled fallback to Codex only when safe.
+If `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING` or `TIMEOUT`:
 
-The plugin bridge returns raw status:
+- the orchestrator does internal read-only review;
+- saves the result in `review-frontend.md`;
+- does not edit productive code.
+
+### Antigravity/AGY on Implementation
+
+Continues with controlled fallback to Codex only when safe. The plugin bridge returns raw status:
 
 - `QUOTA_EXAUSTED`
 - `AUTH_REQUIRED`
@@ -296,21 +299,21 @@ This applies to:
 - `FULLSTACK` tasks;
 - dependent pairs `BACKEND_ONLY` + `FRONTEND_ONLY`.
 
-In Phase 6, each task must register `contractRequired: yes|no`.
+In Phase 2, each task must register `contractRequired: yes|no`.
 
 For `FRONTEND_ONLY` tasks and front-end slice of `FULLSTACK`, also register:
 
 - `agyModel`
 - `agyModelSource: user|heuristic`
 
-The routing validator now requires these fields on AGY tasks and fails if:
+The routing validator requires these fields on AGY tasks and fails if:
 
 - an AGY task does not register `agyModel`;
 - `agyModelSource` is missing;
 - the model is outside the allowlist;
 - `FRONTEND_ONLY` points to Codex as primary agent.
 
-In Phase 8, the orchestrator creates `contracts/*.md` for every item with `contractRequired: yes`.
+In Phase 4, the orchestrator creates `contracts/*.md` for every item with `contractRequired: yes`.
 
 ## Wire Format and Serialization
 
@@ -345,10 +348,9 @@ Especially for C# + TypeScript:
 ```bash
 node --check skills/orchestrator-multi-agent-development/scripts/preflight.mjs
 node scripts/preflight.mjs
-rg --line-number --fixed-strings -- '--model gpt-5.4-codex' commands skills
-rg --line-number --fixed-strings -- '--model gpt-5.5-codex' commands skills
-node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs openspec/changes/<name>
+node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs orchestration/<name>
 rg --line-number --fixed-strings -- 'QUOTA_EXAUSTED' README.md commands skills
 rg --line-number --fixed-strings -- 'agyModelSource' README.md commands skills
 rg --line-number --fixed-strings -- 'agyParallel' README.md commands skills
+rg --line-number --fixed-strings -- 'gemini-3.1-pro-high' README.md commands skills
 ```

@@ -5,10 +5,10 @@
 | Papel | Modelo | Subagent type | Effort | Observacoes |
 |---|---|---|---|---|
 | Orquestrador | Claude Sonnet 4.6 | voce mesmo | Medium | coordena e consolida |
-| Review de plano | Codex padrao da conta | `codex:codex-rescue` | High | read-only |
 | Back-end | Codex padrao da conta | `codex:codex-rescue` | Medium | implementacao |
 | Front-end | AGY definido por override ou heuristica | `cc-antigravity-plugin:antigravity-agent` | - | usar `--model <agyModel>` no bridge |
-| Review pos-implementacao | Codex padrao da conta | `codex:codex-rescue` | High | read-only |
+| Review back-end pos-implementacao | Codex padrao da conta | `codex:codex-rescue` | High | read-only, apenas back-end |
+| Review front-end pos-implementacao | AGY `gemini-3.1-pro-high` | `cc-antigravity-plugin:antigravity-agent` | - | read-only, apenas front-end |
 
 ## Invariante de roteamento
 
@@ -38,7 +38,9 @@ Codex so assume front-end como fallback operacional depois de `QUOTA_EXAUSTED`, 
 Nao fixe `--model` nos prompts do Codex. Use apenas:
 
 - `--effort medium` para implementacao, ajustes pontuais, testes e handoffs;
-- `--effort high` para review de plano e review pos-implementacao.
+- `--effort high` para review back-end pos-implementacao.
+
+Codex revisa apenas back-end. O review de front-end e sempre do AGY com `--model gemini-3.1-pro-high`.
 
 ## Regra para contratos front-back
 
@@ -81,16 +83,20 @@ Bloqueie e escale ao usuario quando o Codex depender de rede externa indisponive
 
 Use para:
 
-- review de plano;
-- review pos-implementacao;
-- leitura critica de risco arquitetural;
-- analise de regressao e seguranca.
+- review back-end pos-implementacao;
+- leitura critica de risco arquitetural no back-end;
+- analise de regressao e seguranca no back-end.
+
+### AGY `gemini-3.1-pro-high` (review front-end)
+
+Use para o review front-end pos-implementacao (Fase 9), em modo read-only. O AGY revisa consumo de contrato, estados de UI, tipagem, build/typecheck/lint e regressao visual. Codex nunca revisa front-end.
 
 ## Politica de quota
 
 - `QUOTA_EXHAUSTED` em implementacao Codex: bloquear e pedir decisao ao usuario.
-- `QUOTA_EXHAUSTED` em review Codex: fazer fallback de review interno read-only do orquestrador e salvar em `review-final.md`.
-- `QUOTA_EXAUSTED` em Antigravity/AGY: seguir a politica de fallback descrita em `workflow.md`.
+- `QUOTA_EXHAUSTED` em review back-end Codex: fazer fallback de review interno read-only do orquestrador e salvar em `review-final.md`.
+- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no review front-end AGY: fazer fallback de review interno read-only do orquestrador e salvar em `review-frontend.md`.
+- `QUOTA_EXAUSTED` em implementacao Antigravity/AGY: seguir a politica de fallback descrita em `workflow.md`.
 - `AUTH_REQUIRED`, `AGY_MISSING` e `TIMEOUT` em Antigravity/AGY: tratar como bloqueios operacionais e registrar evidencia.
 
 ## Politica de sandbox
