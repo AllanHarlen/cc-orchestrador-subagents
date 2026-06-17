@@ -3,8 +3,8 @@
  * Validate generated orchestrator routing artifacts.
  *
  * Usage:
- *   node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" openspec/changes/<change>
- *   node scripts/validate-routing.mjs openspec/changes/<change>
+ *   node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" orchestration/<name>
+ *   node scripts/validate-routing.mjs orchestration/<name>
  */
 
 import { existsSync, readFileSync } from "node:fs";

@@ -2,6 +2,8 @@
 
 Este arquivo expande as fases do `SKILL.md`.
 
+O orquestrador atua somente em projetos com PRD/especificacao ja pronta. Ele nao faz discovery, nao cria plano OpenSpec e nao reabre o entendimento da demanda. Todos os artefatos de coordenacao ficam em `orchestration/<nome>/`, onde `<nome>` e um identificador descritivo em kebab-case derivado do PRD.
+
 ## Fase 0 - Preflight
 
 Rode:
@@ -17,237 +19,37 @@ Regras:
 - a auto-remediacao so vale para `codex-companion-bash`;
 - se `.claude/settings.json` existir com JSON invalido, nao sobrescreva; falhe com remediacao clara.
 
-## Fase 1 - Entendimento da demanda
+## Fase 1 - Ingestao da especificacao
 
-### 1.0 Detectar plano pre-definido
+O usuario fornece a especificacao via mencao de arquivo (`@caminho/para/prd.md`) ou envio do arquivo de PRD/spec. Essa especificacao e a **fonte da verdade** do workflow.
 
-Antes de interpretar a demanda como um pedido aberto, verifique se o usuario ja entregou um plano de execucao, uma lista de tasks, um desenho tecnico, uma sequencia de fases, um conjunto de decisoes arquiteturais ou um escopo aprovado.
+### 1.1 Ler a especificacao fornecida
 
-Classifique a execucao como `PREDEFINED_PLAN=yes` quando o input inicial tiver pelo menos dois destes sinais:
+- Leia o arquivo de PRD/spec apontado pelo usuario com `Read`.
+- Se o usuario apontar varios arquivos ou um diretorio de specs, leia todos os relevantes.
+- Nao reescreva, nao replaneje e nao reinterprete a demanda. O papel do orquestrador e **orquestrar**, nao planejar.
 
-- objetivos ou entregaveis ja definidos;
-- tasks, fases, milestones ou ordem de implementacao proposta;
-- decisoes tecnicas ja tomadas (arquitetura, bibliotecas, endpoints, telas, contratos, migrations);
-- restricoes explicitas de escopo, prazo, agente, tecnologia ou arquivo;
-- criterios de aceite, testes esperados ou validacoes obrigatorias;
-- contexto de negocio suficiente para orientar a implementacao sem discovery aberto.
+### 1.2 Extrair os entregaveis e tasks
 
-Nao classifique como `PREDEFINED_PLAN` quando o usuario trouxe apenas uma ideia, um bug report curto, uma feature desejada ou uma preferencia solta sem estrutura operacional.
+A partir da especificacao, extraia diretamente:
 
-Quando `PREDEFINED_PLAN=yes`, a Fase 1 muda de "descobrir o que fazer" para "normalizar, validar e enriquecer o plano recebido". O conhecimento inicial do usuario vira insumo primario e deve ser preservado como fonte de verdade, sem ser simplificado ou replanejado sem motivo.
+- objetivos e entregaveis ja definidos;
+- tasks, fases ou ordem de implementacao quando o PRD ja as trouxer;
+- decisoes tecnicas firmes (arquitetura, bibliotecas, endpoints, telas, contratos, migrations);
+- restricoes de escopo, agente, tecnologia ou arquivo;
+- criterios de aceite, testes esperados e validacoes obrigatorias.
 
-### 1.1 Executar `/opsx:explore`
+Quando o PRD ja lista tasks, preserve IDs, nomes e ordem para rastreabilidade. Quando o PRD descreve entregaveis sem IDs formais, derive uma lista de tasks objetiva a partir do texto, sem inventar escopo novo.
 
-Antes de criar qualquer artefato, execute:
+### 1.3 Lacunas bloqueantes
 
-```
-/opsx:explore
-```
+Se a especificacao tiver uma lacuna que impeca classificar e delegar com seguranca (ex.: contrato de dados ausente entre front e back, decisao tecnica obrigatoria nao tomada), use `AskUserQuestion` para resolver apenas a lacuna bloqueante. Nao transforme isso em discovery aberto — pergunte o minimo necessario para destravar a orquestracao e registre a resposta.
 
-O `/opsx:explore` e o modo "thinking partner" do OpenSpec: ele investiga o projeto atual, le specs existentes, historico de mudancas e o estado do codebase para construir contexto antes de qualquer planejamento. Use o resultado para:
+Ao final da Fase 1, o orquestrador deve conseguir produzir `tasks-classification.md` diretamente a partir da especificacao ingerida.
 
-- entender o estado atual do projeto e specs vigentes em `openspec/specs/`;
-- identificar mudancas anteriores relevantes em `openspec/changes/` que possam influenciar o plano;
-- detectar restricoes ou convencoes ja estabelecidas no projeto que os subagentes devem respeitar;
-- antecipar dependencias ocultas entre a demanda atual e o que ja foi implementado.
+## Fase 2 - Classificacao das tasks
 
-O resultado do `/opsx:explore` e insumo direto para as etapas seguintes desta fase — nao pule mesmo que o projeto pareca simples.
-
-Se `PREDEFINED_PLAN=yes`, use o `/opsx:explore` para confrontar o plano recebido com o estado real do projeto, nao para substituir o plano. Registre divergencias entre o plano e o codebase como riscos, lacunas ou perguntas em aberto.
-
-### 1.1.1 Resolver duvidas do `/opsx:explore` antes de prosseguir
-
-Ao receber o resultado do `/opsx:explore`, verifique se ele retornou duvidas de planejamento pendentes (perguntas sobre escopo, ambiguidades de requisito, decisoes de arquitetura em aberto ou conflitos com specs existentes).
-
-Para cada duvida pendente, o orquestrador **nao avanca para 1.2** antes de usar `AskUserQuestion` para levar a questao ao usuario e registrar a resposta.
-
-**Quando acionar `AskUserQuestion`:**
-- o `/opsx:explore` identificou ambiguidade de escopo ou requisito que bloqueia o entendimento;
-- ha conflito entre a demanda atual e specs ou mudancas anteriores em `openspec/`;
-- uma decisao de arquitetura em aberto impede mapear o impacto corretamente.
-
-Registre cada resposta do usuario no entendimento antes de continuar com 1.2.
-
-### 1.2 Interpretar a demanda
-
-Com o contexto do OpenSpec em maos, analise o argumento passado para `/orchestrador`.
-
-Quando `PREDEFINED_PLAN=no`, identifique:
-
-- problema real a resolver (nao apenas o pedido literal);
-- contexto de negocio e estado atual do sistema;
-- stakeholders impactados.
-
-Quando `PREDEFINED_PLAN=yes`, extraia e normalize:
-
-- objetivo final do plano;
-- entregaveis ja definidos;
-- ordem ou dependencias entre fases/tasks;
-- decisoes tecnicas firmes;
-- restricoes impostas pelo usuario;
-- criterios de aceite e validacoes esperadas;
-- hipoteses do plano que ainda precisam ser verificadas no codebase;
-- pontos em que o plano conflita com specs, codigo existente ou limites operacionais.
-
-### 1.3 Mapear impacto arquitetural
-
-Percorra mentalmente as camadas do sistema:
-
-- **Backend:** endpoints, services, repositorios, validacoes
-- **Frontend:** paginas, componentes, estado/store, rotas
-- **Banco de dados:** tabelas, migrations, indices, integridade referencial
-- **Auth/autorizacao:** claims, roles, politicas, SSO
-- **Integracoes externas:** contratos, rate limits, sincronismo
-
-### 1.4 Definir escopo
-
-Explicite o que entra *e o que fica fora* (com motivo). Esse limite e o que garante que os subagentes nao vaguem durante a implementacao.
-
-### 1.5 Identificar riscos e perguntas em aberto
-
-- Riscos tecnicos antecipados (probabilidade, impacto, mitigacao)
-- Perguntas que precisam ser resolvidas com o usuario antes de prosseguir
-
-### 1.6 Expandir plano pre-definido
-
-Aplicavel somente quando `PREDEFINED_PLAN=yes`.
-
-Antes de pular a Fase 2, o orquestrador deve ampliar o entendimento com base no conhecimento passado inicialmente pelo usuario. Essa ampliacao e obrigatoria porque o review externo de entendimento sera ignorado neste fluxo.
-
-Crie um **Resumo expandido do plano recebido** no entendimento da Fase 1 contendo:
-
-- **Fonte do plano:** trechos ou itens do input inicial que definem o plano;
-- **Objetivo consolidado:** o resultado final esperado, em linguagem mensuravel;
-- **Mapa de entregaveis:** cada item planejado, seu resultado esperado e criterios de aceite;
-- **Decisoes preservadas:** escolhas que vieram do usuario e nao devem ser redesenhadas sem aprovacao;
-- **Dependencias e sequenciamento:** o que precisa acontecer antes/depois e por que;
-- **Impacto arquitetural:** backend, frontend, banco, auth, integracoes, testes e operacao;
-- **Lacunas preenchidas pelo `/opsx:explore`:** informacoes do projeto que completam o plano;
-- **Conflitos detectados:** divergencias entre plano, specs existentes e codigo real;
-- **Riscos remanescentes:** riscos que devem voltar no `design.md` e no review final;
-- **Perguntas bloqueantes:** somente o que impede transformar o plano em artefatos OpenSpec.
-
-Se houver contradicao estrutural no plano, dependencia desconhecida que mude a ordem de execucao, ou decisao ausente que altere escopo/arquitetura, use `AskUserQuestion` antes de prosseguir. Depois da resposta, registre a decisao no resumo expandido.
-
-Ao final de 1.6, o orquestrador deve conseguir transformar o plano recebido em `proposal.md`, `design.md` e `tasks.md` sem pedir ao Codex para revisar o entendimento.
-
-## Fase 2 - Review do entendimento com Codex
-
-> **Excecao PREDEFINED_PLAN:** Se a Fase 1 marcou `PREDEFINED_PLAN=yes` e a etapa 1.6 foi concluida sem perguntas bloqueantes, ignore a revisao com Codex nesta fase. O usuario ja forneceu informacao estruturada suficiente e o orquestrador deve avancar diretamente para a Fase 3.
-
-Neste caso, salve `review-entendimento.md` com:
-
-- nota `"Codex ausente: plano pre-definido informado pelo usuario"`;
-- classificacao `PREDEFINED_PLAN=yes`;
-- resumo expandido produzido na Fase 1.6;
-- perguntas feitas ao usuario e respostas, quando houver;
-- riscos e hipoteses que devem ser reavaliados na Fase 12;
-- motivo do bypass da Fase 2.
-
-Se o plano pre-definido estiver incompleto a ponto de impedir a criacao segura dos artefatos OpenSpec, nao use esta excecao ainda: resolva as perguntas bloqueantes na Fase 1.6 e so entao pule a Fase 2.
-
-> **Excecao FRONTEND_ONLY:** Se o orquestrador determinar na Fase 1 que toda a atividade e `FRONTEND_ONLY` (nenhuma task de back-end, banco de dados ou teste de API), **nao delegue ao Codex**. Execute um review interno do orquestrador, salve o resultado em `review-entendimento.md` com a nota `"Codex ausente: atividade FRONTEND_ONLY"` e avance diretamente para a Fase 3.
-
-Com o entendimento da demanda formado (fases 1.0 a 1.5, e 1.6 quando aplicavel), o orquestrador delega uma revisao critica ao Codex **antes de criar qualquer artefato OpenSpec**:
-
-**Subagente:** `codex:codex-rescue` com `--effort high`
-**Modo:** somente leitura — o Codex nao modifica arquivos
-
-O Codex recebe o entendimento estruturado da demanda e avalia:
-
-- o problema identificado esta correto?
-- o escopo incluido e excluido faz sentido?
-- ha dependencias ocultas ou riscos nao mapeados?
-- o impacto arquitetural mapeado e completo?
-- ha perguntas em aberto que devem ser resolvidas antes de planejar?
-
-Retorna:
-1. Problemas ou lacunas no entendimento
-2. Ajustes obrigatorios
-3. Ajustes opcionais
-4. Decisao: `APROVADO` | `APROVADO COM AJUSTES` | `REPROVADO`
-5. Duvidas: lista de pontos em que o Codex ficou indeciso ou que exigem decisao humana
-6. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
-
-O resultado e salvo em `review-entendimento.md`.
-
-### Regra de escalada de duvidas para o usuario
-
-Ao processar o retorno do Codex, o orquestrador verifica se ha itens na secao **Duvidas**. Para cada duvida ou ponto de indecisao — seja sobre o que aplicar do review, seja sobre a direcao de implementacao — o orquestrador **nao decide sozinho**: ele pausa o workflow e usa `AskUserQuestion` para levar a questao ao usuario.
-
-**Quando acionar `AskUserQuestion`:**
-- o Codex retornou duvidas explicitas na secao 5;
-- o orquestrador esta indeciso sobre aplicar ou rejeitar um ajuste obrigatorio;
-- dois ajustes do Codex sao contraditories entre si;
-- a decisao afeta escopo, arquitetura ou prazo de forma significativa.
-
-**Como formular a pergunta:**
-- apresente o contexto em uma frase (o que o Codex sinalizou);
-- ofeca as opcoes possiveis como choices;
-- nao tome a decisao no texto da pergunta — deixe o usuario escolher.
-
-**Exemplo:**
-```
-O Codex identificou duas abordagens possiveis para o escopo de autenticacao:
-
-A) Incluir renovacao de token nesta mudanca (maior escopo, mais seguro)
-B) Deixar renovacao de token para uma mudanca futura (escopo menor, entrega mais rapida)
-
-Qual voce prefere?
-```
-
-Apos a resposta do usuario, registre a decisao e o motivo em `review-entendimento.md` na secao **Decisoes do usuario**. Somente entao o orquestrador avanca para a Fase 3.
-
-### Regra de investigacao de hipoteses nao verificaveis
-
-Ao processar "Ajustes Obrigatorios" do Codex, identifique itens que usam linguagem como:
-
-- "hipotese nao verificavel sem inspecionar o repositorio"
-- "nao foi possivel confirmar sem ler o codigo"
-- "assume X sem evidencia"
-- "risco de incompatibilidade nao verificado"
-- "exige inspecao do servico/controller/contrato"
-
-Para cada item desse tipo, o orquestrador **nao avanca para Fase 3** antes de:
-
-1. identificar os arquivos relevantes para verificar a hipotese (ex.: servicos, controllers, contratos, schemas);
-2. ler esses arquivos com `Read` ou `Grep`;
-3. confirmar ou descartar a hipotese com base no codigo real;
-4. registrar a conclusao em `review-entendimento.md` com o arquivo lido, o trecho relevante e a decisao tomada.
-
-Somente apos essa investigacao o orquestrador reclassifica o ajuste como confirmado ou descartado e avanca.
-
-> Hipoteses nao verificadas travadas como verdade no `design.md` causam cascata de implementacao errada que so e detectada no review pos-implementacao — como o caso de assumir que um servico funciona de forma anonima sem confirmar o contrato real do codigo.
-
-## Fase 3 - Criar mudanca OpenSpec
-
-```
-/openspec-new-change <nome>
-```
-
-Cria o diretorio `openspec/changes/<nome>/`. O nome deve ser descritivo em kebab-case.
-
-## Fase 4 - Elaborar o plano
-
-O orquestrador escreve os tres artefatos diretamente — sem delegar:
-
-- `proposal.md` — objetivo mensuravel, escopo incluido/excluido, contexto
-- `design.md` — arquitetura proposta, impactos por camada, riscos, estrategia de testes e rollback
-- `tasks.md` — tasks com ID, categoria, dependencias, complexidade, arquivos criticos e criterios de aceite
-
-### Gate de suficiencia (Fase 4.5) — `plan-sufficiency-check.md`
-
-Quando `PREDEFINED_PLAN=yes`, estes artefatos devem traduzir o plano recebido e enriquecido na Fase 1.6, nao substitui-lo por um plano novo. Preserve IDs, nomes de fases, entregaveis e decisoes do usuario quando forem uteis para rastreabilidade. Ajustes so devem ser feitos para compatibilizar o plano com OpenSpec, com o codebase real ou com riscos explicitamente registrados.
-
-Antes de consolidar, o orquestrador preenche um checklist minimo que valida se o plano esta maduro. Plano insuficiente nao avanca.
-
-## Fase 5 - Consolidar o plano
-
-O orquestrador revisita o entendimento aprovado na Fase 2 e garante que os artefatos da Fase 4 estao alinhados. Quando `PREDEFINED_PLAN=yes`, revisita o resumo expandido da Fase 1.6 e o `review-entendimento.md` de bypass. Atualiza `proposal.md`, `design.md` e `tasks.md` se necessario. O plano consolidado e a fonte da verdade para todo o restante do workflow.
-
-## Fase 6 - Classificacao das tasks
-
-Para cada task em `tasks.md`, registre em `tasks-classification.md`:
+Para cada task extraida do PRD/spec, registre em `orchestration/<nome>/tasks-classification.md`:
 
 - categoria;
 - dependencias;
@@ -292,14 +94,14 @@ Exemplos:
 - mudanca de payload, filtros, paginacao, validacao ou erro -> `yes`;
 - ajuste puramente visual sem tocar API -> `no`.
 
-## Fase 7 - Ondas
+## Fase 3 - Ondas
 
-Agrupe tasks em `waves.md`.
+Agrupe tasks em `orchestration/<nome>/waves.md`.
 
 Cada entrada de `waves.md` deve repetir `assignedAgent` vindo de `tasks-classification.md`. Depois de montar as waves, rode:
 
 ```bash
-node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" "openspec/changes/<nome>"
+node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" "orchestration/<nome>"
 ```
 
 Se o validador falhar, corrija `tasks-classification.md` e `waves.md` antes de qualquer delegacao.
@@ -311,9 +113,9 @@ Nao paralelize quando houver:
 - arquivo central compartilhado;
 - autenticacao ou seguranca sem consolidacao.
 
-## Fase 8 - Contratos API/UI
+## Fase 4 - Contratos API/UI
 
-Crie `contracts/*.md` para:
+Crie `orchestration/<nome>/contracts/*.md` para:
 
 - toda task `FULLSTACK`;
 - todo par dependente `BACKEND_ONLY` + `FRONTEND_ONLY` que troque dados entre si.
@@ -339,7 +141,7 @@ Quando houver DTO C# e consumidor TypeScript:
 - documente serializer global ou atributos por campo;
 - nao aceite "bate com a interface" sem verificar o payload real.
 
-## Fase 9 - Delegacao paralela
+## Fase 5 - Delegacao paralela
 
 Antes de lancar subagentes, confirme que `validate-routing.mjs` passou. A delegacao precisa seguir `assignedAgent` dos artefatos validados.
 
@@ -399,14 +201,14 @@ Cada prompt deve incluir:
 Todo subagente em background deve, como **primeiro passo antes de implementar**, listar as skills disponiveis no ambiente e filtrar as compativeis com sua task:
 
 1. execute `/skills` ou equivalente para listar as skills do ambiente;
-2. ignore todas as skills cujo nome comece com `openspec` ou `opsx` — essas sao exclusivas do orquestrador;
+2. ignore skills exclusivas do orquestrador (planejamento/coordenacao);
 3. das skills restantes, identifique quais se aplicam a task em execucao;
 4. use as skills compativeis durante a implementacao;
 5. registre no retorno quais skills foram utilizadas (campo obrigatorio no retorno de Codex e Gemini).
 
 O orquestrador consolida as skills utilizadas por subagente em `subagents-context.md`.
 
-## Fase 10 - Monitoramento
+## Fase 6 - Monitoramento
 
 Status validos:
 
@@ -448,7 +250,7 @@ Status validos:
   - registre evidencia;
   - peca decisao ao usuario.
 
-- `QUOTA_EXHAUSTED` no Codex durante review:
+- `QUOTA_EXHAUSTED` no Codex durante review back-end:
   - faca review interno read-only no orquestrador;
   - salve o resultado em `review-final.md`;
   - nao edite codigo produtivo.
@@ -467,11 +269,11 @@ Status validos:
 
 - Para UI sem dependencia de rede, mantenha AGY como executor primario. So faca handoff para Codex se o bloqueio AGY estiver documentado e o sandbox Codex permitir a escrita necessaria.
 
-## Fase 11 - Integracao
+## Fase 7 - Integracao
 
 Valide:
 
-- aderencia a `tasks.md`;
+- aderencia a especificacao (PRD/spec) ingerida;
 - aderencia ao contrato;
 - wire format;
 - casing JSON;
@@ -479,96 +281,116 @@ Valide:
 - arquivos alterados fora do escopo;
 - testes e build.
 
-Se precisar ajuste, delegue para Codex com `--effort medium`.
+Se precisar ajuste, delegue para Codex com `--effort medium` (back-end) ou AGY (front-end), conforme a categoria.
 
-## Fase 12 - Review pos-implementacao
+## Fase 8 - Review back-end pos-implementacao (Codex)
 
-> **Excecao FRONTEND_ONLY:** Se toda a atividade for `FRONTEND_ONLY`, **nao delegue ao Codex**. O orquestrador faz review interno read-only seguindo as secoes 12.1, 12.3 quando aplicavel e 12.5; salva o resultado em `review-final.md` com a nota `"Codex ausente: atividade FRONTEND_ONLY"` e so avanca para a Fase 13 quando a decisao permitir.
+> **Ignorar quando nao houver back-end:** Se nao houver nenhuma task `BACKEND_ONLY`, `DATABASE_ONLY`, `TEST_ONLY` nem fatia back-end de `FULLSTACK`, pule a Fase 8 e registre `review-final.md` com a nota `"Sem back-end: review back-end nao aplicavel"`.
 
-Objetivo da fase: validar a implementacao final contra a demanda original, o plano consolidado, os contratos, as tasks executadas e os retornos dos subagentes. Esta fase e read-only: nao edite codigo durante o review. Se houver defeitos, volte para Fase 11 para integrar ajustes ou redelegar correcao.
+Objetivo da fase: validar a implementacao **back-end** final contra a especificacao, os contratos, as tasks executadas e os retornos dos subagentes. Esta fase e read-only: nao edite codigo durante o review. Codex revisa **apenas back-end** — nunca front-end. Se houver defeitos, volte para a Fase 7 para integrar ajustes ou redelegar correcao.
 
-### 12.1 Preparar pacote de review
+### 8.1 Preparar pacote de review
 
 Antes de delegar ao Codex ou fazer review interno, monte um pacote de contexto com:
 
-- demanda original do usuario;
-- classificacao `PREDEFINED_PLAN=yes|no`;
-- se `PREDEFINED_PLAN=yes`, o plano inicial recebido e o resumo expandido da Fase 1.6;
-- `review-entendimento.md`;
-- `proposal.md`, `design.md`, `tasks.md`, `tasks-classification.md`, `waves.md` e contratos em `contracts/*.md`;
+- especificacao original (PRD/spec) ingerida na Fase 1;
+- `tasks-classification.md`, `waves.md` e contratos em `contracts/*.md`;
 - `monitoring.md`, `workflow-log.md` e `subagents-context.md`;
-- resumo dos arquivos alterados;
-- comandos de build, testes e validacoes executadas;
+- resumo dos arquivos back-end alterados;
+- comandos de build, testes e validacoes executadas no back-end;
 - falhas, bloqueios, fallbacks e decisoes do usuario durante a execucao.
 
-### 12.2 Fluxo principal
+### 8.2 Fluxo principal
 
 - delegue ao Codex com `--effort high`;
-- informe que o review e somente leitura;
+- informe que o review e somente leitura e restrito ao back-end (controllers, services, repositorios, DTOs, migrations, testes, contratos do lado servidor);
 - exija achados com severidade, arquivo/trecho quando aplicavel, impacto e correcao esperada;
 - salve o resultado em `review-final.md`.
 
-O prompt do review deve pedir verificacao explicita de:
+O prompt do review back-end deve pedir verificacao explicita de:
 
-- aderencia ao objetivo original e ao escopo incluido/excluido;
-- aderencia a cada task e criterio de aceite em `tasks.md`;
-- diferencas entre implementacao real e `design.md`;
-- contratos API/UI, wire format, status codes, casing JSON e serializacao real;
-- integracao entre entregas de subagentes diferentes;
-- auth/autorizacao, validacoes, tratamento de erro e estados de UI;
+- aderencia a especificacao e ao escopo back-end;
+- aderencia a cada task e criterio de aceite das tasks back-end;
+- contratos API, wire format, status codes, casing JSON e serializacao real no lado servidor;
+- auth/autorizacao, validacoes e tratamento de erro no back-end;
 - migrations, persistencia, indices e integridade referencial quando houver banco;
-- testes executados, lacunas de teste e builds pendentes;
+- testes executados, lacunas de teste e builds pendentes no back-end;
 - arquivos alterados fora do escopo;
-- regressao potencial em fluxos existentes;
-- qualidade do handoff final para Fase 13.
+- regressao potencial em fluxos existentes do back-end.
 
-### 12.3 Regra especial para plano pre-definido
+### 8.3 Fluxo de fallback
 
-Quando `PREDEFINED_PLAN=yes`, a Fase 12 compensa o bypass da Fase 2. O review final deve ser mais critico e comparar a implementacao com o plano inicial do usuario, nao apenas com os artefatos OpenSpec derivados.
-
-`review-final.md` deve conter uma secao obrigatoria **Comparacao com plano pre-definido** com:
-
-- cada objetivo, fase, task ou entregavel do plano inicial;
-- status: `IMPLEMENTADO`, `PARCIAL`, `NAO_IMPLEMENTADO`, `ALTERADO_COM_JUSTIFICATIVA` ou `FORA_DO_ESCOPO`;
-- evidencia da implementacao ou motivo da divergencia;
-- decisao: aceitar, corrigir antes da Fase 13, ou pedir decisao ao usuario.
-
-Qualquer divergencia nao aprovada que mude escopo, comportamento, contrato, ordem de entrega ou decisao tecnica do usuario deve ser tratada como achado de alta severidade. O orquestrador nao avanca para Fase 13 enquanto essa divergencia nao for corrigida, justificada no plano consolidado, ou aprovada pelo usuario.
-
-### 12.4 Fluxo de fallback
-
-- se o review Codex vier com `QUOTA_EXHAUSTED`, o orquestrador faz review interno read-only;
+- se o review Codex vier com `QUOTA_EXHAUSTED`, o orquestrador faz review interno read-only do back-end;
 - registre no proprio `review-final.md` que o review foi fallback interno do orquestrador por indisponibilidade de quota do Codex;
-- mantenha as mesmas secoes obrigatorias do fluxo principal, incluindo a comparacao com plano pre-definido quando aplicavel.
+- mantenha as mesmas secoes obrigatorias do fluxo principal.
 
-### 12.5 Resultado e loop de correcao
+### 8.4 Resultado e loop de correcao
 
 `review-final.md` deve terminar com uma decisao:
 
-- `APROVADO`: pode seguir para Fase 13;
+- `APROVADO`: pode seguir para a Fase 9;
 - `APROVADO_COM_RESSALVAS`: pode seguir somente se as ressalvas forem documentadas como nao bloqueantes;
-- `REPROVADO`: nao avance; volte para Fase 11 ou redelegue ajustes.
+- `REPROVADO`: nao avance; volte para a Fase 7 ou redelegue ajustes ao Codex.
 
-Se houver achados bloqueantes:
+## Fase 9 - Review front-end pos-implementacao (AGY)
+
+> **Ignorar quando nao houver front-end:** Se nao houver nenhuma task `FRONTEND_ONLY` nem fatia front-end de `FULLSTACK`, pule a Fase 9 e registre `review-frontend.md` com a nota `"Sem front-end: review front-end nao aplicavel"`. Se nao existir `review-frontend.md`, basta registrar a ausencia em `workflow-log.md`.
+
+Objetivo da fase: validar a implementacao **front-end** final. O review e feito pelo **AGY** com `--model gemini-3.1-pro-high`, em modo read-only. Codex nunca participa desta fase.
+
+### 9.1 Preparar pacote de review
+
+Monte um pacote de contexto com:
+
+- especificacao original (PRD/spec) ingerida na Fase 1;
+- `tasks-classification.md`, `waves.md` e contratos em `contracts/*.md`;
+- `subagents-context.md` das tasks front-end;
+- resumo dos arquivos front-end alterados;
+- comandos de build/typecheck/lint/testes executados no front-end.
+
+### 9.2 Fluxo principal
+
+- delegue ao `cc-antigravity-plugin:antigravity-agent` com `--model gemini-3.1-pro-high`;
+- informe que o review e somente leitura — o AGY nao modifica arquivos;
+- exija achados com severidade, arquivo/trecho quando aplicavel, impacto e correcao esperada;
+- salve o resultado em `review-frontend.md`.
+
+O prompt do review front-end deve pedir verificacao explicita de:
+
+- aderencia a especificacao e ao escopo front-end;
+- aderencia a cada task e criterio de aceite das tasks front-end;
+- consumo correto do contrato API/UI: wire format, casing JSON e serializacao real contra o TypeScript consumidor;
+- estados de UI tratados (loading, erro, empty, sucesso);
+- tipagem TypeScript, build, typecheck e lint;
+- acessibilidade e consistencia visual quando aplicavel;
+- testes de componente/e2e executados e lacunas;
+- arquivos alterados fora do escopo;
+- regressao potencial em telas/fluxos existentes.
+
+### 9.3 Fluxo de fallback
+
+- se o review AGY vier com `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING` ou `TIMEOUT`, o orquestrador faz review interno read-only do front-end;
+- registre em `review-frontend.md` que o review foi fallback interno do orquestrador por indisponibilidade do AGY, com o status cru retornado pelo bridge;
+- mantenha as mesmas secoes obrigatorias do fluxo principal.
+
+### 9.4 Resultado e loop de correcao
+
+`review-frontend.md` deve terminar com uma decisao:
+
+- `APROVADO`: pode seguir para a Fase 10;
+- `APROVADO_COM_RESSALVAS`: pode seguir somente se as ressalvas forem documentadas como nao bloqueantes;
+- `REPROVADO`: nao avance; volte para a Fase 7 e redelegue a correcao ao AGY.
+
+Se houver achados bloqueantes em qualquer das fases de review (8 ou 9):
 
 1. registre os achados em `monitoring.md` e `workflow-log.md`;
-2. crie ou atualize tasks de correcao com agente responsavel;
-3. execute a correcao pela Fase 11;
-4. repita a Fase 12 focando nas areas alteradas e nos achados anteriores.
+2. crie ou atualize tasks de correcao com agente responsavel pela categoria;
+3. execute a correcao pela Fase 7;
+4. repita o review focando nas areas alteradas e nos achados anteriores.
 
-## Fase 13 - Verificacao OpenSpec
+## Fases 10 e 11 - Relatorio final
 
-Use:
-
-```text
-/openspec-verify-change <nome>
-/openspec-sync-specs <nome>
-/openspec-archive-change <nome>
-```
-
-## Fases 14 e 15 - Relatorio final
-
-Entregaveis obrigatorios (salve na **raiz de execucao do agente**, nao dentro de `openspec/`):
+Entregaveis obrigatorios (salve na **raiz de execucao do agente**):
 
 - `workflow-log.md`
 - `subagents-context.md`
@@ -579,7 +401,7 @@ O relatorio final deve citar:
 - se houve auto-remediacao no preflight;
 - quais contratos foram criados;
 - quais validacoes de wire format e serializacao foram feitas;
-- se houve fallback de review interno por `QUOTA_EXHAUSTED`;
+- se houve fallback de review interno (back-end por `QUOTA_EXHAUSTED` no Codex; front-end por indisponibilidade do AGY);
 - para cada delegacao AGY com `agyParallel: yes`: numero de subagentes Gemini nativos e Conversation IDs reportados pelo AGY;
 - contagem de tokens por agente (tabela consolidada em `implementation-report.md` secao 11a e em `subagents-context.md` secao "Uso de Tokens por Agente"; quando houver fan-out, os tokens reportados pelo AGY sao o agregado da sessao).
 
