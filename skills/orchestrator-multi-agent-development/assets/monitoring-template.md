@@ -41,10 +41,11 @@
 
 ## Política de quota
 
-- `QUOTA_EXAUSTED` no Antigravity/AGY: registrar evidência e avaliar fallback para Codex.
+- `QUOTA_EXAUSTED` no Antigravity/AGY em implementação: registrar evidência e avaliar fallback para Codex.
 - `AUTH_REQUIRED`, `AGY_MISSING` e `TIMEOUT` no Antigravity/AGY: registrar evidência, marcar bloqueio operacional e definir a próxima ação.
 - `QUOTA_EXHAUSTED` no Codex em implementação ou ajuste: marcar `BLOCKED` e pedir decisão.
-- `QUOTA_EXHAUSTED` no Codex em review: registrar fallback de review interno read-only do orquestrador em `review-final.md`.
+- `QUOTA_EXHAUSTED` no Codex em review back-end: registrar fallback de review interno read-only do orquestrador em `review-final.md`.
+- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no AGY em review front-end (`gemini-3.1-pro-high`): registrar fallback de review interno read-only do orquestrador em `review-frontend.md`.
 
 ## Política de sandbox Codex
 

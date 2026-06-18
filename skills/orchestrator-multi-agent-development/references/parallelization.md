@@ -2,7 +2,7 @@
 
 ## Regra basica
 
-A categoria declarada em `tasks.md`/`tasks-classification.md` e a fonte da verdade. Nao mude o agente porque a task de front-end parece "setup", "infra" ou "simples para Codex".
+A categoria declarada em `tasks-classification.md` (derivada do PRD/spec ingerido) e a fonte da verdade. Nao mude o agente porque a task de front-end parece "setup", "infra" ou "simples para Codex".
 
 | Categoria | Agentes tipicos |
 |---|---|

@@ -1,7 +1,7 @@
 {
     "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
     "name": "cc-orchestrador-subagents",
-    "description": "Multi-agent development orchestrator for Claude Code. Coordinates OpenSpec, orchestrator-led planning, Codex review/back-end, and Antigravity/AGY front-end subagents in parallel, with API/UI contracts, consolidated subagent context, a final implementation report and business-level user instructions.",
+    "description": "Multi-agent development orchestrator for Claude Code that runs from an existing PRD/spec. Coordinates Codex back-end and Antigravity/AGY front-end subagents in parallel, with API/UI contracts, Codex back-end review, AGY (gemini-3.1-pro-high) front-end review, consolidated subagent context, a final implementation report and business-level user instructions.",
     "owner": {
         "name": "allanharlen",
         "email": "allanharlen@gmail.com"
@@ -13,8 +13,8 @@
     "plugins": [
         {
             "name": "cc-orchestrador-subagents",
-            "description": "Orchestrator skill + /orchestrator slash command that drive an OpenSpec -> orchestrator plan -> Codex review -> parallel Codex/Antigravity execution -> review -> consolidated context -> implementation report workflow. Runs a preflight check for agy, codex-cli, openspec-cli and required plugins before starting; cancels operation if anything is missing.",
-            "version": "2.6.3",
+            "description": "Orchestrator skill + /orchestrator slash command that drive a PRD/spec ingestion -> task classification -> API/UI contracts -> parallel Codex/Antigravity execution -> Codex back-end review -> AGY front-end review -> consolidated context -> implementation report workflow. Runs a preflight check for agy, codex-cli and required plugins before starting; cancels operation if anything is missing.",
+            "version": "3.0.0",
             "author": {
                 "name": "allanharlen"
             },
@@ -24,10 +24,9 @@
                 "orchestrator",
                 "multi-agent",
                 "subagents",
-                "openspec",
+                "prd",
                 "codex",
                 "antigravity",
-                "planning",
                 "parallel-execution",
                 "workflow",
                 "claude-code"

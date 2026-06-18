@@ -6,6 +6,7 @@ Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 
 - Para Codex, use o modelo padrao disponivel na conta e controle apenas `--effort medium` ou `--effort high`.
 - A categoria da task decide o agente. `FRONTEND_ONLY` sempre usa Antigravity/AGY como agente primario; Codex so pode receber front-end em fallback operacional registrado.
+- Codex revisa apenas back-end. O review de front-end e sempre do AGY com `--model gemini-3.1-pro-high`.
 - Se aparecer cota, rate limit, billing, resource exhausted, model capacity ou daily limit no Codex, retorne `Status: QUOTA_EXHAUSTED`.
 - Se aparecer cota, rate limit, billing, resource exhausted, model capacity ou daily limit no AGY, preserve o status cru `Status: QUOTA_EXAUSTED`.
 - Nao tente contornar cota com retries longos ou mudanca arbitraria de modelo.
@@ -14,49 +15,7 @@ Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 - Valide casing JSON e wire format real; nao assuma que nomes de DTO internos sao iguais ao payload na rede.
 - No Codex, trate rede externa bloqueada para pacotes/restore, pacote ausente do cache local e erro de escrita fora do working directory permitido como `Status: BLOCKED`.
 
-## 1. Review do entendimento - Codex (Fase 2)
-
-**Subagent type:** `codex:codex-rescue`
-
-```text
---effort high
-
-Nao modifique arquivos. Apenas revise.
-
-Revise criticamente o entendimento da demanda antes de qualquer artefato OpenSpec ser criado.
-
-Entendimento a revisar:
-- Problema identificado: <COLAR RESUMO DO PROBLEMA>
-- Escopo incluido: <COLAR LISTA>
-- Escopo excluido: <COLAR LISTA COM MOTIVOS>
-- Impacto arquitetural mapeado: <COLAR RESUMO POR CAMADA>
-- Riscos antecipados: <COLAR LISTA>
-- Perguntas em aberto: <COLAR LISTA OU "nenhuma">
-
-Avalie:
-- o problema identificado esta correto e completo?
-- o escopo incluido faz sentido para o problema?
-- o escopo excluido tem justificativa valida?
-- ha dependencias ocultas ou riscos nao mapeados?
-- o impacto arquitetural esta completo?
-- ha perguntas em aberto criticas que bloqueiam o planejamento?
-
-Retorne:
-1. Problemas ou lacunas no entendimento
-2. Ajustes obrigatorios
-3. Ajustes opcionais
-4. Decisao final: APROVADO | APROVADO COM AJUSTES | REPROVADO
-5. Duvidas: liste cada ponto em que voce ficou indeciso, nao teve informacao suficiente
-   para decidir ou que exige escolha humana antes de prosseguir. Se nao houver, escreva "nenhuma".
-6. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
-   (informe N/A se a plataforma nao expor o dado)
-```
-
-Salve o resultado em `review-entendimento.md`.
-
-> O orquestrador vai processar a secao "Duvidas" e, para cada item, usar `AskUserQuestion` para levar a decisao ao usuario antes de avancar.
-
-## 2. Back-end - Codex
+## 1. Back-end - Codex
 
 **Subagent type:** `codex:codex-rescue`
 
@@ -66,12 +25,12 @@ Salve o resultado em `review-entendimento.md`.
 Voce e o subagente back-end desta task.
 
 Antes de implementar, liste as skills disponiveis no ambiente com `/skills` ou equivalente.
-Ignore todas as skills cujo nome comece com `openspec` ou `opsx`.
+Ignore skills exclusivas de planejamento/coordenacao do orquestrador.
 Das skills restantes, identifique quais sao compativeis com esta task e use-as durante a implementacao.
 Registre no retorno quais skills foram utilizadas.
 
-Contexto OpenSpec:
-- mudanca: openspec/changes/<nome>/
+Contexto:
+- especificacao (PRD/spec): <COLAR TRECHO RELEVANTE OU CAMINHO DO ARQUIVO>
 - task atual: <TASK ID - TITULO>
 
 Descricao:
@@ -128,7 +87,7 @@ Retorno:
     (informe N/A se a plataforma nao expor o dado)
 ```
 
-## 3. Front-end - Antigravity (AGY)
+## 2. Front-end - Antigravity (AGY)
 
 **Subagent type:** `cc-antigravity-plugin:antigravity-agent`
 
@@ -150,12 +109,12 @@ Voce e o subagente front-end desta task.
 Esta task foi roteada para AGY porque sua categoria e `FRONTEND_ONLY` ou a fatia front-end de `FULLSTACK`. Mesmo quando o trabalho for setup de projeto, roteamento, tipos TypeScript ou servico API, trate como front-end.
 
 Antes de implementar, liste as skills disponiveis no ambiente com `/skills` ou equivalente.
-Ignore todas as skills cujo nome comece com `openspec` ou `opsx`.
+Ignore skills exclusivas de planejamento/coordenacao do orquestrador.
 Das skills restantes, identifique quais sao compativeis com esta task e use-as durante a implementacao.
 Registre no retorno quais skills foram utilizadas.
 
-Contexto OpenSpec:
-- mudanca: openspec/changes/<nome>/
+Contexto:
+- especificacao (PRD/spec): <COLAR TRECHO RELEVANTE OU CAMINHO DO ARQUIVO>
 - task atual: <TASK ID - TITULO>
 
 Descricao:
@@ -229,7 +188,7 @@ Retorno:
     (informe N/A se a plataforma nao expor o dado)
 ```
 
-## 4. SLOW_CHECKIN
+## 3. SLOW_CHECKIN
 
 ```text
 SLOW_CHECKIN - preciso de uma atualizacao operacional curta da task <TASK ID>.
@@ -243,40 +202,39 @@ Responda sem implementar trabalho novo nesta mensagem:
 6. existe falha de tool, terminal, escrita ou criacao de arquivos?
 ```
 
-## 5. Review pos-implementacao - Codex
+## 4. Review back-end pos-implementacao - Codex (Fase 8)
 
 **Subagent type:** `codex:codex-rescue`
 
 ```text
 --effort high
 
-Nao modifique arquivos. Apenas revise.
+Nao modifique arquivos. Apenas revise. Revise SOMENTE o back-end.
 
-Revise a implementacao realizada pelos subagentes para a mudanca OpenSpec <nome>.
+Revise a implementacao back-end realizada pelos subagentes para a especificacao <nome>.
 
 Leia:
-- openspec/changes/<nome>/proposal.md
-- openspec/changes/<nome>/design.md
-- openspec/changes/<nome>/tasks.md
-- .orchestration/<slug>/contracts/
-- .orchestration/<slug>/tasks-classification.md
-- diff git da branch atual
+- a especificacao (PRD/spec) ingerida
+- orchestration/<nome>/tasks-classification.md
+- orchestration/<nome>/waves.md
+- orchestration/<nome>/contracts/
+- diff git da branch atual (apenas arquivos back-end)
 
 Verifique:
-- aderencia ao plano;
-- contratos API/UI;
-- wire format e casing JSON;
-- serializacao real contra TypeScript;
-- inconsistencias front-back;
-- regressao;
+- aderencia a especificacao no escopo back-end;
+- contratos API (lado servidor);
+- wire format e casing JSON no payload emitido;
+- serializacao real contra TypeScript consumidor;
+- auth/autorizacao, validacoes e tratamento de erro;
+- migrations, persistencia, indices e integridade referencial;
+- regressao no back-end;
 - seguranca;
-- tipagem;
-- build;
+- build e testes back-end;
 - testes faltando;
 - pendencias antes do merge.
 
 Retorne:
-1. Decisao: APROVADO | REPROVADO
+1. Decisao: APROVADO | APROVADO_COM_RESSALVAS | REPROVADO
 2. Problemas bloqueantes
 3. Problemas nao bloqueantes
 4. Recomendacoes
@@ -285,9 +243,68 @@ Retorne:
    (informe N/A se a plataforma nao expor o dado)
 ```
 
+Salve o resultado em `review-final.md`.
+
+## 5. Review front-end pos-implementacao - Antigravity (AGY) (Fase 9)
+
+**Subagent type:** `cc-antigravity-plugin:antigravity-agent`
+
+**Parametros:**
+
+```text
+--model gemini-3.1-pro-high --dirs <DIRS_FRONT_END>
+```
+
+O review front-end usa sempre `gemini-3.1-pro-high`, independentemente do `agyModel` de implementacao.
+
+**Corpo do prompt:**
+
+```text
+Voce e o revisor front-end desta entrega. NAO modifique arquivos. Apenas revise.
+
+Revise a implementacao front-end realizada pelos subagentes para a especificacao <nome>.
+
+Leia:
+- a especificacao (PRD/spec) ingerida
+- orchestration/<nome>/tasks-classification.md
+- orchestration/<nome>/contracts/
+- diff/arquivos front-end alterados
+
+Verifique:
+- aderencia a especificacao no escopo front-end;
+- aderencia a cada task e criterio de aceite das tasks front-end;
+- consumo correto do contrato API/UI: wire format, casing JSON e serializacao real contra o TypeScript consumidor;
+- estados de UI tratados (loading, erro, empty, sucesso);
+- tipagem TypeScript, build, typecheck e lint;
+- acessibilidade e consistencia visual quando aplicavel;
+- testes de componente/e2e executados e lacunas;
+- arquivos alterados fora do escopo;
+- regressao potencial em telas/fluxos existentes.
+
+Regras de status:
+- se houver cota, retorne `Status: QUOTA_EXAUSTED`;
+- se houver autenticacao pendente, retorne `Status: AUTH_REQUIRED`;
+- se o `agy` nao existir no PATH, retorne `Status: AGY_MISSING`;
+- se houver timeout do bridge, retorne `Status: TIMEOUT`.
+
+Retorne:
+0. Status: DONE | QUOTA_EXAUSTED | AUTH_REQUIRED | AGY_MISSING | TIMEOUT
+1. Decisao: APROVADO | APROVADO_COM_RESSALVAS | REPROVADO
+2. Problemas bloqueantes (severidade, arquivo/trecho, impacto, correcao esperada)
+3. Problemas nao bloqueantes
+4. Recomendacoes
+5. Checklist final
+6. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
+   (informe N/A se a plataforma nao expor o dado)
+```
+
+Salve o resultado em `review-frontend.md`.
+
+> Se o AGY retornar `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING` ou `TIMEOUT`, o orquestrador faz review interno read-only do front-end e registra o fallback em `review-frontend.md`.
+
 ## 6. Ajustes pontuais - Codex
 
-Use Codex para ajustes pontuais de implementacao, handoff ou sincronizacao:
+Use Codex para ajustes pontuais de implementacao back-end, handoff ou sincronizacao:
 
 ```text
 --effort medium
@@ -302,6 +319,11 @@ Se houver cota, retorne `Status: QUOTA_EXHAUSTED`.
 Se houver rede externa bloqueada, pacote ausente no cache local ou escrita fora do working directory permitido, retorne `Status: BLOCKED` com evidencia.
 ```
 
-## 7. Fallback de review sem quota Codex
+> Ajustes pontuais de front-end voltam para o AGY (`cc-antigravity-plugin:antigravity-agent`) com `--model <agyModel>`, nao para o Codex.
 
-Se o review Codex retornar `QUOTA_EXHAUSTED`, o orquestrador nao redelega implementacao nem troca modelo a esmo. Ele faz review interno read-only, salva em `review-final.md` e deixa claro que foi fallback do orquestrador.
+## 7. Fallback de review sem agente disponivel
+
+- Review back-end com Codex em `QUOTA_EXHAUSTED`: o orquestrador faz review interno read-only, salva em `review-final.md` e deixa claro que foi fallback do orquestrador.
+- Review front-end com AGY em `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT`: o orquestrador faz review interno read-only, salva em `review-frontend.md` e deixa claro que foi fallback do orquestrador.
+
+Em nenhum caso o orquestrador redelega implementacao por conta propria nem troca modelo a esmo.

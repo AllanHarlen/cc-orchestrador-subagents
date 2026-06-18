@@ -16,17 +16,15 @@
 - `autoRemediation.action:` `<none|created-settings-json|updated-settings-json|blocked-...>`
 - `autoRemediation.revalidated:` `<true|false>`
 
-## 4. Artefatos OpenSpec utilizados
+## 4. Artefatos utilizados
 
-- `proposal.md`
-- `design.md`
-- `tasks.md`
-- `tasks-classification.md`
-- `waves.md`
-- `contracts/`
-- `monitoring.md`
-- `review-codex.md`
-- `review-final.md`
+- especificação fonte (PRD/spec): `<caminho>`
+- `orchestration/<nome>/tasks-classification.md`
+- `orchestration/<nome>/waves.md`
+- `orchestration/<nome>/contracts/`
+- `orchestration/<nome>/monitoring.md`
+- `orchestration/<nome>/review-final.md` (review back-end)
+- `orchestration/<nome>/review-frontend.md` (review front-end)
 - `workflow-log.md`
 - `subagents-context.md`
 
@@ -36,10 +34,6 @@
 - Modelo: Claude Sonnet 4.6
 - Effort: Medium
 
-### Review de plano
-- Modelo: Codex padrao da conta
-- Effort: High
-
 ### Back-end
 - Modelo: Codex padrao da conta
 - Effort: Medium
@@ -48,9 +42,14 @@
 - Agente: AGY (`cc-antigravity-plugin:antigravity-agent`, com `--model <agyModel>`)
 - Fan-out: `<agyParallel: yes|no>` — subagentes Gemini nativos: `<N | N/A>` | Conversation IDs: `<lista | N/A>`
 
-### Review pos-implementação
-- Modelo: Codex padrao da conta ou fallback interno do orquestrador
+### Review back-end pos-implementação
+- Agente: Codex padrao da conta (`codex:codex-rescue`) ou fallback interno do orquestrador
 - Effort: High
+- Escopo: somente back-end
+
+### Review front-end pos-implementação
+- Agente: AGY (`cc-antigravity-plugin:antigravity-agent`, `--model gemini-3.1-pro-high`) ou fallback interno do orquestrador
+- Escopo: somente front-end
 
 ## 6. Tasks executadas
 
@@ -85,7 +84,7 @@ Para cada contrato:
 
 ## 9. Ajustes após review
 
-- `<ajuste>` - driver: `<fase 4 | fase 12>`
+- `<ajuste>` - driver: `<fase 8 (review back-end) | fase 9 (review front-end)>`
 
 ## 10. Riscos identificados
 
@@ -139,9 +138,17 @@ Para cada contrato:
 
 ## 16. Review final
 
-- origem: `<Codex | fallback interno do orquestrador>`
+### Review back-end
+- origem: `<Codex | fallback interno do orquestrador | N/A (sem back-end)>`
 - arquivo: `review-final.md`
+- decisão: `<APROVADO | APROVADO_COM_RESSALVAS | REPROVADO | N/A>`
 - houve `QUOTA_EXHAUSTED` no review Codex?: `<sim|nao>`
+
+### Review front-end
+- origem: `<AGY gemini-3.1-pro-high | fallback interno do orquestrador | N/A (sem front-end)>`
+- arquivo: `review-frontend.md`
+- decisão: `<APROVADO | APROVADO_COM_RESSALVAS | REPROVADO | N/A>`
+- houve `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no review AGY?: `<sim|nao>`
 
 ## 17. Conclusão
 

@@ -3,9 +3,8 @@
  * Preflight check for cc-orchestrador-subagents.
  *
  * Validates that every dependency the orchestrator needs is present:
- *  - CLIs on PATH: agy, codex, openspec
+ *  - CLIs on PATH: agy, codex
  *  - Claude Code plugins: cc-antigravity-plugin, openai-codex
- *  - OpenSpec skills under ~/.claude/skills/openspec-*
  *  - A compatible Bash permission for the Codex companion runtime
  *  - A summary of the broader agent permission profile when available
  *  - Claude Code hook settings compatible with /goal
@@ -122,31 +121,6 @@ function checkPlugin(marketplace, pluginName, options = {}) {
   }
 
   return { ok: true, version, path: versionDir };
-}
-
-function checkOpenSpecSkills() {
-  const required = [
-    "openspec-new-change",
-    "openspec-ff-change",
-    "openspec-apply-change",
-    "openspec-verify-change",
-    "openspec-archive-change",
-    "openspec-sync-specs",
-  ];
-
-  const missing = required.filter(
-    (name) => !existsSync(join(SKILLS_DIR, name, "SKILL.md")),
-  );
-
-  if (missing.length === 0) {
-    return { ok: true, found: required };
-  }
-
-  return {
-    ok: false,
-    error: `missing skill folders: ${missing.join(", ")}`,
-    missing,
-  };
 }
 
 function checkCodexCompanionBashPermission() {
@@ -500,7 +474,6 @@ const checks = {
   cli: {
     agy: checkCli("agy"),
     codex: checkCli("codex"),
-    openspec: checkCli("openspec"),
   },
   plugins: {
     "cc-antigravity-plugin": checkPlugin("cc-antigravity-plugin", "cc-antigravity-plugin", {
@@ -512,9 +485,6 @@ const checks = {
       ],
     }),
     "openai-codex": checkPlugin("openai-codex", "codex"),
-  },
-  skills: {
-    openspec: checkOpenSpecSkills(),
   },
   permissions: {
     "codex-companion-bash": finalCodexCompanionBash,
@@ -534,9 +504,6 @@ for (const [name, result] of Object.entries(checks.cli)) {
 }
 for (const [name, result] of Object.entries(checks.plugins)) {
   if (!result.ok) failed.push({ category: "plugin", name, ...result });
-}
-for (const [name, result] of Object.entries(checks.skills)) {
-  if (!result.ok) failed.push({ category: "skill-bundle", name, ...result });
 }
 for (const [name, result] of Object.entries(checks.permissions)) {
   if (!result.ok) failed.push({ category: "permission", name, ...result });
@@ -588,18 +555,6 @@ function remediationFor(f) {
         ],
         docs: "https://github.com/openai/codex",
       };
-    case "cli:openspec":
-      return {
-        target: "openspec-cli",
-        steps: [
-          "Instalar OpenSpec CLI globalmente:",
-          "  npm install -g @fission-ai/openspec",
-          "Inicializar no projeto atual:",
-          "  openspec init",
-          "Garantir que o binario 'openspec' esta no PATH global.",
-        ],
-        docs: "https://github.com/Fission-AI/OpenSpec",
-      };
     case "plugin:cc-antigravity-plugin":
       return {
         target: "Claude Code plugin: cc-antigravity-plugin",
@@ -620,18 +575,6 @@ function remediationFor(f) {
           "  /plugin install codex@openai-codex",
         ],
         docs: "https://github.com/openai/codex-plugin-cc",
-      };
-    case "skill-bundle:openspec":
-      return {
-        target: "OpenSpec skills (~/.claude/skills/openspec-*)",
-        steps: [
-          "Esses skills sao instalados pelo CLI do OpenSpec:",
-          "  openspec init",
-          "Apos inicializar, os skills openspec-* aparecem em ~/.claude/skills/.",
-          "Se ainda assim faltarem, reinstale o OpenSpec CLI:",
-          "  npm install -g @fission-ai/openspec",
-        ],
-        docs: "https://github.com/Fission-AI/OpenSpec",
       };
     case "permission:codex-companion-bash":
       return {
