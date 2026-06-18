@@ -14,15 +14,15 @@
 - **Fim:** `<timestamp ou N/A>`
 - **Orquestrador:** `Claude Sonnet 4.6 medium`
 - **Artefatos principais:**
-  - `orchestration/<nome>/tasks-classification.md`
-  - `orchestration/<nome>/waves.md`
-  - `orchestration/<nome>/contracts/`
-  - `orchestration/<nome>/monitoring.md`
-  - `orchestration/<nome>/review-final.md` (review back-end)
-  - `orchestration/<nome>/review-frontend.md` (review front-end)
-  - `workflow-log.md`
-  - `subagents-context.md`
-  - `implementation-report.md`
+  - `.orchestration/<nome>/tasks-classification.md`
+  - `.orchestration/<nome>/waves.md`
+  - `.orchestration/<nome>/contracts/`
+  - `.orchestration/<nome>/monitoring.md`
+  - `.orchestration/<nome>/review-final.md` (review back-end)
+  - `.orchestration/<nome>/review-frontend.md` (review front-end)
+  - `.orchestration/<nome>/workflow-log.md`
+  - `.orchestration/<nome>/subagents-context.md`
+  - `.orchestration/<nome>/implementation-report.md`
 
 ## 2. Resumo Executivo do Workflow
 
@@ -35,9 +35,9 @@
 | `-1 Goal autonomy` | `<N/A | DONE | BLOCKED>` | `<ts>` | `<usado ou N/A>` | `<links>` | `<observacao>` |
 | `0 Preflight` | `<DONE | FAILED>` | `<ts>` | `<resultado do preflight>` | `<N/A>` | `<falhas se houver>` |
 | `1 Ingestao da especificacao` | `<status>` | `<ts>` | `<PRD/spec ingerido>` | `<spec fonte>` | `<lacunas bloqueantes se houver>` |
-| `2 Classificacao` | `<status>` | `<ts>` | `<tasks classificadas>` | `<tasks-classification.md>` | `<falhas se houver>` |
-| `3 Ondas` | `<status>` | `<ts>` | `<ondas definidas + validate-routing>` | `<waves.md>` | `<restricoes/erros de roteamento>` |
-| `4 Contratos` | `<status>` | `<ts>` | `<contratos criados>` | `<contracts/*.md>` | `<duvidas/decisoes>` |
+| `2 Classificacao` | `<status>` | `<ts>` | `<tasks classificadas>` | `.orchestration/<nome>/tasks-classification.md` | `<falhas se houver>` |
+| `3 Ondas` | `<status>` | `<ts>` | `<ondas definidas + validate-routing>` | `.orchestration/<nome>/waves.md` | `<restricoes/erros de roteamento>` |
+| `4 Contratos` | `<status>` | `<ts>` | `<contratos criados>` | `.orchestration/<nome>/contracts/*.md` | `<duvidas/decisoes>` |
 | `5 Delegacao paralela` | `<status>` | `<ts>` | `<subagentes lancados>` | `<monitoring.md>` | `<falhas se houver>` |
 | `6 Monitoramento` | `<status>` | `<ts>` | `<eventos principais>` | `<monitoring.md>` | `<SLOW_CHECKIN/cota/tools>` |
 | `7 Integracao` | `<status>` | `<ts>` | `<entregas consolidadas>` | `<subagents-context.md>` | `<divergencias/fallbacks>` |

@@ -19,14 +19,14 @@
 ## 4. Artefatos utilizados
 
 - especificação fonte (PRD/spec): `<caminho>`
-- `orchestration/<nome>/tasks-classification.md`
-- `orchestration/<nome>/waves.md`
-- `orchestration/<nome>/contracts/`
-- `orchestration/<nome>/monitoring.md`
-- `orchestration/<nome>/review-final.md` (review back-end)
-- `orchestration/<nome>/review-frontend.md` (review front-end)
-- `workflow-log.md`
-- `subagents-context.md`
+- `.orchestration/<nome>/tasks-classification.md`
+- `.orchestration/<nome>/waves.md`
+- `.orchestration/<nome>/contracts/`
+- `.orchestration/<nome>/monitoring.md`
+- `.orchestration/<nome>/review-final.md` (review back-end)
+- `.orchestration/<nome>/review-frontend.md` (review front-end)
+- `.orchestration/<nome>/workflow-log.md`
+- `.orchestration/<nome>/subagents-context.md`
 
 ## 5. Agentes utilizados
 

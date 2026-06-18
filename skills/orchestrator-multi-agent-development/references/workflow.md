@@ -2,7 +2,7 @@
 
 Este arquivo expande as fases do `SKILL.md`.
 
-O orquestrador atua somente em projetos com PRD/especificacao ja pronta. Ele nao faz discovery, nao cria plano OpenSpec e nao reabre o entendimento da demanda. Todos os artefatos de coordenacao ficam em `orchestration/<nome>/`, onde `<nome>` e um identificador descritivo em kebab-case derivado do PRD.
+O orquestrador atua somente em projetos com PRD/especificacao ja pronta. Ele nao faz discovery, nao cria plano OpenSpec e nao reabre o entendimento da demanda. Todos os artefatos de coordenacao ficam em `.orchestration/<nome>/`, onde `<nome>` e um identificador descritivo em kebab-case derivado do PRD.
 
 ## Fase 0 - Preflight
 
@@ -49,7 +49,7 @@ Ao final da Fase 1, o orquestrador deve conseguir produzir `tasks-classification
 
 ## Fase 2 - Classificacao das tasks
 
-Para cada task extraida do PRD/spec, registre em `orchestration/<nome>/tasks-classification.md`:
+Para cada task extraida do PRD/spec, registre em `.orchestration/<nome>/tasks-classification.md`:
 
 - categoria;
 - dependencias;
@@ -96,12 +96,12 @@ Exemplos:
 
 ## Fase 3 - Ondas
 
-Agrupe tasks em `orchestration/<nome>/waves.md`.
+Agrupe tasks em `.orchestration/<nome>/waves.md`.
 
 Cada entrada de `waves.md` deve repetir `assignedAgent` vindo de `tasks-classification.md`. Depois de montar as waves, rode:
 
 ```bash
-node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" "orchestration/<nome>"
+node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" ".orchestration/<nome>"
 ```
 
 Se o validador falhar, corrija `tasks-classification.md` e `waves.md` antes de qualquer delegacao.
@@ -115,7 +115,7 @@ Nao paralelize quando houver:
 
 ## Fase 4 - Contratos API/UI
 
-Crie `orchestration/<nome>/contracts/*.md` para:
+Crie `.orchestration/<nome>/contracts/*.md` para:
 
 - toda task `FULLSTACK`;
 - todo par dependente `BACKEND_ONLY` + `FRONTEND_ONLY` que troque dados entre si.
@@ -220,7 +220,8 @@ Status validos:
 - `NEEDS_SYNC`
 - `DONE`
 - `FAILED`
-- `QUOTA_EXAUSTED`
+- `QUOTA_EXAUSTED` (AGY)
+- `QUOTA_EXHAUSTED` (Codex)
 - `REVIEWED`
 
 ### Politica de quota

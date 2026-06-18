@@ -25,7 +25,7 @@ const FRONTEND_AGENT_RE = /\b(cc-antigravity-plugin:antigravity-agent|antigravit
 const CODEX_AGENT_RE = /\b(codex:codex-rescue|codex)\b/i;
 const CODEX_MEDIUM_RE = /--effort\s+medium/i;
 const CODEX_HIGH_RE = /--effort\s+high/i;
-const AGY_MODEL_RE = /(?:^|\b)(?:agyModel(?!Source)\b|--agy-model\b|--model\b)\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
+const AGY_MODEL_RE = /(?:^|[\s|,])(?:agyModel(?!Source)|--agy-model|--model)\b\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
 const AGY_MODEL_SOURCE_RE = /agyModelSource\s*[:=]?\s*`?(user|heuristic)`?/i;
 const AGY_SUBAGENT_MODEL_RE = /agySubagentModel\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
 const ALLOWED_AGY_MODELS = new Set([
@@ -55,7 +55,9 @@ function readRequired(file) {
     return "";
   }
 
-  return readFileSync(file, "utf8");
+  // Strip UTF-8 BOM if present (common on Windows editors)
+  const content = readFileSync(file, "utf8");
+  return content.charCodeAt(0) === 0xFEFF ? content.slice(1) : content;
 }
 
 function uniqueMatches(text, regex) {

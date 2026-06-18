@@ -187,6 +187,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - `references/contracts.md`
 - `references/parallelization.md`
 - `references/preflight-check.md`
+- `references/handoff-contract.md`
 - `assets/contract-template.md`
 - `assets/monitoring-template.md`
 - `assets/implementation-report-template.md`

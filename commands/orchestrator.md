@@ -143,9 +143,9 @@ Remova todos os prefixos reconhecidos do argumento. Se nao houver override de mo
 
 ### Passo 4 - Conduzir o workflow
 
-Siga `SKILL.md` + `references/*.md`. Crie os artefatos de coordenacao em `orchestration/<nome>/`, onde `<nome>` e um identificador descritivo em kebab-case derivado do PRD/spec. Use `assets/*.md` para os templates.
+Siga `SKILL.md` + `references/*.md`. Crie os artefatos de coordenacao em `.orchestration/<nome>/`, onde `<nome>` e um identificador descritivo em kebab-case derivado do PRD/spec. Use `assets/*.md` para os templates.
 
-Depois de gerar `tasks-classification.md` e `waves.md`, rode `node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs" "orchestration/<nome>"` ou o caminho equivalente via `${CLAUDE_SKILL_DIR}`. Se falhar, corrija os artefatos antes de delegar.
+Depois de gerar `tasks-classification.md` e `waves.md`, rode `node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs" ".orchestration/<nome>"` ou o caminho equivalente via `${CLAUDE_SKILL_DIR}`. Se falhar, corrija os artefatos antes de delegar.
 
 As tasks `FRONTEND_ONLY` e a fatia front-end de `FULLSTACK` devem registrar `agyModel` e `agyModelSource: user|heuristic` em `tasks-classification.md` e `waves.md`.
 
@@ -162,9 +162,9 @@ Mantenha o usuario informado com mensagens curtas:
 - `preflight OK`
 - se houve auto-correcao: `preflight auto-remediou Bash(node:*) em .claude/settings.json e revalidou`
 - `Context7 MCP detectado; vou exigir docs atuais nos prompts dos subagentes`
-- `especificacao ingerida; classificando tasks em orchestration/<nome>`
+- `especificacao ingerida; classificando tasks em .orchestration/<nome>`
 - `lancei <N> subagentes em paralelo para a onda <N>, aviso quando completarem`
-- no fim: caminhos do `workflow-log.md`, `implementation-report.md` e `subagents-context.md` + resumo de 2-3 frases + instrucoes de negocio
+- no fim: caminhos do `.orchestration/<nome>/workflow-log.md`, `.orchestration/<nome>/implementation-report.md` e `.orchestration/<nome>/subagents-context.md` + resumo de 2-3 frases + instrucoes de negocio
 
 ## Quando o usuario invocar sem argumento
 

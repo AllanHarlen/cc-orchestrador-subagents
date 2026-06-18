@@ -109,7 +109,6 @@ O consumidor nunca adivinha caminhos: descobre tudo via `handoff.json`. Se o `ha
 | `monitoring` | `monitoring.md` | sim |
 | `workflow-log` | `workflow-log.md` | sim |
 | `subagents-context` | `subagents-context.md` | sim |
-| `openspec-change` | `openspec/changes/<nome>/` | quando OpenSpec for usado |
 
 ### Executor (`stage: executor`)
 | role | arquivo padrao | required |
