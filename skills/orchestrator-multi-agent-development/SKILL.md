@@ -190,4 +190,6 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - `references/handoff-contract.md`
 - `assets/contract-template.md`
 - `assets/monitoring-template.md`
+- `assets/workflow-log-template.md`
+- `assets/subagents-context-template.md`
 - `assets/implementation-report-template.md`
