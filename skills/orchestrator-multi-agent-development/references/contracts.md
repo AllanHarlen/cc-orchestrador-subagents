@@ -5,10 +5,10 @@ Contrato e obrigatorio sempre que houver troca de dados entre front-end e back-e
 ## Onde salvar
 
 ```text
-openspec/changes/<nome>/contracts/<task-id-ou-par>.md
+.orchestration/<slug>/contracts/<task-id-ou-par>.md
 ```
 
-Use um arquivo por task `FULLSTACK` ou por par dependente front-back quando a classificacao estiver separada.
+Use um arquivo por task `FULLSTACK` ou por par dependente front-back quando a classificacao estiver separada. Quando houver `comunication_json.md` herdado do Pensador (Fase 0.5), use-o como base do contrato em vez de partir do zero.
 
 ## Quando `contractRequired` deve ser `yes`
 

@@ -8,6 +8,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Age
 
 Inicia o **Orquestrador Multiagentico de Desenvolvimento** para a demanda descrita pelo usuario. O workflow cobre:
 
+0. Ingestao de artefatos do Pensador em `.pensador/<slug>-vN/` (handoff upstream via `references/handoff-contract.md`)
 1. Entendimento da demanda
 2. Criacao de mudanca OpenSpec
 3. Plano tecnico feito pelo orquestrador
@@ -23,7 +24,7 @@ Inicia o **Orquestrador Multiagentico de Desenvolvimento** para a demanda descri
 11. Integracao e resolucao de divergencias
 12. Review pos-implementacao
 13. Verificacao OpenSpec
-14. `workflow-log.md` + `subagents-context.md` + `implementation-report.md`
+14. `workflow-log.md` + `subagents-context.md` + `implementation-report.md` + `handoff.json` em `.orchestration/<slug>/`
 15. Instrucoes de negocio para o usuario
 
 ## Regra central de execucao
@@ -91,7 +92,7 @@ Politica de sandbox Codex:
 Para trabalho independente entre turnos, o modo recomendado e envolver a demanda em `/goal`.
 
 ```text
-/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Antigravity encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; workflow-log.md, subagents-context.md e implementation-report.md criados; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para: <demanda>. Condicao de conclusao: preflight OK; mudanca OpenSpec criada, planejada e revisada; ondas de subagentes Codex/Antigravity encerradas ou bloqueios documentados; review pos-implementacao executado; verificacao OpenSpec executada ou impedimento registrado; workflow-log.md, subagents-context.md, implementation-report.md e handoff.json criados em .orchestration/<slug>/; resultados de testes/validacoes e instrucoes de negocio publicados na conversa; ou pare apos 20 turnos preservando o estado.
 ```
 
 ## Comportamento
@@ -144,9 +145,11 @@ Remova todos os prefixos reconhecidos da descricao da demanda. Se nao houver ove
 
 ### Passo 4 - Conduzir o workflow
 
-Siga `SKILL.md` + `references/*.md`. Use `assets/*.md` para criar artefatos em `openspec/changes/<nome>/`.
+Antes de tudo, execute a **Fase 0.5 - Ingestao de artefatos do Pensador**: descubra `.pensador/*/handoff.json` (ou `.pensador-progress.json` em fallback), ingira `prd`/`userhistory`/`architecture`/`communication-contract` e adote o `slug` base como identidade. Veja `references/handoff-contract.md`.
 
-Depois de gerar `tasks-classification.md` e `waves.md`, rode `node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs" "openspec/changes/<nome>"` ou o caminho equivalente via `${CLAUDE_SKILL_DIR}`. Se falhar, corrija os artefatos antes de delegar.
+Siga `SKILL.md` + `references/*.md`. Specs do OpenSpec ficam em `openspec/changes/<nome>/`; os artefatos de coordenacao e entregaveis finais (incluindo `handoff.json`) ficam em `.orchestration/<slug>/`.
+
+Depois de gerar `tasks-classification.md` e `waves.md`, rode `node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs" ".orchestration/<slug>"` ou o caminho equivalente via `${CLAUDE_SKILL_DIR}`. Se falhar, corrija os artefatos antes de delegar.
 
 As tasks `FRONTEND_ONLY` e a fatia front-end de `FULLSTACK` devem registrar `agyModel` e `agyModelSource: user|heuristic` em `tasks-classification.md` e `waves.md`.
 
@@ -165,7 +168,7 @@ Mantenha o usuario informado com mensagens curtas:
 - `Context7 MCP detectado; vou exigir docs atuais nos prompts dos subagentes`
 - `criando mudanca OpenSpec <nome>`
 - `lancei <N> subagentes em paralelo para a onda <N>, aviso quando completarem`
-- no fim: caminhos do `workflow-log.md`, `implementation-report.md` e `subagents-context.md` + resumo de 2-3 frases + instrucoes de negocio
+- no fim: caminhos do `workflow-log.md`, `implementation-report.md`, `subagents-context.md` e `handoff.json` em `.orchestration/<slug>/` + resumo de 2-3 frases + instrucoes de negocio. Indique que o proximo passo e `/cc-executor-subagents:executor` para review/validacao.
 
 ## Quando o usuario invocar sem argumento
 

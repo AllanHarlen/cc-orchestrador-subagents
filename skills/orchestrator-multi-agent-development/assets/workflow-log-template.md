@@ -1,6 +1,6 @@
 # Log de Workflow do Orquestrador - <NOME DA MUDANÇA>
 
-> Entregável final obrigatório. Salve em `openspec/changes/<nome>/workflow-log.md`.
+> Entregável final obrigatório. Salve em `.orchestration/<slug>/workflow-log.md`.
 > Este arquivo registra a execução completa do orquestrador por fase. Use `monitoring.md` como fonte viva de eventos de ondas/subagentes e consolide aqui a linha do tempo auditável.
 
 ## 1. Metadados da Execução
@@ -16,10 +16,11 @@
   - `openspec/changes/<nome>/proposal.md`
   - `openspec/changes/<nome>/design.md`
   - `openspec/changes/<nome>/tasks.md`
-  - `openspec/changes/<nome>/monitoring.md`
-  - `openspec/changes/<nome>/workflow-log.md`
-  - `openspec/changes/<nome>/subagents-context.md`
-  - `openspec/changes/<nome>/implementation-report.md`
+  - `.orchestration/<slug>/monitoring.md`
+  - `.orchestration/<slug>/workflow-log.md`
+  - `.orchestration/<slug>/subagents-context.md`
+  - `.orchestration/<slug>/implementation-report.md`
+  - `.orchestration/<slug>/handoff.json`
 
 ## 2. Resumo Executivo do Workflow
 
@@ -50,7 +51,7 @@
 
 ## 4. Subagentes Acionados
 
-> Resumo curto. O detalhe completo fica em `openspec/changes/<nome>/subagents-context.md`.
+> Resumo curto. O detalhe completo fica em `.orchestration/<slug>/subagents-context.md`.
 
 | Onda | Task | Subagent type | Execucao | Status final | Link/contexto |
 |---|---|---|---|---|---|
@@ -109,7 +110,7 @@ Se nenhuma falha ocorreu, escreva: `Nenhuma falha operacional ocorreu durante es
 
 ## 10. Checklist Final do Log
 
-- [ ] `workflow-log.md` criado em `openspec/changes/<nome>/workflow-log.md`
+- [ ] `workflow-log.md` criado em `.orchestration/<slug>/workflow-log.md`
 - [ ] Todas as fases aplicáveis registradas
 - [ ] Falhas possíveis consideradas
 - [ ] Falhas ocorridas registradas com evidência, impacto e ação

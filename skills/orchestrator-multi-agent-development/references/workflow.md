@@ -17,6 +17,19 @@ Regras:
 - a auto-remediacao so vale para `codex-companion-bash`;
 - se `.claude/settings.json` existir com JSON invalido, nao sobrescreva; falhe com remediacao clara.
 
+## Fase 0.5 - Ingestao de artefatos do Pensador (upstream)
+
+Aplica o `references/handoff-contract.md` no papel de consumidor do Pensador. Execute apos o preflight e antes da Fase 1.
+
+1. Procure `.pensador/*/handoff.json`. Varios `slug` distintos → confirme via `AskUserQuestion` qual demanda implementar. Mesmo `slug` com varias versoes `-vN` → use a maior versao.
+2. Sem `handoff.json`: faca fallback para `.pensador/<slug>-vN/.pensador-progress.json` (campo `artifacts`). Sem diretorio `.pensador/`: registre greenfield (sem upstream) e siga.
+3. `handoffVersion != 1`: avise o usuario e degrade para descoberta por convencao.
+4. Ingira na ordem `prd` → `userhistory` → `architecture` → `communication-contract`. O `prd`/`userhistory` definem o escopo aprovado; `architecture` traz restricoes; `comunication_json.md` e a base dos contratos da Fase 8.
+5. Adote o `slug` base (sem `-vN`) como identidade. Coordenacao vai para `.orchestration/<slug>/`.
+6. `status` upstream `BLOCKED`/`PARTIAL`: pare e peca decisao ao usuario antes de planejar.
+
+Quando o Pensador foi a origem do plano, trate-o como `PREDEFINED_PLAN=yes` na Fase 1.
+
 ## Fase 1 - Entendimento da demanda
 
 ### 1.0 Detectar plano pre-definido
@@ -299,7 +312,7 @@ Agrupe tasks em `waves.md`.
 Cada entrada de `waves.md` deve repetir `assignedAgent` vindo de `tasks-classification.md`. Depois de montar as waves, rode:
 
 ```bash
-node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" "openspec/changes/<nome>"
+node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" ".orchestration/<slug>"
 ```
 
 Se o validador falhar, corrija `tasks-classification.md` e `waves.md` antes de qualquer delegacao.
@@ -313,10 +326,12 @@ Nao paralelize quando houver:
 
 ## Fase 8 - Contratos API/UI
 
-Crie `contracts/*.md` para:
+Crie `.orchestration/<slug>/contracts/*.md` para:
 
 - toda task `FULLSTACK`;
 - todo par dependente `BACKEND_ONLY` + `FRONTEND_ONLY` que troque dados entre si.
+
+Use o `comunication_json.md` herdado do Pensador (Fase 0.5) como base quando existir.
 
 Todo contrato deve conter:
 
@@ -568,11 +583,24 @@ Use:
 
 ## Fases 14 e 15 - Relatorio final
 
-Entregaveis obrigatorios (salve na **raiz de execucao do agente**, nao dentro de `openspec/`):
+Entregaveis obrigatorios (salve em `.orchestration/<slug>/`, **nunca** dentro de `openspec/` nem na raiz do projeto):
 
 - `workflow-log.md`
 - `subagents-context.md`
 - `implementation-report.md`
+- `handoff.json` (manifesto de handoff para o Executor; veja `references/handoff-contract.md`)
+
+> Onde `<slug>` e o slug base herdado do handoff do Pensador (sem `-vN`), ou derivado da demanda quando greenfield. Os artefatos de coordenacao (`tasks-classification.md`, `waves.md`, `monitoring.md`, `contracts/`, `review-final.md`, `review-frontend.md`) tambem ficam em `.orchestration/<slug>/`. Specs do OpenSpec (`proposal.md`, `design.md`, `tasks.md`) permanecem em `openspec/changes/<nome>/`.
+
+### Manifesto de handoff
+
+Ao concluir a Fase 14, grave `.orchestration/<slug>/handoff.json` (`HANDOFF_VERSION = 1`) com:
+
+- `stage: "orchestrador"`, `slug`, `artifactRoot: ".orchestration/<slug>"`;
+- `upstream`: `{ stage: "pensador", handoffPath: ".pensador/<slug>-vN/handoff.json" }` (ou `null` se greenfield);
+- `artifacts[]` com os roles do orquestrador (`implementation-report`, `tasks-classification`, `waves`, `api-contracts`, `review-final`, `review-frontend`, `monitoring`, `workflow-log`, `subagents-context`, `openspec-change`);
+- `status` final (`DONE`/`PARTIAL`/`BLOCKED`);
+- `nextStage`: `{ consumer: "cc-executor-subagents", entrypoint: "/executor", instructions: "Revisar a implementacao contra o plano e validar." }`.
 
 O relatorio final deve citar:
 

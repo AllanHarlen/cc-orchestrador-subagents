@@ -258,7 +258,8 @@ Leia:
 - openspec/changes/<nome>/proposal.md
 - openspec/changes/<nome>/design.md
 - openspec/changes/<nome>/tasks.md
-- openspec/changes/<nome>/contracts/
+- .orchestration/<slug>/contracts/
+- .orchestration/<slug>/tasks-classification.md
 - diff git da branch atual
 
 Verifique:

@@ -21,6 +21,7 @@ Codex e Antigravity/AGY entram como subagentes especializados:
 ### Workflow completo
 
 - **Fase 0 - Preflight:** executa `node scripts/preflight.mjs`, valida dependencias, Codex, AGY, permissao `Bash(node:*)` e registra `autoRemediation` quando `.claude/settings.json` puder ser criado ou atualizado com seguranca.
+- **Fase 0.5 - Ingestao do Pensador (upstream):** descobre `.pensador/<slug>-vN/handoff.json` e ingere `prd`, `userhistory`, `architecture` e `comunication_json.md` conforme o contrato de handoff (`references/handoff-contract.md`). O `comunication_json.md` vira a base dos contratos da Fase 8. Adota o `slug` base como identidade; toda coordenacao vai para `.orchestration/<slug>/`.
 - **Fase 1 - Entendimento da demanda:** roda `/opsx:explore`, le o estado do projeto, specs existentes e mudancas anteriores. Duvidas de escopo, conflito com specs ou decisoes arquiteturais abertas sao resolvidas com `AskUserQuestion` antes de avancar.
 - **Fase 2 - Review do entendimento com Codex:** delega uma revisao read-only para Codex com `--effort high`, salva `review-entendimento.md` e resolve duvidas ou ajustes obrigatorios antes de criar artefatos OpenSpec. Hipoteses nao verificaveis exigem leitura dos arquivos relevantes antes de virar decisao no `design.md`.
 - **Fase 3 - Criacao da mudanca OpenSpec:** cria `openspec/changes/<nome>/` via `/openspec-new-change <nome>`.
@@ -35,7 +36,7 @@ Codex e Antigravity/AGY entram como subagentes especializados:
 - **Fase 11 - Integracao:** valida aderencia a `tasks.md`, contratos, wire format, casing JSON, serializacao real, escopo de arquivos, testes e build. Ajustes pontuais voltam para Codex com `--effort medium`.
 - **Fase 12 - Review pos-implementacao:** delega review final read-only ao Codex com `--effort high` e salva `review-final.md`. Se Codex ficar sem quota em review, o proprio Orchestrador faz review interno read-only e registra o fallback.
 - **Fase 13 - Verificacao OpenSpec:** executa `/openspec-verify-change <nome>`, `/openspec-sync-specs <nome>` e `/openspec-archive-change <nome>` quando aplicavel.
-- **Fase 14 - Relatorios finais:** cria `workflow-log.md`, `subagents-context.md` e `implementation-report.md`, consolidando timeline, contratos, validacoes, subagentes, Conversation IDs do AGY e tokens por agente.
+- **Fase 14 - Relatorios finais:** cria `workflow-log.md`, `subagents-context.md`, `implementation-report.md` e `handoff.json` em `.orchestration/<slug>/`, consolidando timeline, contratos, validacoes, subagentes, Conversation IDs do AGY e tokens por agente. O `handoff.json` e o manifesto que o `/cc-executor-subagents:executor` consome para o review.
 - **Fase 15 - Entrega ao usuario:** publica o resumo final, caminhos dos artefatos, validacoes executadas, bloqueios restantes e instrucoes de negocio.
 
 ### Regras operacionais principais
@@ -345,7 +346,7 @@ node --check skills/orchestrator-multi-agent-development/scripts/preflight.mjs
 node scripts/preflight.mjs
 rg --line-number --fixed-strings -- '--model gpt-5.4-codex' commands skills
 rg --line-number --fixed-strings -- '--model gpt-5.5-codex' commands skills
-node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs openspec/changes/<nome>
+node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs .orchestration/<slug>
 rg --line-number --fixed-strings -- 'QUOTA_EXAUSTED' README.md commands skills
 rg --line-number --fixed-strings -- 'agyModelSource' README.md commands skills
 rg --line-number --fixed-strings -- 'agyParallel' README.md commands skills

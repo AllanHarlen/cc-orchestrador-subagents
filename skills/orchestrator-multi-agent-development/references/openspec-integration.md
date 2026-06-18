@@ -45,6 +45,8 @@ Antes de `/openspec-archive-change`, sempre que a mudança introduzir specs novo
 
 ## Layout esperado
 
+O OpenSpec guarda apenas os artefatos nativos da mudanca (`proposal.md`, `design.md`, `tasks.md`, `specs/`). Os artefatos de coordenacao do orquestrador ficam em `.orchestration/<slug>/` (veja `references/handoff-contract.md`).
+
 ```
 openspec/
 ├── specs/                                  # specs vigentes do projeto
@@ -53,18 +55,23 @@ openspec/
         ├── proposal.md                     # o que e por quê
         ├── design.md                       # como (arquitetura, decisões)
         ├── tasks.md                        # quebra em tasks
-        ├── tasks-classification.md         # gerado pelo orquestrador (fase 6)
-        ├── waves.md                        # gerado pelo orquestrador (fase 7)
-        ├── contracts/                      # contratos API/UI por task FULLSTACK
-        │   └── <task-id>.md
-        ├── monitoring.md                   # status das tasks (fase 10)
-        ├── workflow-log.md                 # log auditável do workflow (fase 14)
-        ├── subagents-context.md            # contexto consolidado dos subagentes (fase 14)
-        ├── review-codex.md                 # output do review do plano (fase 4)
-        ├── review-final.md                 # output do review pós-implementação (fase 12)
-        ├── specs/                          # deltas de spec gerados nesta mudança
-        ├── implementation-report.md        # relatório final (fase 14)
-        └── README.md                       # (opcional)
+        └── specs/                          # deltas de spec gerados nesta mudança
+
+.orchestration/
+└── <slug>/                                 # raiz de coordenacao do orquestrador
+    ├── review-entendimento.md              # review do entendimento (fase 2)
+    ├── plan-sufficiency-check.md           # gate de suficiencia do plano (fase 4.5)
+    ├── tasks-classification.md             # gerado pelo orquestrador (fase 6)
+    ├── waves.md                            # gerado pelo orquestrador (fase 7)
+    ├── contracts/                          # contratos API/UI por task FULLSTACK
+    │   └── <task-id>.md
+    ├── monitoring.md                       # status das tasks (fase 10)
+    ├── review-final.md                     # review pós-implementação (fase 12)
+    ├── review-frontend.md                  # review do front-end (quando houver)
+    ├── workflow-log.md                     # log auditável do workflow (fase 14)
+    ├── subagents-context.md                # contexto consolidado dos subagentes (fase 14)
+    ├── implementation-report.md            # relatório final (fase 14)
+    └── handoff.json                        # manifesto de handoff para o Executor (fase 14)
 ```
 
 ## Boas práticas

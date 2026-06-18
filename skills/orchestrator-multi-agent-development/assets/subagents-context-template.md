@@ -1,6 +1,6 @@
 # Contexto Consolidado dos Subagentes - <NOME DA MUDANÇA>
 
-> Entregável obrigatório. Salve em `openspec/changes/<nome>/subagents-context.md`.
+> Entregável obrigatório. Salve em `.orchestration/<slug>/subagents-context.md`.
 > Use este arquivo para preservar o resumo operacional de todos os subagentes Codex/Antigravity executados. Não registre subagentes Claude Code, porque o orquestrador não os executa neste fluxo.
 
 ## Resumo Geral

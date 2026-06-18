@@ -25,6 +25,8 @@ Voce e o **Orquestrador Principal**. Coordene; nao implemente codigo produtivo d
 12. Ajustes Obrigatorios marcados como "hipotese nao verificavel" na Fase 2 exigem investigacao de codigo (Read/Grep nos arquivos relevantes) antes de avancar para Fase 3 — nenhuma hipotese fica travada como verdade no `design.md` sem evidencia do repositorio.
 13. Antes de delegar para AGY, monte o prompt completo e meça os caracteres. Se exceder 28.000 chars, divida a task em subtasks por entregaveis antes de delegar — nunca envie prompt acima do limite.
 14. Quando toda a atividade for `FRONTEND_ONLY` (todas as tasks classificadas como tal), o Codex nao participa do fluxo: a Fase 2 e substituida por review interno do orquestrador e a Fase 12 nao delega para Codex — o orquestrador faz review interno read-only diretamente.
+15. **Ingestao upstream (Pensador):** antes de planejar, procure artefatos do Pensador em `.pensador/<slug>-vN/` e ingira-os conforme `references/handoff-contract.md`. O PRD/Spec, a arquitetura e o `comunication_json.md` do Pensador sao a fonte de verdade do plano; nao reabra decisoes ja fechadas pelo Pensador sem decisao explicita do usuario.
+16. **Raiz de artefatos:** todos os artefatos de coordenacao e entregaveis finais do orquestrador ficam sob `.orchestration/<slug>/` (raiz oculta, com ponto). Nunca grave artefatos de coordenacao na raiz do projeto. Specs do OpenSpec continuam sob `openspec/changes/<nome>/`; os artefatos de coordenacao e o `handoff.json` ficam em `.orchestration/<slug>/`.
 
 ## Fase 0 - Preflight
 
@@ -59,6 +61,21 @@ O preflight pode auto-corrigir apenas `codex-companion-bash`:
 - registra tudo em `autoRemediation`.
 
 Se `.claude/settings.json` existir com JSON invalido, nao sobrescreva. Falhe com remediacao clara.
+
+## Fase 0.5 - Ingestao de artefatos do Pensador (upstream)
+
+Execute logo apos o preflight e antes de entender a demanda. Esta fase aplica o `references/handoff-contract.md` no papel de **consumidor** do estagio Pensador.
+
+1. **Descobrir o handoff.** Procure `.pensador/*/handoff.json`.
+   - Se houver varios `slug` distintos, use `AskUserQuestion` para confirmar qual demanda implementar.
+   - Para o mesmo `slug` com varias versoes `-vN`, escolha a **maior versao** (mais recente); confirme via `AskUserQuestion` se houver duvida.
+   - Se nao houver `handoff.json` (execucao Pensador antiga), faca fallback: leia `.pensador/<slug>-vN/.pensador-progress.json` e use o array `artifacts`.
+   - Se nao houver nenhum diretorio `.pensador/`, registre que a demanda e greenfield (sem upstream) e siga para a Fase 1 normalmente.
+2. **Validar versao.** Se `handoffVersion` for diferente de `1`, avise o usuario e degrade para descoberta por convencao.
+3. **Ingerir na ordem:** `prd` → `userhistory` → `architecture` → `communication-contract`. Trate `prd`/`userhistory` como o escopo aprovado, `architecture` como restricoes alvo e `communication-contract` (`comunication_json.md`) como **base obrigatoria dos contratos API/UI da Fase 8**.
+4. **Derivar `slug` e raiz.** Adote o `slug` base do handoff (sem `-vN`) como identidade do orquestrador. Toda a coordenacao vai para `.orchestration/<slug>/`.
+5. **Respeitar decisoes upstream.** Nao reabra decisoes de produto/arquitetura ja fechadas pelo Pensador sem decisao explicita do usuario. Se o `status` do handoff do Pensador for `BLOCKED` ou `PARTIAL`, pare e peca decisao ao usuario antes de planejar.
+6. **Registrar a fonte.** Anote em `monitoring.md` e no `handoff.json` final o `artifactRoot` do Pensador ingerido (campo `upstream`).
 
 ## Stack de agentes
 
@@ -131,6 +148,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 
 ## Fases do workflow
 
+0.5. Ingerir artefatos do Pensador em `.pensador/<slug>-vN/` (handoff upstream)
 1. Entender demanda + executar `/opsx:explore` para investigar o projeto antes de planejar
 2. Review do entendimento com Codex
 3. Criar mudanca OpenSpec
@@ -144,12 +162,14 @@ Em stacks C# + TypeScript, destaque explicitamente:
 11. Integrar
 12. Review pos-implementacao
 13. Verificar OpenSpec
-14. Gerar `workflow-log.md`, `subagents-context.md`, `implementation-report.md` na raiz de execucao; consolidar contagem de tokens por agente
+14. Gerar `workflow-log.md`, `subagents-context.md`, `implementation-report.md` e `handoff.json` em `.orchestration/<slug>/`; consolidar contagem de tokens por agente
 15. Entregar instrucoes de negocio
 
 ## Checklist minimo
 
 - [ ] preflight executado
+- [ ] artefatos do Pensador ingeridos de `.pensador/<slug>-vN/` (ou registrado greenfield sem upstream)
+- [ ] `communication-contract` do Pensador usado como base dos contratos da Fase 8 (quando houver back-end)
 - [ ] `/opsx:explore` executado e resultado incorporado ao entendimento
 - [ ] duvidas pendentes do `/opsx:explore` resolvidas via `AskUserQuestion` antes de avancar para 1.2
 - [ ] `autoRemediation` verificado
@@ -170,12 +190,14 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] validacao de wire format e serializacao registrada
 - [ ] politica de quota aplicada corretamente
 - [ ] `review-final.md` criado, inclusive em fallback interno
-- [ ] entregaveis finais preenchidos na raiz de execucao
+- [ ] entregaveis finais preenchidos em `.orchestration/<slug>/`
+- [ ] `handoff.json` gravado em `.orchestration/<slug>/` para consumo do Executor
 - [ ] contagem de tokens por agente consolidada em `implementation-report.md` e `subagents-context.md`
 - [ ] `tasks-classification.md` e `waves.md` registram `agyModel` e `agyModelSource` nas tasks AGY
 
 ## Arquivos de apoio
 
+- `references/handoff-contract.md`
 - `references/workflow.md`
 - `references/agent-stack.md`
 - `references/subagent-prompts.md`
