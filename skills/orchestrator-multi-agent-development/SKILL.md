@@ -29,6 +29,7 @@ O orquestrador atua **exclusivamente em projetos com PRD ja montado ou com espec
 12. `--parallel` e `--subagent-model` sao **modificadores de execucao** da delegacao AGY, nao criterios de roteamento. A categoria da task continua decidindo o agente; o fan-out nativo Gemini e apenas uma otimizacao interna da sessao AGY.
 13. Antes de delegar para AGY, monte o prompt completo e meca os caracteres. Se exceder 28.000 chars, divida a task em subtasks por entregaveis antes de delegar — nunca envie prompt acima do limite.
 14. Quando toda a atividade for `FRONTEND_ONLY` (todas as tasks classificadas como tal), o Codex nao participa do fluxo: a Fase 8 (review back-end) e ignorada e o review fica inteiramente com o AGY na Fase 9.
+15. **Design system (Open Design) e contrato visual, nao decoracao.** Quando a especificacao tiver design system — `design-system.md` (modo PRD) ou `design.md` + `specs/ui-design-system/spec.md` (modo Spec OpenSpec), com os arquivos verbatim em `packages/ui/design-systems/<id>/` (`tokens.css`, `components.html`, `preview/app.html`) — o orquestrador **passa os caminhos desses artefatos no prompt de toda task front-end** e exige que o AGY **consuma `tokens.css` (sem inventar tokens)** e bata os componentes com `components.html`. Na Fase 9, o review aplica o **gate de design**: `tokens.css` consumido via `var(--*)`, accent contido (≤ 2x/pagina), telas-chave conferidas contra `preview/app.html`, anti-padroes da secao 9 ausentes; violacao de requisito explicito e BLOQUEANTE.
 
 ## Fase 0 - Preflight
 
@@ -45,6 +46,8 @@ Se a execucao foi iniciada com `--agy-model <modelo>`, valide a allowlist e pres
 - `gemini-3.5-flash-medium` por padrao;
 - `gemini-3.1-pro-low` para tasks front-end complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressao;
 - `gemini-3.1-pro-high` apenas em casos criticos.
+
+> **Roteamento por fidelidade de design.** Toda task front-end que **implementa um design system** (consome `design-system.md`/`tokens.css`/`components.html` do Open Design) precisa de julgamento visual — **nunca** use `gemini-3.5-flash-medium` para ela. Minimo `gemini-3.5-flash-high`; suba para `gemini-3.1-pro-high` quando a fidelidade visual for critica (landing, vitrine publica, hero, telas de marca). Scaffold puramente funcional (setup, rotas, tipos, servico API) pode seguir a heuristica padrao. Registre o motivo do upgrade em `agyModelSource: heuristic`.
 
 > O review front-end da Fase 9 usa sempre `gemini-3.1-pro-high`, independentemente do `agyModel` escolhido para implementacao.
 
@@ -175,6 +178,9 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] politica de quota aplicada corretamente
 - [ ] `review-final.md` criado (review back-end), inclusive em fallback interno; N/A se nao houver back-end
 - [ ] `review-frontend.md` criado (review front-end pelo AGY com gemini-3.1-pro-high), inclusive em fallback interno; N/A se nao houver front-end
+- [ ] quando houver design system: prompts front-end carregam os caminhos de `tokens.css`/`components.html`/`design-system.md` (ou `design.md` + `specs/ui-design-system/` no modo Spec) e `preview/app.html`
+- [ ] tasks que implementam design system nao usam `gemini-3.5-flash-medium` (minimo `gemini-3.5-flash-high`; `-high` quando a fidelidade visual for critica)
+- [ ] Fase 9 aplicou o gate de design (tokens via `var(--*)`, accent ≤ 2x, diff vs `preview/app.html`, anti-padroes secao 9); violacao de requisito explicito tratada como BLOQUEANTE
 - [ ] entregaveis finais preenchidos na raiz de execucao
 - [ ] contagem de tokens por agente consolidada em `implementation-report.md` e `subagents-context.md`
 - [ ] `tasks-classification.md` e `waves.md` registram `agyModel` e `agyModelSource` nas tasks AGY
