@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.2] — 2026-06-23
+
+### Coerência do roteamento de modelo por fidelidade de design
+
+- **`gemini-3.5-flash-high` agora está na escada da heurística (GAP #2 do review):** a regra de fidelidade de design fixava o piso em `flash-high`, mas a heurística base (default/complexa/crítica) nunca listava esse tier — o leitor não via onde ele se posicionava. Adicionada a linha `flash-high` (design system não-crítico) à heurística e a escada de capacidade explícita: `flash-low < flash-medium < flash-high < pro-low < pro-high` (allowlist `validate-routing.mjs`).
+- **Checklist desambiguado (GAP #3):** o item dizia "`-high` quando crítico" (ambíguo entre `flash-high` e `pro-high`); agora diz `gemini-3.1-pro-high` por extenso, alinhado à regra 15.
+
 ## [3.2.1] — 2026-06-23
 
 ### Correções do review e2e Open Design

@@ -44,10 +44,13 @@ Use o JSON retornado como fonte da verdade.
 Se a execucao foi iniciada com `--agy-model <modelo>`, valide a allowlist e preserve a escolha como override do usuario. Caso contrario, o orquestrador deve atribuir `agyModel` por heuristica:
 
 - `gemini-3.5-flash-medium` por padrao;
+- `gemini-3.5-flash-high` para tasks front-end que implementam design system (precisam de julgamento visual) mas nao sao criticas de marca;
 - `gemini-3.1-pro-low` para tasks front-end complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressao;
 - `gemini-3.1-pro-high` apenas em casos criticos.
 
-> **Roteamento por fidelidade de design.** Toda task front-end que **implementa um design system** (consome `design-system.md`/`tokens.css`/`components.html` do Open Design) precisa de julgamento visual — **nunca** use `gemini-3.5-flash-medium` para ela. Minimo `gemini-3.5-flash-high`; suba para `gemini-3.1-pro-high` quando a fidelidade visual for critica (landing, vitrine publica, hero, telas de marca). Scaffold puramente funcional (setup, rotas, tipos, servico API) pode seguir a heuristica padrao. Registre o motivo do upgrade em `agyModelSource: heuristic`.
+Escada de capacidade (allowlist `validate-routing.mjs`): `flash-low < flash-medium < flash-high < pro-low < pro-high`.
+
+> **Roteamento por fidelidade de design.** Toda task front-end que **implementa um design system** (consome `design-system.md`/`tokens.css`/`components.html` do Open Design) precisa de julgamento visual — **nunca** use `gemini-3.5-flash-medium` para ela. Minimo `gemini-3.5-flash-high` (um degrau acima do default); suba para `gemini-3.1-pro-high` quando a fidelidade visual for critica (landing, vitrine publica, hero, telas de marca). Scaffold puramente funcional (setup, rotas, tipos, servico API) pode seguir a heuristica padrao. Registre o motivo do upgrade em `agyModelSource: heuristic`.
 
 > O review front-end da Fase 9 usa sempre `gemini-3.1-pro-high`, independentemente do `agyModel` escolhido para implementacao.
 
@@ -179,7 +182,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] `review-final.md` criado (review back-end), inclusive em fallback interno; N/A se nao houver back-end
 - [ ] `review-frontend.md` criado (review front-end pelo AGY com gemini-3.1-pro-high), inclusive em fallback interno; N/A se nao houver front-end
 - [ ] quando houver design system: prompts front-end carregam os caminhos de `tokens.css`/`components.html`/`design-system.md` (ou `design.md` + `specs/ui-design-system/` no modo Spec) e o diretorio `preview/`
-- [ ] tasks que implementam design system nao usam `gemini-3.5-flash-medium` (minimo `gemini-3.5-flash-high`; `-high` quando a fidelidade visual for critica)
+- [ ] tasks que implementam design system nao usam `gemini-3.5-flash-medium` (minimo `gemini-3.5-flash-high`; `gemini-3.1-pro-high` quando a fidelidade visual for critica)
 - [ ] Fase 9 aplicou o gate de design (tokens via `var(--*)`, accent ≤ 2x, diff vs diretorio `preview/`, anti-padroes secao 9); violacao de requisito explicito tratada como BLOQUEANTE
 - [ ] entregaveis finais preenchidos na raiz de execucao
 - [ ] contagem de tokens por agente consolidada em `implementation-report.md` e `subagents-context.md`
