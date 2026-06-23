@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.1] — 2026-06-23
+
+### Correções do review e2e Open Design
+
+- **`preview/` em vez de `preview/app.html` (GAP 1 — bug real):** dos ~152 systems curados do Open Design, só 1 traz `preview/app.html`; a maioria traz `preview/colors.html`, `preview/spacing.html` e `preview/typography.html`. Todas as referências operacionais (`SKILL.md` regra 15, checklist, `references/subagent-prompts.md` prompt de implementação/regra de comparação/gate de design Fase 9, `references/handoff-contract.md` passo 5) foram atualizadas para apontar para o diretório `preview/` — igual ao que o `od-fetch-system.mjs` já fazia ao copiar o diretório inteiro via `copyTree`.
+- **`design-system` role no handoff-contract (GAP 2):** a tabela do Pensador em `references/handoff-contract.md` estava sem a linha `design-system`, quebrando a promessa de documento idêntico entre os três plugins. Adicionada com o diretório verbatim `packages/ui/design-systems/<id>/` explícito no contrato.
+
 ## [3.2.0] — 2026-06-21
 
 ### Design system (Open Design) como contrato visual de ponta a ponta

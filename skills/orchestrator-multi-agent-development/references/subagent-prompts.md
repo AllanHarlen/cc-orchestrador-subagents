@@ -140,14 +140,14 @@ Design System (Open Design) — CONSUMIR, NAO REINVENTAR:
 - tokens (fonte de verdade): <CAMINHO tokens.css, ex.: packages/ui/design-systems/<id>/tokens.css>
 - fixtures de componente: <CAMINHO components.html>
 - decisoes/intencao: <CAMINHO design-system.md (modo PRD) | openspec/changes/<nome>/design.md + specs/ui-design-system/spec.md (modo Spec)>
-- preview de referencia (alvo visual): <CAMINHO preview/app.html>
+- preview de referencia (alvo visual): <CAMINHO preview/ (diretorio — ex.: packages/ui/design-systems/<id>/preview/)>
 Regras de design (do skills-protocol do Open Design — obrigatorias):
 - cole o `tokens.css` como base e use as custom properties (`var(--*)`); NAO invente hex/raio/espacamento fora dos tokens;
 - implemente os componentes batendo com os seletores/estados de `components.html` (default/hover/focus/active/disabled/loading/empty/error);
 - accent contido: no maximo 2x por pagina (hero + CTA) alem de links; nao floode;
 - sem sombra se Depth & Elevation = minimal; nada de emoji como icone;
 - quando o requisito conflitar com o system, aplique override DOCUMENTADO (nao um token solto novo);
-- o resultado deve poder ser comparado visualmente com `preview/app.html`.
+- o resultado deve poder ser comparado visualmente com o diretorio `preview/` (abrir `colors.html`, `spacing.html` ou `typography.html` conforme o system).
 
 Modelo AGY:
 <COLAR AGYMODEL>
@@ -299,7 +299,7 @@ Gate de design system (quando houver design system — Open Design):
 - o estilo consome `tokens.css` via custom properties (`var(--*)`); SEM hex/raio/espacamento inventado fora dos tokens;
 - componentes batem com seletores/estados de `components.html` (default/hover/focus/active/disabled/loading/empty/error);
 - accent usado no maximo 2x por pagina (hero + CTA) alem de links; sem flood; sem emoji como icone; sem sombra se Depth & Elevation = minimal;
-- telas-chave conferidas contra o alvo visual `preview/app.html` (diferenca de layout/hierarquia/contraste);
+- telas-chave conferidas contra o diretorio `preview/` (diferenca de layout/hierarquia/contraste; abrir `colors.html`, `spacing.html` ou `typography.html` — so 1/152 systems tem `app.html`);
 - no modo Spec, os requisitos da capability `ui-design-system` (specs/ui-design-system/spec.md) sao atendidos (cada cenario);
 - anti-padroes da secao 9 do DESIGN.md ausentes do codigo final.
 - Trate violacao de design system como problema BLOQUEANTE quando contrariar requisito explicito (override sem justificativa, token inventado, accent flood).

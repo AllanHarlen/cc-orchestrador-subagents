@@ -94,6 +94,7 @@ O consumidor nunca adivinha caminhos: descobre tudo via `handoff.json`. Se o `ha
 | `userhistory` | `userhistory.md` | sim |
 | `architecture` | `architecture.md` | quando houver ARCH |
 | `communication-contract` | `comunication_json.md` | quando `backendConfirmed` |
+| `design-system` | `design-system.md` + `packages/ui/design-systems/<id>/` | quando `hasFrontend` (DESIGN.md via Open Design — o diretório verbatim com `tokens.css`, `components.html` e `preview/` também faz parte do contrato) |
 | `codebase-memory` | `codebase-memory.md` | opcional |
 | `shared-agents` | `shared-agents/` | opcional |
 
@@ -131,7 +132,7 @@ O consumidor nunca adivinha caminhos: descobre tudo via `handoff.json`. Se o `ha
 2. Para o mesmo `slug` com varias versoes `-vN`, **use a maior versao** (mais recente). Confirme via `AskUserQuestion` se houver duvida.
 3. Sem `handoff.json`: leia `.pensador/<slug>-vN/.pensador-progress.json` (`checkpointVersion: 2`) e o array `artifacts`.
 4. Ingira na ordem: `prd` → `userhistory` → `architecture` → `communication-contract` → `design-system`. Use o `communication-contract` como base dos contratos API/UI da Fase 8 e o **`design-system` como contrato visual** do front-end.
-5. **Artefatos de design (Open Design), quando houver front-end:** o `design-system` (`design-system.md` no modo PRD; ou `design.md` + `specs/ui-design-system/spec.md` quando a demanda veio do modo Spec/OpenSpec) aponta para os arquivos verbatim do system em `packages/ui/design-systems/<id>/` (`tokens.css` = fonte de verdade, `components.html` = fixtures, `preview/app.html` = alvo visual). O orquestrador **carrega esses caminhos no prompt de toda task front-end** (ver `subagent-prompts.md` › bloco *Design System*) e os usa como criterio do gate de design na Fase 9. Os arquivos verbatim **nao** sao reescritos — sao consumidos.
+5. **Artefatos de design (Open Design), quando houver front-end:** o `design-system` (`design-system.md` no modo PRD; ou `design.md` + `specs/ui-design-system/spec.md` quando a demanda veio do modo Spec/OpenSpec) aponta para os arquivos verbatim do system em `packages/ui/design-systems/<id>/` (`tokens.css` = fonte de verdade, `components.html` = fixtures, `preview/` = diretório de sanity check visual — os arquivos reais variam por system: `colors.html`, `spacing.html`, `typography.html`). O orquestrador **carrega esses caminhos no prompt de toda task front-end** (ver `subagent-prompts.md` › bloco *Design System*) e os usa como criterio do gate de design na Fase 9. Os arquivos verbatim **nao** sao reescritos — sao consumidos.
 
 ### Executor ingere Orchestrador
 1. Procure `.orchestration/<slug>/handoff.json`.
