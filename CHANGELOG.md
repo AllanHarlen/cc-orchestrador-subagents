@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.3.0] — 2026-07-13
+
+### Escopo contínuo por padrão — fim do corte silencioso de escopo
+
+Corrige um problema real observado em produção: numa demanda com PRD grande (SaaS multi-domínio), o orquestrador extraiu o escopo completo mentalmente, decidiu sozinho reduzir a execução a uma "Onda 1 — Fundação" e só comunicou esse corte de escopo no relatório final, depois de já ter implementado, revisado e fechado a entrega. O usuário nunca teve a chance de decidir se queria execução contínua, onda a onda, ou um subconjunto acordado.
+
+- **Nova regra central 16 (`SKILL.md`):** "Escopo é contínuo por padrão — redução de escopo exige acordo explícito do usuário." Proíbe o orquestrador de cortar unilateralmente o escopo extraído da especificação para uma "primeira onda"/MVP arbitrário.
+- **Nova seção 1.3a (`references/workflow.md`):** gate de escopo contínuo vs. faseado, logo após a extração de tasks (1.2) e antes da classificação (Fase 2). Quando o volume de tasks justificar entrega faseada, o orquestrador **para antes da Fase 5 (delegação)** e usa `AskUserQuestion` para apresentar o breakdown por onda/domínio e perguntar explicitamente ao usuário: (a) todas as ondas continuamente, (b) onda a onda com checkpoint, ou (c) um subconjunto acordado agora com o restante em backlog explícito.
+- **Checklist mínimo atualizado** com o item correspondente, para que a verificação de conformidade capture o caso de escopo não confirmado.
+
 ## [3.2.2] — 2026-06-23
 
 ### Coerência do roteamento de modelo por fidelidade de design

@@ -30,6 +30,11 @@ O orquestrador atua **exclusivamente em projetos com PRD ja montado ou com espec
 13. Antes de delegar para AGY, monte o prompt completo e meca os caracteres. Se exceder 28.000 chars, divida a task em subtasks por entregaveis antes de delegar — nunca envie prompt acima do limite.
 14. Quando toda a atividade for `FRONTEND_ONLY` (todas as tasks classificadas como tal), o Codex nao participa do fluxo: a Fase 8 (review back-end) e ignorada e o review fica inteiramente com o AGY na Fase 9.
 15. **Design system (Open Design) e contrato visual, nao decoracao.** Quando a especificacao tiver design system — `design-system.md` (modo PRD) ou `design.md` + `specs/ui-design-system/spec.md` (modo Spec OpenSpec), com os arquivos verbatim em `packages/ui/design-systems/<id>/` (`tokens.css`, `components.html`, `preview/`) — o orquestrador **passa os caminhos desses artefatos no prompt de toda task front-end** e exige que o AGY **consuma `tokens.css` (sem inventar tokens)** e bata os componentes com `components.html`. Na Fase 9, o review aplica o **gate de design**: `tokens.css` consumido via `var(--*)`, accent contido (≤ 2x/pagina), telas-chave conferidas contra o diretorio `preview/` (os arquivos variam por system: `colors.html`, `spacing.html`, `typography.html` — so 1/152 systems tem `app.html`), anti-padroes da secao 9 ausentes; violacao de requisito explicito e BLOQUEANTE.
+16. **Escopo e continuo por padrao — reducao de escopo exige acordo explicito do usuario.** Na Fase 1.2, extraia da especificacao **todas** as tasks implicadas — nao corte unilateralmente para uma "primeira onda", "fundacao" ou MVP que o orquestrador julgue razoavel para uma unica execucao. Se o volume total de tasks for grande o suficiente para justificar entrega faseada (dependencias fortes entre blocos, risco de erro composto, necessidade de checkpoints de validacao), o orquestrador **deve** parar antes da Fase 5 (delegacao) e usar `AskUserQuestion` para apresentar o breakdown por onda/dominio e perguntar explicitamente qual modo o usuario quer:
+    - (a) executar todas as ondas continuamente ate o fim desta execucao;
+    - (b) executar onda a onda, com checkpoint do usuario entre cada uma;
+    - (c) executar apenas um subconjunto acordado agora, com o restante registrado como backlog explicito.
+    Nunca decidir isso silenciosamente e reportar a reducao de escopo so no relatorio final — a escolha de escopo e do usuario, nao uma inferencia do orquestrador. Esta pergunta e adicional (nao substitui) as demais lacunas bloqueantes da Fase 1.3 (`references/workflow.md`).
 
 ## Fase 0 - Preflight
 
@@ -165,6 +170,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 
 - [ ] preflight executado
 - [ ] PRD/especificacao do usuario ingerido e tratado como fonte da verdade
+- [ ] todas as tasks implicadas pela especificacao foram extraidas (sem corte unilateral de escopo); se o volume justificar entrega faseada, o modo de execucao (continuo/onda-a-onda/subconjunto) foi confirmado com o usuario via `AskUserQuestion` antes da Fase 5
 - [ ] `autoRemediation` verificado
 - [ ] atividade classificada como FRONTEND_ONLY → Codex excluido do fluxo (Fase 8 ignorada; review fica com AGY na Fase 9)
 - [ ] `tasks-classification.md` com `contractRequired`
