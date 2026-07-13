@@ -2,13 +2,13 @@
 
 ## [3.3.0] — 2026-07-13
 
-### Escopo contínuo por padrão — fim do corte silencioso de escopo
+### Execução contínua até a conclusão integral — fim do corte silencioso de escopo
 
-Corrige um problema real observado em produção: numa demanda com PRD grande (SaaS multi-domínio), o orquestrador extraiu o escopo completo mentalmente, decidiu sozinho reduzir a execução a uma "Onda 1 — Fundação" e só comunicou esse corte de escopo no relatório final, depois de já ter implementado, revisado e fechado a entrega. O usuário nunca teve a chance de decidir se queria execução contínua, onda a onda, ou um subconjunto acordado.
+Corrige um problema real observado em produção: numa demanda com PRD grande (SaaS multi-domínio) vinda da integração Pensador → Orquestrador, o orquestrador extraiu o escopo completo mentalmente, decidiu sozinho reduzir a execução a uma "Onda 1 — Fundação" e só comunicou esse corte de escopo no relatório final, depois de já ter implementado, revisado e fechado a entrega. O usuário nunca teve a chance de reagir a essa redução, porque nunca foi consultado sobre ela.
 
-- **Nova regra central 16 (`SKILL.md`):** "Escopo é contínuo por padrão — redução de escopo exige acordo explícito do usuário." Proíbe o orquestrador de cortar unilateralmente o escopo extraído da especificação para uma "primeira onda"/MVP arbitrário.
-- **Nova seção 1.3a (`references/workflow.md`):** gate de escopo contínuo vs. faseado, logo após a extração de tasks (1.2) e antes da classificação (Fase 2). Quando o volume de tasks justificar entrega faseada, o orquestrador **para antes da Fase 5 (delegação)** e usa `AskUserQuestion` para apresentar o breakdown por onda/domínio e perguntar explicitamente ao usuário: (a) todas as ondas continuamente, (b) onda a onda com checkpoint, ou (c) um subconjunto acordado agora com o restante em backlog explícito.
-- **Checklist mínimo atualizado** com o item correspondente, para que a verificação de conformidade capture o caso de escopo não confirmado.
+- **Nova regra central 16 (`SKILL.md`):** "Execução contínua até a conclusão integral do que já foi elaborado — sem corte unilateral de escopo, sem pausa para perguntar sobre fasear." A decisão de escopo já foi tomada rio acima — pelo Pensador (que já conduziu a entrevista de descoberta com o usuário no modo conjunto) ou pelo próprio usuário ao escrever/fornecer o PRD/spec (modo independente). O orquestrador **implementa o que já foi decidido até o fim**, montando todas as ondas necessárias e executando-as sequencialmente sem parar entre elas para confirmar se deve continuar.
+- **Nova seção 1.3a (`references/workflow.md`):** "Execução contínua até a conclusão integral" — reforça que as únicas pausas legítimas durante a execução são por bloqueio real (lacuna bloqueante da Fase 1.3, bloqueio de sandbox/quota, reprovação em review na Fase 8/9), nunca por incerteza sobre o tamanho do escopo. Redução de escopo só é aceitável se o próprio usuário pedir isso explicitamente na mensagem que invocou o orquestrador.
+- **Checklist mínimo atualizado** com o item correspondente: todas as tasks extraídas e todas as ondas executadas sequencialmente até a conclusão, sem pausa para perguntar sobre fasear.
 
 ## [3.2.2] — 2026-06-23
 

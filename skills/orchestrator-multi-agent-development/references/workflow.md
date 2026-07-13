@@ -41,22 +41,25 @@ A partir da especificacao, extraia diretamente:
 
 Quando o PRD ja lista tasks, preserve IDs, nomes e ordem para rastreabilidade. Quando o PRD descreve entregaveis sem IDs formais, derive uma lista de tasks objetiva a partir do texto, sem inventar escopo novo.
 
-**Extraia o escopo completo, nao um subconjunto.** A lista de tasks desta fase deve cobrir tudo que a especificacao implica — nao apenas uma "primeira onda", "fundacao" ou MVP que o orquestrador julgue razoavel para uma unica execucao. Reduzir escopo unilateralmente (mesmo com boa justificativa tecnica de risco/complexidade) e uma decisao do usuario, nao do orquestrador — ver 1.3a abaixo.
+**Extraia o escopo completo, nao um subconjunto.** A lista de tasks desta fase deve cobrir tudo que a especificacao implica — nao apenas uma "primeira onda", "fundacao" ou MVP que o orquestrador julgue razoavel para uma unica execucao. A decisao de escopo ja foi tomada rio acima: no **modo conjunto** (integracao Pensador → Orquestrador), o Pensador ja conduziu a entrevista de descoberta com o usuario e o `handoff.json`/PRD/spec resultante ja reflete o escopo acordado; no **modo independente**, o proprio usuario definiu o escopo ao escrever ou fornecer o PRD/spec. Em nenhum dos dois casos cabe ao orquestrador redecidir o tamanho do trabalho — ver 1.3a abaixo.
 
 ### 1.3 Lacunas bloqueantes
 
 Se a especificacao tiver uma lacuna que impeca classificar e delegar com seguranca (ex.: contrato de dados ausente entre front e back, decisao tecnica obrigatoria nao tomada), use `AskUserQuestion` para resolver apenas a lacuna bloqueante. Nao transforme isso em discovery aberto — pergunte o minimo necessario para destravar a orquestracao e registre a resposta.
 
-### 1.3a Gate de escopo continuo vs. faseado
+### 1.3a Execucao continua ate a conclusao integral
 
-Depois de extrair a lista completa de tasks (1.2), avalie o volume total. Se a especificacao gerar tasks suficientes para varias ondas de execucao sequenciais com dependencias fortes entre blocos (ex.: um PRD de produto inteiro com multiplos dominios funcionais, nao uma feature pontual), **pare antes da Fase 5 (delegacao)** e use `AskUserQuestion` para apresentar ao usuario:
+Depois de extrair a lista completa de tasks (1.2), monte as ondas necessarias (Fase 3) e execute-as **sequencialmente ate a ultima**, sem pausar entre ondas para perguntar ao usuario se deve continuar. Isso vale mesmo quando a especificacao gerar tasks suficientes para varias ondas com dependencias fortes entre blocos (ex.: um PRD de produto inteiro com multiplos dominios funcionais): o orquestrador planeja o breakdown completo em `tasks-classification.md`/`waves.md` e delega onda apos onda ate esgotar o escopo, sem checkpoint de "posso continuar?" no meio do caminho.
 
-- um resumo do breakdown por onda/dominio (quantas tasks, o que cada onda cobriria);
-- as tres opcoes de modo de execucao: (a) todas as ondas continuamente nesta execucao, (b) onda a onda com checkpoint do usuario entre cada uma, (c) um subconjunto acordado agora, com o restante em backlog explicito.
+As unicas pausas legitimas em qualquer ponto da execucao sao por bloqueio real, ja cobertas em outras secoes deste documento:
 
-So prossiga para a Fase 2 com o subconjunto/ordem que o usuario efetivamente escolheu. Nao decida isso por conta propria e reporte a reducao de escopo apenas no relatorio final — isso quebra a confianca do usuario no que foi de fato entregue. Esta pergunta e adicional (nao substitui) as lacunas bloqueantes de 1.3.
+- lacuna bloqueante da Fase 1.3 (informacao que falta para classificar/delegar com seguranca);
+- bloqueio de sandbox ou de quota (Codex/AGY — secoes "Politica de sandbox Codex" e "Politica de quota");
+- reprovacao em review (Fase 8/9), que aciona o loop de correcao da Fase 7 antes de seguir adiante.
 
-Ao final da Fase 1, o orquestrador deve conseguir produzir `tasks-classification.md` diretamente a partir da especificacao ingerida, no escopo (integral ou parcial) que o usuario confirmou.
+Reducao de escopo (implementar menos do que a especificacao pede) so e aceitavel quando o **proprio usuario** pedir isso explicitamente na mensagem que invocou o orquestrador — nunca por iniciativa do orquestrador, e nunca comunicada apenas no relatorio final depois do fato consumado.
+
+Ao final da Fase 1, o orquestrador deve conseguir produzir `tasks-classification.md` diretamente a partir da especificacao ingerida, cobrindo o escopo integral, e seguir sem pausa ate a Fase 11.
 
 ## Fase 2 - Classificacao das tasks
 
