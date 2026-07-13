@@ -2,6 +2,10 @@
 
 ## [3.3.0] — 2026-07-13
 
+### Reconciliação com a integração Pensador → Orquestrador (modo conjunto)
+
+Este release também incorpora um commit que já estava publicado em `origin/main` sem entrada correspondente no changelog nem bump de versão: a detecção de `modo conjunto` (Fase 1.0), a ingestão do `handoff.json` do Pensador como fonte da verdade (PRD/Spec + `api-contract` + `design-system-files`), e a reformulação de `references/handoff-contract.md` (papéis por estágio, modos independente/conjunto, materialização do design system via `materializeInto`). As regras de execução contínua desta versão (abaixo) já foram escritas levando em conta esse modo conjunto.
+
 ### Execução contínua até a conclusão integral — fim do corte silencioso de escopo
 
 Corrige um problema real observado em produção: numa demanda com PRD grande (SaaS multi-domínio) vinda da integração Pensador → Orquestrador, o orquestrador extraiu o escopo completo mentalmente, decidiu sozinho reduzir a execução a uma "Onda 1 — Fundação" e só comunicou esse corte de escopo no relatório final, depois de já ter implementado, revisado e fechado a entrega. O usuário nunca teve a chance de reagir a essa redução, porque nunca foi consultado sobre ela.

@@ -2,7 +2,7 @@
 
 Este arquivo expande as fases do `SKILL.md`.
 
-O orquestrador atua somente em projetos com PRD/especificacao ja pronta. Ele nao faz discovery, nao cria plano OpenSpec e nao reabre o entendimento da demanda. Todos os artefatos de coordenacao ficam em `.orchestration/<nome>/`, onde `<nome>` e um identificador descritivo em kebab-case derivado do PRD.
+O orquestrador atua somente em projetos com PRD/especificacao ja pronta, em desenvolvimento complexo. Ele nao faz discovery, nao cria plano OpenSpec e nao reabre o entendimento da demanda. Todos os artefatos de coordenacao ficam em `.orchestration/<nome>/`, onde `<nome>` e um identificador descritivo em kebab-case: em **modo conjunto** e o `<slug>` do Pensador (sem `-vN`); em **modo independente** e derivado do PRD. Ver `references/handoff-contract.md`.
 
 ## Fase 0 - Preflight
 
@@ -21,13 +21,28 @@ Regras:
 
 ## Fase 1 - Ingestao da especificacao
 
-O usuario fornece a especificacao via mencao de arquivo (`@caminho/para/prd.md`) ou envio do arquivo de PRD/spec. Essa especificacao e a **fonte da verdade** do workflow.
+A especificacao chega por **duas vias** (ver `references/handoff-contract.md`). Antes de tratar a demanda como avulsa, detecte o modo.
+
+### 1.0 Detectar modo de operacao (conjunto vs independente)
+
+1. Procure `.pensador/*/handoff.json`.
+2. **Modo conjunto (Pensador → Orchestrador):** se houver um handoff `stage: pensador` com `status: DONE`:
+   - Para multiplos `slug`, confirme via `AskUserQuestion` qual demanda implementar.
+   - Para o mesmo `slug` com varias versoes `-vN`, use a maior versao (confirme se houver duvida).
+   - Leia o `handoff.json` e trate os artefatos referenciados como fonte da verdade. Correlacione pelo `slug` e grave seus artefatos em `.orchestration/<slug>/` (sem `-vN`).
+   - `status: BLOCKED`/`PARTIAL` no upstream: pare e peca decisao ao usuario.
+   - Sem `handoff.json` mas com `.pensador/<slug>-vN/`: fallback por convencao — leia `.pensador-progress.json` (`checkpointVersion: 2`) e o array `artifacts`; avise o usuario.
+3. **Modo independente:** sem `.pensador/`, o usuario fornece a especificacao via `@arquivo` ou texto no `/orquestrador`. `<nome>`/`<slug>` derivam do PRD.
 
 ### 1.1 Ler a especificacao fornecida
 
-- Leia o arquivo de PRD/spec apontado pelo usuario com `Read`.
-- Se o usuario apontar varios arquivos ou um diretorio de specs, leia todos os relevantes.
+- Em modo conjunto, ingira os artefatos do Pensador na ordem do handoff contract (secao 7):
+  - **Modo PRD:** `prd` → `userhistory` → `architecture` → `api-contract` → `communication-contract` → `design-system`/`design-system-files`.
+  - **Modo Spec (OpenSpec):** ingira o change set em `openspec/changes/<nome>/` (`proposal.md`, `design.md`, `specs/`, `tasks.md`); derive as tasks de `tasks.md` preservando IDs/ordem.
+- Em modo independente, leia o arquivo de PRD/spec apontado pelo usuario com `Read`. Se o usuario apontar varios arquivos ou um diretorio de specs, leia todos os relevantes.
 - Nao reescreva, nao replaneje e nao reinterprete a demanda. O papel do orquestrador e **orquestrar**, nao planejar.
+- **Contrato de API:** quando houver `api-contract` (maquina-legivel), ele e a **fonte da verdade** dos contratos da Fase 4 — suba o mock a partir dele e valide o codigo contra ele (campo `validation`). O `communication-contract` e apenas a visao legivel.
+- **Design (Open Design):** quando houver `design-system-files`, guarde os caminhos verbatim e o `materializeInto` de cada `<id>` para materializar na Fase 4 (ver Fase 4).
 
 ### 1.2 Extrair os entregaveis e tasks
 
@@ -127,7 +142,18 @@ Nao paralelize quando houver:
 - arquivo central compartilhado;
 - autenticacao ou seguranca sem consolidacao.
 
-## Fase 4 - Contratos API/UI
+## Fase 4 - Contratos API/UI e materializacao de design
+
+### 4.0 Materializar arquivos de design (Open Design)
+
+Quando a ingestao trouxe `design-system-files` (ou um `design-system.md` com diretorio verbatim):
+
+- Copie os arquivos verbatim de cada `<id>` (`.pensador/<slug>-vN/design-systems/<id>/`) para o alvo real indicado em `materializeInto` (ex.: `packages/ui/design-systems/<id>/`, ou `src/styles/…` em app unico). Ver `references/handoff-contract.md` secao 6.
+- Nao reescreva `tokens.css`, `DESIGN.md`, `components.html` nem `preview/`: eles sao consumidos verbatim.
+- Guarde os caminhos materializados para carregar no prompt de **toda task front-end** (Fase 5) e para o gate de design da Fase 9.
+- No modo Spec, o design chega em `design.md` + `specs/ui-design-system/spec.md`: use-os como requisito normativo do gate.
+
+### 4.1 Contratos
 
 Crie `.orchestration/<nome>/contracts/*.md` para:
 
@@ -403,13 +429,23 @@ Se houver achados bloqueantes em qualquer das fases de review (8 ou 9):
 3. execute a correcao pela Fase 7;
 4. repita o review focando nas areas alteradas e nos achados anteriores.
 
-## Fases 10 e 11 - Relatorio final
+## Fases 10 e 11 - Relatorio final e handoff
 
-Entregaveis obrigatorios (salve na **raiz de execucao do agente**):
+Entregaveis obrigatorios (salve na **raiz de execucao do agente**, `.orchestration/<slug>/`):
 
 - `workflow-log.md`
 - `subagents-context.md`
 - `implementation-report.md`
+- `handoff.json` — manifesto de handoff do estagio orchestrador (ver `references/handoff-contract.md`)
+
+### Gravar `handoff.json` (para o Executor)
+
+Ao fechar, grave `.orchestration/<slug>/handoff.json` com:
+
+- `handoffVersion: 1`, `stage: "orchestrador"`, `slug` (sem `-vN`), `producer` (plugin + version), `artifactRoot: ".orchestration/<slug>"`, `status` (`DONE`/`PARTIAL`/`BLOCKED`), `summary`, timestamps.
+- `upstream`: em modo conjunto, aponta o `handoff.json` do Pensador (`.pensador/<slug>-vN/handoff.json`); em modo independente, `null`.
+- `artifacts[]`: uma entrada por role do vocabulario Orchestrador (secao 5 do handoff contract) — `implementation-report`, `tasks-classification`, `waves`, `api-contracts`, `review-final`, `review-frontend`, `monitoring`, `workflow-log`, `subagents-context` (+ `openspec-change` quando aplicavel), com `path` relativo ao `artifactRoot`.
+- `nextStage`: `consumer: "cc-executor-subagents"`, `entrypoint: "/executor"`, `instructions` orientando review plano-vs-entrega e ajustes finos.
 
 O relatorio final deve citar:
 
