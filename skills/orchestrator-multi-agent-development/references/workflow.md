@@ -429,6 +429,26 @@ Se houver achados bloqueantes em qualquer das fases de review (8 ou 9):
 3. execute a correcao pela Fase 7;
 4. repita o review focando nas areas alteradas e nos achados anteriores.
 
+## Fase 9.5 - Verificacao E2E no navegador real (OBRIGATORIA para front separado do back)
+
+> **Por que esta fase existe.** Review de codigo, `dotnet build`, `npm run build`, `tsc` e `curl` sao **cegos** a uma classe inteira de defeitos de integracao runtime. Em um caso real, tres rodadas de review deram "APROVADO" e a vitrine publica inteira estava quebrada no navegador — porque nenhum review tinha aberto um browser de verdade. Ver a regra 17 do `SKILL.md` para os tres defeitos concretos (CORS ausente, tenant nao resolvido a partir do browser, casing de resposta divergente que falha silenciosamente com 200).
+
+**Quando roda:** sempre que houver task `FRONTEND_ONLY` ou fatia front-end de `FULLSTACK` **e** o front-end for servido como deploy/origem separada do back-end (SPA/Next.js/etc. chamando uma API em outra porta/host). Quando nao ha front-end, ou o front e server-rendered sem chamadas cross-origin, registre "N/A" e siga.
+
+**Como conduzir (o orquestrador faz diretamente, read-only sobre a app rodando):**
+
+1. **Suba a app de verdade** (ex.: `docker compose up --build`) e confirme os servicos saudaveis. Se subir a stack falhar, isso ja e um achado bloqueante — nao existe "APROVADO" para uma app que nao sobe.
+2. **Dirija os fluxos de usuario criticos** (os `UC-*`/caminhos-felizes da especificacao) num navegador real via **Playwright MCP** (ou ferramenta equivalente): navegue, preencha formularios, clique, submeta.
+3. **Em cada fluxo, verifique:**
+   - console e network **sem erros de CORS** nem `net::ERR_FAILED`;
+   - cada requisicao de API retorna 2xx **e a UI reflete o dado real** — desconfie de "200 mas a tela ficou vazia/inalterada", que e o sintoma classico de casing divergente ou campo `undefined`;
+   - o **efeito final** de cada acao aconteceu de fato (o redirect abriu a aba/rota, o item entrou no carrinho, o registro apareceu na lista, o estado mudou) — nao apenas que a chamada retornou;
+   - resolucao **multi-tenant / por host** funciona a partir do browser (o front informa o tenant certo ao back);
+   - estados de tela (vazio/carregando/erro/sucesso) se comportam como especificado.
+4. **Capture evidencia**: screenshot e/ou o resumo de console+network dos fluxos exercitados, salvos em `.orchestration/<slug>/e2e-verification.md` (e screenshots em `.orchestration/<slug>/screenshots/`).
+
+**Achados desta fase sao BLOQUEANTES** como qualquer review: registre em `monitoring.md`/`workflow-log.md`, crie tasks de correcao, corrija pela Fase 7 e **re-verifique no navegador** antes de aprovar. So depois que os fluxos criticos passarem no navegador o orquestrador pode marcar a entrega como `DONE`. Se a ferramenta de navegador nao estiver disponivel no ambiente, **nao invente aprovacao**: registre a limitacao e marque o `handoff.json` como `PARTIAL` com o gap explicito ("verificacao E2E no navegador nao executada").
+
 ## Fases 10 e 11 - Relatorio final e handoff
 
 Entregaveis obrigatorios (salve na **raiz de execucao do agente**, `.orchestration/<slug>/`):

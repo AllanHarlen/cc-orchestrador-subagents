@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.4.0] — 2026-07-14
+
+### Verificacao E2E no navegador real obrigatoria (Fase 9.5) — fim do "APROVADO" cego
+
+Corrige uma falha real e grave de processo: num SaaS com front (Next.js) e back (.NET) em origens/deploys separados, o orquestrador deu "APROVADO" **tres vezes** (Onda 1, Ondas 2-5, correcoes de seguranca) verificando apenas `dotnet build`, `npm run build` e `curl`. Ao dirigir a app num navegador real com o Playwright MCP, a vitrine publica inteira estava quebrada por defeitos que `build`/`curl` sao estruturalmente incapazes de detectar:
+
+- **CORS ausente** no back — `curl` respondia 200, mas o browser bloqueava toda chamada cross-origin no preflight;
+- **resolucao de tenant a partir do browser** — o front chamava a API sem o subdominio do tenant e recebia `400 tenant_required` (mascarado no `curl` porque o `Host` era passado a mao);
+- **mismatch de casing no corpo de resposta** — o back serializava `whatsAppRedirectUrl` e o front lia `whatsappRedirectUrl`; a chamada retornava `200`, o campo vinha `undefined`, e a acao (redirect pro WhatsApp) falhava **silenciosamente, sem nenhum erro**.
+
+Mudancas:
+
+- **Nova regra central 17 (`SKILL.md`):** verificacao E2E no navegador real e OBRIGATORIA antes de qualquer "APROVADO" quando front e back sao separados; `build`/`tsc`/`curl` sao declarados explicitamente cegos a CORS, resolucao de host/tenant no browser, casing de resposta e "200 mas silenciosamente quebrado". Sem essa verificacao, a entrega no maximo pode ser `PARTIAL`, nunca `DONE`.
+- **Nova Fase 9.5 (`references/workflow.md`):** passo concreto de verificacao — subir a app de verdade (`docker compose up`), dirigir os fluxos criticos (`UC-*`) via Playwright MCP, checar console/network sem CORS, UI refletindo dados reais, efeito final de cada acao confirmado, resolucao multi-tenant a partir do browser; achados sao BLOQUEANTES; evidencia em `.orchestration/<slug>/e2e-verification.md`.
+- **Lista de fases e checklist minimo atualizados** com a Fase 9.5.
+
 ## [3.3.0] — 2026-07-13
 
 ### Reconciliação com a integração Pensador → Orquestrador (modo conjunto)
