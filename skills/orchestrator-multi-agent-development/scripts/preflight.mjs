@@ -18,7 +18,7 @@
  *   node scripts/preflight.mjs [--json] [--silent] # compatibility wrapper
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -29,6 +29,47 @@ const SKILLS_DIR = join(HOME, ".claude", "skills");
 const PROJECT_CLAUDE_DIR = join(process.cwd(), ".claude");
 const PROJECT_SETTINGS_FILE = join(PROJECT_CLAUDE_DIR, "settings.json");
 const MIN_ANTIGRAVITY_PLUGIN_VERSION = "3.6.0";
+const MIN_SQLITE_NODE_VERSION = "22.13.0";
+
+function checkNodeSqlite() {
+  const current = process.versions.node;
+  const versionOk = compareSemver(current, MIN_SQLITE_NODE_VERSION) >= 0;
+  if (!versionOk) {
+    return {
+      ok: false,
+      version: current,
+      minVersion: MIN_SQLITE_NODE_VERSION,
+      error: `Node.js ${MIN_SQLITE_NODE_VERSION}+ is required for node:sqlite without the experimental CLI flag`,
+    };
+  }
+  try {
+    const output = execFileSync(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      "import { DatabaseSync } from 'node:sqlite'; const db=new DatabaseSync(':memory:'); db.exec(\"CREATE VIRTUAL TABLE docs USING fts5(body); INSERT INTO docs(body) VALUES ('ok')\"); const row=db.prepare('SELECT count(*) AS n FROM docs WHERE docs MATCH ?').get('ok'); db.close(); console.log(JSON.stringify({fts5:Number(row.n)===1,sqlite:process.versions.sqlite??null}))",
+    ], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 10_000,
+      windowsHide: true,
+    });
+    const capability = JSON.parse(output.trim());
+    return {
+      ok: capability.fts5 === true,
+      version: current,
+      sqliteVersion: capability.sqlite,
+      fts5: capability.fts5,
+      error: capability.fts5 ? null : "SQLite FTS5 is unavailable",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      version: current,
+      minVersion: MIN_SQLITE_NODE_VERSION,
+      error: error.stderr?.toString().trim() || error.message,
+    };
+  }
+}
 
 function checkCli(cli) {
   try {
@@ -471,6 +512,9 @@ const autoRemediation = autoRemediateCodexCompanionBashPermission(initialCodexCo
 const finalCodexCompanionBash = checkCodexCompanionBashPermission();
 
 const checks = {
+  runtime: {
+    "node-sqlite-fts5": checkNodeSqlite(),
+  },
   cli: {
     agy: checkCli("agy"),
     codex: checkCli("codex"),
@@ -479,6 +523,7 @@ const checks = {
     "cc-antigravity-plugin": checkPlugin("cc-antigravity-plugin", "cc-antigravity-plugin", {
       minVersion: MIN_ANTIGRAVITY_PLUGIN_VERSION,
       requiredFiles: [
+        "agents/antigravity-coder.md",
         "agents/antigravity-agent.md",
         "commands/antigravity.md",
         "scripts/antigravity-bridge.js",
@@ -498,6 +543,10 @@ const checks = {
 };
 
 const failed = [];
+
+for (const [name, result] of Object.entries(checks.runtime)) {
+  if (!result.ok) failed.push({ category: "runtime", name, ...result });
+}
 
 for (const [name, result] of Object.entries(checks.cli)) {
   if (!result.ok) failed.push({ category: "cli", name, ...result });
@@ -531,6 +580,16 @@ function buildRemediation(failures) {
 function remediationFor(f) {
   const key = `${f.category}:${f.name}`;
   switch (key) {
+    case "runtime:node-sqlite-fts5":
+      return {
+        target: "Node.js runtime with node:sqlite and FTS5",
+        steps: [
+          `Install or select Node.js >= ${MIN_SQLITE_NODE_VERSION}.`,
+          "Confirm that `node:sqlite` loads without an experimental flag and SQLite includes FTS5.",
+          "Rerun /orchestrator preflight before using project memory/history.",
+        ],
+        docs: "https://nodejs.org/api/sqlite.html",
+      };
     case "cli:agy":
       return {
         target: "Antigravity CLI (agy)",
@@ -562,7 +621,7 @@ function remediationFor(f) {
           "Dentro do Claude Code:",
           "  claude plugin install AllanHarlen/cc-antigravity-plugin",
           `Confirme que a versao instalada seja >= ${MIN_ANTIGRAVITY_PLUGIN_VERSION} (requerido para --parallel e --subagent-model).`,
-          "Valide que o plugin instalado contenha agents/antigravity-agent.md, commands/antigravity.md e scripts/antigravity-bridge.js.",
+          "Valide que o plugin instalado contenha agents/antigravity-coder.md (implementacao), agents/antigravity-agent.md (review, somente leitura), commands/antigravity.md e scripts/antigravity-bridge.js.",
         ],
         docs: "https://github.com/AllanHarlen/cc-antigravity-plugin",
       };

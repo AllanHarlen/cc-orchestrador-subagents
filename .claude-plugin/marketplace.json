@@ -1,7 +1,7 @@
 {
     "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
     "name": "cc-orchestrador-subagents",
-    "description": "Multi-agent development orchestrator for Claude Code that runs from an existing PRD/spec. Coordinates Codex back-end and Antigravity/AGY front-end subagents in parallel, with API/UI contracts, Codex back-end review, AGY (gemini-3.1-pro-high) front-end review, consolidated subagent context, a final implementation report and business-level user instructions.",
+    "description": "Persistent multi-agent engineering orchestrator for Claude Code with verified memory, FTS5 history, durable resume, lifecycle adapters, worktrees, deterministic validation, telemetry, adaptive routing and curated learning.",
     "owner": {
         "name": "allanharlen",
         "email": "allanharlen@gmail.com"
@@ -13,8 +13,8 @@
     "plugins": [
         {
             "name": "cc-orchestrador-subagents",
-            "description": "Orchestrator skill + /orchestrator slash command that drive a PRD/spec ingestion -> task classification -> API/UI contracts -> parallel Codex/Antigravity execution -> Codex back-end review -> AGY front-end review -> consolidated context -> implementation report workflow. Runs a preflight check for agy, codex-cli and required plugins before starting; cancels operation if anything is missing.",
-            "version": "3.4.0",
+            "description": "Orchestrator skill + /orchestrator command for PRD-driven Codex/Antigravity execution with verified project knowledge, crash-safe lifecycle, physical isolation, programmatic validation, telemetry, learning recipes and auditable delivery.",
+            "version": "4.0.0",
             "author": {
                 "name": "allanharlen"
             },
@@ -29,7 +29,15 @@
                 "antigravity",
                 "parallel-execution",
                 "workflow",
-                "claude-code"
+                "claude-code",
+                "persistent-state",
+                "resume",
+                "project-memory",
+                "fts5",
+                "worktrees",
+                "telemetry",
+                "adaptive-routing",
+                "learning"
             ],
             "homepage": "https://github.com/AllanHarlen/cc-orchestrador-subagents",
             "repository": "https://github.com/AllanHarlen/cc-orchestrador-subagents"

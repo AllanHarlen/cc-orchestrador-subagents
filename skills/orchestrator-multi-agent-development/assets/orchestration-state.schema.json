@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AllanHarlen/cc-orchestrador-subagents/schemas/orchestration-state.schema.json",
+  "title": "Orchestrator persistent run state",
+  "type": "object",
+  "required": [
+    "schemaVersion", "runId", "slug", "artifactRoot", "status", "phase",
+    "phaseStatus", "lastSafePhase", "currentWave", "tasks", "waves",
+    "completionGates", "phaseHistory", "repository", "sync", "lifecycle",
+    "resume", "cancellation", "revision", "lastEventId", "createdAt", "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "artifactRoot": { "type": "string", "minLength": 1 },
+    "status": { "$ref": "#/$defs/runStatus" },
+    "statusReason": { "type": ["string", "null"] },
+    "phase": { "enum": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9.5, 10, 11, 12] },
+    "phaseStatus": { "$ref": "#/$defs/phaseStatus" },
+    "lastSafePhase": { "type": "number", "minimum": 0, "maximum": 12 },
+    "currentWave": { "type": ["integer", "null"], "minimum": 1 },
+    "tasks": {
+      "type": "object",
+      "propertyNames": { "pattern": "^(?:[A-Z]{1,8}-[0-9]{1,4}(?:-[A-Z0-9]+)?|T[0-9]+(?:-[A-Z0-9]+)?)$" },
+      "additionalProperties": { "$ref": "#/$defs/task" }
+    },
+    "waves": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "tasks"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "tasks": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+        },
+        "additionalProperties": false
+      }
+    },
+    "completionGates": {
+      "type": "object",
+      "required": ["backendReview", "frontendReview", "browserE2E", "reports", "handoff", "delivery", "learning"],
+      "additionalProperties": { "$ref": "#/$defs/completionGate" }
+    },
+    "phaseHistory": { "type": "object", "additionalProperties": { "$ref": "#/$defs/phaseRecord" } },
+    "repository": { "type": "object" },
+    "sync": { "type": "object" },
+    "lifecycle": {
+      "type": "object",
+      "required": ["staleIdleSeconds", "staleInToolSeconds", "stallGraceSeconds", "lastSweepAt"],
+      "properties": {
+        "staleIdleSeconds": { "type": "number", "minimum": 1 },
+        "staleInToolSeconds": { "type": "number", "minimum": 1 },
+        "stallGraceSeconds": { "type": "number", "minimum": 1 },
+        "lastSweepAt": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "resume": { "type": "object" },
+    "cancellation": { "$ref": "#/$defs/cancellation" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "lastEventId": { "type": "string", "format": "uuid" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "runStatus": { "enum": ["RUNNING", "DONE", "FAILED", "BLOCKED", "CANCELLED", "UNKNOWN"] },
+    "taskStatus": { "enum": ["PENDING", "RUNNING", "DONE", "FAILED", "BLOCKED", "STALLED", "CANCELLED", "UNKNOWN"] },
+    "phaseStatus": { "enum": ["PENDING", "RUNNING", "DONE", "FAILED", "BLOCKED", "CANCELLED", "UNKNOWN"] },
+    "gateStatus": { "enum": ["PENDING", "RUNNING", "DONE", "FAILED", "BLOCKED", "N/A"] },
+    "attempt": {
+      "type": "object",
+      "required": ["attempt", "status", "startedAt"],
+      "properties": {
+        "attempt": { "type": "integer", "minimum": 1 },
+        "executor": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "status": { "$ref": "#/$defs/taskStatus" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": ["string", "null"], "format": "date-time" },
+        "durationMs": { "type": ["integer", "null"], "minimum": 0 },
+        "reasonCode": { "type": ["string", "null"] },
+        "reviewResult": { "type": ["string", "null"] },
+        "regressions": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "lease": {
+      "type": ["object", "null"],
+      "properties": {
+        "ownerId": { "type": "string" },
+        "status": { "enum": ["ACTIVE", "RELEASED"] },
+        "expiresAt": { "type": ["string", "null"], "format": "date-time" },
+        "ttlSeconds": { "type": "number", "minimum": 30 }
+      },
+      "additionalProperties": true
+    },
+    "workspace": {
+      "type": ["object", "null"],
+      "properties": {
+        "status": { "enum": ["PLANNED", "CREATED", "RUNNING", "READY", "INTEGRATING", "MERGED", "CONFLICT", "BLOCKED", "CLEANED", "UNKNOWN"] },
+        "path": { "type": "string" },
+        "branch": { "type": "string" },
+        "baseCommit": { "type": "string" },
+        "head": { "type": "string" },
+        "integrationStatus": { "type": "string" },
+        "cleanupStatus": { "type": "string" },
+        "conflicts": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      },
+      "additionalProperties": true
+    },
+    "task": {
+      "type": "object",
+      "required": [
+        "id", "status", "attempt", "attemptHistory", "apiCalls", "toolCalls",
+        "expectedFiles", "producedFiles", "validations", "evidence",
+        "sourcePresent", "createdAt", "updatedAt"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(?:[A-Z]{1,8}-[0-9]{1,4}(?:-[A-Z0-9]+)?|T[0-9]+(?:-[A-Z0-9]+)?)$" },
+        "title": { "type": ["string", "null"] },
+        "category": { "type": ["string", "null"] },
+        "complexity": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "status": { "$ref": "#/$defs/taskStatus" },
+        "executor": { "type": ["string", "null"] },
+        "attempt": { "type": "integer", "minimum": 0 },
+        "attemptHistory": { "type": "array", "items": { "$ref": "#/$defs/attempt" } },
+        "sessionId": { "type": ["string", "null"] },
+        "conversationId": { "type": ["string", "null"] },
+        "commitBefore": { "type": ["string", "null"] },
+        "commitAfter": { "type": ["string", "null"] },
+        "startedAt": { "type": ["string", "null"], "format": "date-time" },
+        "completedAt": { "type": ["string", "null"], "format": "date-time" },
+        "lastActivityAt": { "type": ["string", "null"], "format": "date-time" },
+        "apiCalls": { "type": "integer", "minimum": 0 },
+        "toolCalls": { "type": "integer", "minimum": 0 },
+        "inTool": { "type": "boolean" },
+        "expectedFiles": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "producedFiles": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "validationPlan": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "validations": { "type": "array", "items": { "type": ["object", "string", "boolean"] } },
+        "allowedPaths": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "contractIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "evidence": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "reasonCode": { "type": ["string", "null"] },
+        "reason": { "type": ["string", "null"] },
+        "sourcePresent": { "type": "boolean" },
+        "scopeResolution": { "type": ["object", "null"] },
+        "lease": { "$ref": "#/$defs/lease" },
+        "workspace": { "$ref": "#/$defs/workspace" },
+        "reconciliation": { "type": ["object", "null"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "completionGate": {
+      "type": "object",
+      "required": ["id", "phase", "required", "status", "evidence", "updatedAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "phase": { "type": "number" },
+        "required": { "type": "boolean" },
+        "requiredOverride": { "type": ["boolean", "null"] },
+        "status": { "$ref": "#/$defs/gateStatus" },
+        "reason": { "type": ["string", "null"] },
+        "evidence": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "phaseRecord": {
+      "type": "object",
+      "required": ["name", "status", "startedAt"],
+      "properties": {
+        "name": { "type": "string" },
+        "status": { "$ref": "#/$defs/phaseStatus" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": ["string", "null"], "format": "date-time" },
+        "reason": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "cancellation": {
+      "type": "object",
+      "required": ["requestedAt", "requestedBy", "reason", "pendingExecutorStops", "finalizedAt"],
+      "properties": {
+        "requestedAt": { "type": ["string", "null"], "format": "date-time" },
+        "requestedBy": { "type": ["string", "null"] },
+        "reason": { "type": ["string", "null"] },
+        "pendingExecutorStops": { "type": "array", "items": { "type": "object" } },
+        "finalizedAt": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

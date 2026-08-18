@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AllanHarlen/cc-orchestrador-subagents/schemas/executor-control-config.schema.json",
+  "title": "Executor lifecycle control adapter",
+  "type": "object",
+  "properties": {
+    "codex": { "$ref": "#/$defs/executor" },
+    "agy": { "$ref": "#/$defs/executor" }
+  },
+  "minProperties": 1,
+  "additionalProperties": false,
+  "$defs": {
+    "executor": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "probe": { "$ref": "#/$defs/action" },
+        "interrupt": { "$ref": "#/$defs/action" },
+        "dispatch": { "$ref": "#/$defs/action" }
+      },
+      "additionalProperties": false
+    },
+    "action": {
+      "type": "object",
+      "required": ["command", "args"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!.*\\{[^}]+\\}).+$",
+          "description": "Fixed executable name/path. Placeholders are accepted only in args and cwd."
+        },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "cwd": { "type": "string" },
+        "timeoutMs": { "type": "integer", "minimum": 1000, "maximum": 600000 },
+        "maxBuffer": { "type": "integer", "minimum": 65536, "maximum": 16777216 },
+        "auditName": { "type": "string" },
+        "inheritEnv": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

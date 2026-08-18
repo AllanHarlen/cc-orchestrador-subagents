@@ -1,5 +1,102 @@
 # Changelog
 
+## [4.0.0] — 2026-08-17
+
+### Sistema de engenharia persistente inspirado nos padrões do Hermes
+
+Este release conclui os 11 itens do review de conformidade e transforma o workflow em um sistema que preserva estado, pesquisa experiências anteriores, executa validações mecânicas em código e aprende sob curadoria. É um major release porque passa a exigir **Node.js 22.13+ com `node:sqlite`/FTS5** e amplia o contrato operacional da run até a Fase 12.
+
+#### 1. State Engine e resume estabilizados
+
+- Runs terminais são imutáveis; `runId` não pode ser reutilizado e `RUN_TRANSITIONS` é independente do lifecycle de tasks.
+- `run DONE` exige tasks não vazias, evidence plan, escopo resolvido, Fase 12, artefatos e completion gates com evidence IDs.
+- Task removida da classificação continua bloqueante até decisão explícita `REMOVE|REINSTATE`; corrupção da run mais recente é exposta como `RUN_CORRUPT`, sem fallback silencioso.
+- Cancelamento tornou-se protocolo reconciliável: impede dispatch, interrompe/consulta executores, terminaliza tasks e só então fecha a run.
+- `UNKNOWN -> DONE` exige status externo autoritativo mais corroboração local; Git/arquivo isolado nunca prova sucesso. Reason codes brutos, attempts, leases e workspaces são preservados.
+- O gate `browserE2E` é obrigatório sempre que a run possui front-end. A dispensa por topologia (front e back na mesma origem) é um waiver explícito com motivo auditável, nunca uma derivação silenciosa; nenhum outro gate obrigatório pode ser dispensado.
+
+#### 2–3. Project Memory e histórico pesquisável
+
+- `.orchestrator/project-memory.md` é uma projeção pequena apenas de fatos `VALIDATED`, provenientes de `FILE`, `CONTRACT`, teste aprovado, `RUN_EVENT` ou declaração explícita `USER`.
+- `knowledge.db` preserva fingerprints, conflitos, stale/revoke/pin, lessons e recipes. Fontes alteradas deixam automaticamente o contexto sempre carregado.
+- `history.db` é uma projeção SQLite reconstruível/idempotente dos `events.jsonl`, com migrations WAL e FTS5 para runs, tasks, falhas, soluções, reviews, modelos, agentes e evidências.
+- Nova CLI `orchestrator-knowledge.mjs`: init/status/render/audit, facts, project/rebuild/search/browse/status do histórico.
+
+#### 4. Programmatic intelligence
+
+- Nova camada de scripts determinísticos: `inspect-project`, `inspect-contract`, `inspect-api-ui`, `inspect-diff`, `validate-wire-format`, `validate-task-scope`, `collect-test-results` e `reconcile-run`.
+- Scans são confinados ao projeto, bounded, read-only sobre código produtivo e emitem JSON versionado + `evidenceId`; resultados podem ser anexados ao State Engine.
+- A regra operacional agora é executável: três ou mais reads/greps, loop de arquivos ou comparação mecânica devem usar script, mantendo o contexto do LLM condensado.
+
+#### 5. Lifecycle Manager completo
+
+- Adapters conservadores de Codex/AGY, probes por arquivo ou comando sem shell, redaction/limite de output e persistência de resultados antes da transição.
+- Scheduler `tick/watch`, heartbeats baseados em progresso, leases renováveis, stall/grace, recovery, interrupt, retry e cancel reais.
+- Ações externas exigem adapter ou confirmação explícita; payload desconhecido mantém `UNKNOWN`.
+
+#### 6–8. Learning, Learned Recipes e Curator
+
+- Fase 12 formal gera atomicamente `learning-report.md` e candidate lessons a partir de eventos/reviews duráveis, sem editar `SKILL.md` nem promover regras automaticamente.
+- Promoção exige validação independente; Recipes são versionadas, possuem trigger determinístico, action escopada, confidence, evidências e contadores de uso/sucesso/falha.
+- Curator implementa `ACTIVE -> STALE -> ARCHIVED`, pin/archive/activate, detecção de contradições (`needsReview`), backups com hashes e rollback com safety backup. Mutação é dry-run por padrão e nunca apaga recipe arquivada.
+
+#### 9. Worktrees por task
+
+- Planner compara `allowedPaths`/`expectedFiles`: scopes disjuntos são elegíveis a worktree; overlap ou escopo ausente serializa a execução.
+- Create/recover/ready/integrate/cleanup persistem branch, base/head, status, conflito e cleanup. Conflitos ficam materializados e nunca são abortados/resolvidos silenciosamente.
+
+#### 10–11. Adaptive routing e observabilidade
+
+- Router conservador combina override, pisos de criticidade/fidelidade, retry e histórico comparável por tipo/complexidade. Usa sucesso suavizado, intervalo Wilson, first-pass success, review failures, regressões e duração; nunca rebaixa o piso nem explora tasks críticas aleatoriamente.
+- Decisões adaptativas exigem `agyModelEvidence`; o validator recusa source adaptativo sem evidência.
+- `.orchestrator/telemetry.jsonl` registra somente metadados allowlisted. Campos de prompt/conteúdo/diff/source/raw output/secrets são recusados inclusive quando aninhados.
+- Relatórios cross-run, retenção recuperável com backup e export OTLP/HTTP metadata-only opt-in foram adicionados.
+
+#### Gates mecânicos e consistência entre parsers
+
+Correções encontradas na revisão de conformidade do próprio 4.0.0, antes da publicação:
+
+- **`validate-routing.mjs` passou a aceitar a mesma gramática de ID do State Engine** (`T1`, `T12-A`, `BE-01`, `FE-001-B`) e entradas de wave em lista (`- FE-01 -> agente`). Antes reconhecia apenas `T<N>` em cabeçalho/tabela: uma classificação com `BE-01` — formato documentado no workflow e usado nos próprios exemplos do CLI — reprovava a Fase 3 com "nenhum bloco de task encontrado", sem saída além de renomear todas as tasks.
+- **O validador agora reprova implementação delegada ao `antigravity-agent`**, que é somente leitura. A regra existia em prosa desde o 3.5.0 no workflow, no comando e no `SKILL.md`, e o preflight já exigia `antigravity-coder.md`, mas o gate mecânico não distinguia os dois subagentes e deixava passar exatamente o bug crítico que o 3.5.0 corrigiu.
+- **`browserE2E` deixou de sumir sozinho em run só de front-end.** A aplicabilidade era derivada de `backend && frontend`, então uma SPA consumindo uma API separada já existente — o caso canônico da Fase 9.5 — nascia `N/A` sem motivo nem registro. Agora o gate é obrigatório sempre que há front-end e a dispensa exige waiver com motivo.
+- **Nome de modelo AGY deixou de ser lido como task.** `TASK_ID_SOURCE` casava `gemini-3` dentro de `gemini-3.5-flash-high`; numa tabela de roteamento isso podia virar o ID do bloco no validador e uma task fantasma no `sync`. A gramática — idêntica nos dois parsers — agora descarta sufixo de versão.
+- Novos testes de regressão em `tests/routing-gates.test.mjs` cobrem os quatro casos.
+- **Documentado o que versionar.** `.orchestration/` e `.orchestrator/` não têm o mesmo destino no Git: `events.jsonl`, artefatos da run, `project-memory.md` e `learned/` são versionáveis; `history.db`/`telemetry.jsonl` são projeções reconstruíveis; `.orchestrator/worktrees/` e `*.db-wal`/`*.db-shm` nunca podem ser versionados nem limpos durante uma wave. Tabela por caminho em `references/persistent-state.md`, com bloco de `.gitignore` pronto nos READMEs e verificação na Fase 1.K.
+
+#### Integração e rastreabilidade
+
+- `/orchestrator` e `/orquestrador` agora expõem `resume`, operações `knowledge` e `telemetry`, além do workflow completo até Learning.
+- `SKILL.md`, workflow, READMEs, schemas e referências foram atualizados; `references/hermes-adaptation.md` documenta exatamente os padrões adaptados e as diferenças locais.
+- Lógica estudada no [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent/tree/aeabff6aec6fe0e8a32ed96cf76b9a692eaf705f) (MIT), commit auditado em 2026-08-17: persist-before-delivery, estado indeterminado explícito, stall por atividade, SQLite/FTS5, execução condensada e curadoria recuperável. A implementação Node.js deste plugin é própria e não declara compatibilidade de API.
+
+## [3.6.0] — 2026-08-17
+
+### State engine persistente e `/orchestrator resume`
+
+- **Nova state machine durável por run:** `.orchestration/<slug>/state.json` materializa o estado atual e `events.jsonl` preserva um log append-only com write-ahead, revisão monotônica, lock exclusivo e reconstrução automática do snapshot.
+- **Retomada conservadora:** `/orchestrator resume [runId]` localiza a run ativa, transforma tasks interrompidas de `RUNNING` em `UNKNOWN`, reconcilia Git, arquivos, validações e probes de Codex/AGY, e nunca reexecuta nem declara sucesso apenas por encontrar mudanças locais.
+- **Lifecycle formal:** estados canônicos `PENDING`, `RUNNING`, `DONE`, `FAILED`, `BLOCKED`, `STALLED`, `CANCELLED` e `UNKNOWN`; heartbeats, atividade de tool/API, grace period e detecção de stall baseada em ausência de progresso, não em duração total.
+- **Recuperação após crash:** evento persistido antes do snapshot, replay de snapshot ausente/inválido, reparo seguro de evento final truncado, preservação de tasks terminais e bloqueio de resume em runs `DONE`/`CANCELLED`.
+- **CLI e contratos versionados:** comandos determinísticos `init`, `sync`, `phase`, `task`, `heartbeat`, `sweep`, `reconcile`, `resume`, `run`, `status` e `verify`, acompanhados de JSON Schemas e referência operacional.
+- **Cobertura automatizada:** testes de replay, tail truncado, snapshot inválido, reconciliação autoritativa, proteção contra falso positivo, stall/heartbeat, terminalidade, avanço de fase e sincronização de tasks.
+- A semântica foi adaptada dos princípios do [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/c86197e60798801f62986e4e59460b1272d0c687) (MIT): persistir antes de publicar, representar ownership perdido como `unknown` e distinguir lentidão de ausência real de progresso. A implementação neste plugin é própria e ajustada ao workflow Codex/AGY.
+
+## [3.5.0] — 2026-07-15
+
+### Correções de processo identificadas em auditoria multi-frente (Pensador → Orquestrador)
+
+Uma auditoria de ponta a ponta (código-fonte dos dois plugins + verificação real da entrega de um SaaS de oficina automotiva no navegador via Playwright) encontrou 9 problemas concretos no processo Pensador → Orquestrador. Esta versão corrige os que cabem ao Orquestrador:
+
+- **CRÍTICO — roteamento de implementação front-end apontava para um agente somente-leitura.** Todo o roteamento (`workflow.md`, `subagent-prompts.md`, `agent-stack.md`, `commands/orchestrator.md`, templates) delegava tasks `FRONTEND_ONLY`/fatia front-end de `FULLSTACK` para `cc-antigravity-plugin:antigravity-agent` — que no plugin `cc-antigravity-plugin` é **read-only** (análise/review); quem edita arquivos é `antigravity-coder`. Corrigido em todos os pontos: implementação → `antigravity-coder`; review (Fase 9) → `antigravity-agent` (mantido, correto). `preflight.mjs` agora também valida a presença de `agents/antigravity-coder.md`.
+- **`handoff-contract.md` ressincronizado (byte-idêntico nos 3 plugins)** — a cópia do `cc-pensador` estava 118 linhas desatualizada; corrigida no lado do Pensador (ver changelog daquele plugin), verificado aqui.
+- **`validate-routing.mjs` agora reprova automaticamente** task de design system (cita `tokens.css`/`components.html`/`DESIGN.md`) usando modelo AGY de tier baixo (`flash-low`/`flash-medium`) — a regra "fidelidade de design" da Fase 0 do `SKILL.md` deixou de ser só prosa. Testado funcionalmente (fixture com modelo baixo reprova; com `flash-high` passa).
+- **Gate de design (Fase 9) passa a exigir hover/focus reais via CSS**, não `style={{}}` inline — inline style não pode expressar `:hover`/`:focus`/`@keyframes`. Achado real: uma entrega com 141 blocos `style={{}}` e apenas 3 regras `:hover` em todo o app (só as setas do carrossel).
+- **Pipeline de imagery/ícones (`IMAGE_SUGGESTIONS`)** — o `antigravity-coder` já sugeria proativamente oportunidades de imagem (mecanismo nativo `--generate-image`/Nano Banana), mas o Orquestrador nunca instruía a task front-end a devolver isso nem tratava a resposta. Agora todo prompt front-end carrega `sectorContext` e retorna o bloco `IMAGE_SUGGESTIONS`; quando presente, o Orquestrador apresenta as opções ao usuário via `AskUserQuestion` (multiSelect) antes de gerar qualquer imagem (ver seção 2a de `subagent-prompts.md`).
+- **Guidance de testes contraditória removida.** Categoria `TEST_ONLY` eliminada (implicava tasks dedicadas de "escrever testes"); linguagem solta "adicione testes quando aplicável" removida. Deixado explícito: nem orquestrador nem subagentes geram projeto/suite de testes automatizados como entregável — a validação de cada requisito (`RF`/`CA`) acontece no review de código (Fases 8/9), por inspeção direta.
+- **Nova matriz de rastreabilidade RF/CA → evidência** (`implementation-report-template.md` seção 13), montada na Fase 7 (não retroativamente) e conferida nas Fases 8/9. `// TODO`/`NotImplementedException`/placeholder/stub no caminho de um `RF` do escopo agora é achado **CRÍTICO/bloqueante** explícito nos prompts de review — não mais uma "lacuna conhecida" que passa despercebida (foi assim que um requisito de conteúdo institucional ficou 5 ondas como `// TODO` sem bloquear nenhum review).
+- **Contagem de design systems curados corrigida (1/152 → confirmado ~150, 1 com `app.html`)**, alinhada com a correção equivalente no `cc-pensador`.
+- **Fase 9.5 (E2E no navegador) agora cobre fluxos autenticados.** Novo passo explícito: antes de tentar login, verificar se o PRD documenta credenciais de seed conhecidas; se não, tratar como lacuna real (idealmente corrigir redefinindo a senha do seed para um valor conhecido, não apenas pular o fluxo). Evita repetir o gap observado: seed com hash sem plaintext bloqueou toda a verificação E2E de fluxos autenticados numa entrega real.
+
 ## [3.4.0] — 2026-07-14
 
 ### Verificacao E2E no navegador real obrigatoria (Fase 9.5) — fim do "APROVADO" cego

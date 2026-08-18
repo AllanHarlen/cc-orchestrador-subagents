@@ -64,7 +64,7 @@ Regras:
 - valide wire format real, especialmente casing JSON;
 - se houver DTO C# em PascalCase e payload esperado em camelCase, confirme serializer/atributos e registre a decisao;
 - valide serializacao real contra o TypeScript consumidor quando houver fronteira front-back;
-- adicione testes quando aplicavel;
+- nao crie projeto/suite de testes automatizados como entregavel desta task — a validacao de cada `RF`/`CA` acontece no review de codigo (Fase 8), nao numa suite gerada por voce;
 - reporte todos os arquivos alterados;
 - se houver cota, retorne `Status: QUOTA_EXHAUSTED`;
 - se `dotnet restore`, `dotnet add package`, npm, pip ou outro registry falhar por rede externa bloqueada ou pacote ausente do cache local, retorne `Status: BLOCKED` com o comando, pacote e erro;
@@ -89,7 +89,7 @@ Retorno:
 
 ## 2. Front-end - Antigravity (AGY)
 
-**Subagent type:** `cc-antigravity-plugin:antigravity-agent`
+**Subagent type:** `cc-antigravity-plugin:antigravity-coder` (edita arquivos via o bridge nativo; `antigravity-agent` e somente leitura e nunca deve ser usado aqui)
 
 **Parametros:**
 
@@ -116,6 +116,7 @@ Registre no retorno quais skills foram utilizadas.
 Contexto:
 - especificacao (PRD/spec): <COLAR TRECHO RELEVANTE OU CAMINHO DO ARQUIVO>
 - task atual: <TASK ID - TITULO>
+- setor/industria do negocio: <COLAR sectorContext do PRD/design-system.md, ex.: "oficina automotiva de carro/moto" | "N/A (nao informado)"> — use isso para julgar quais imagens/icones fazem sentido; nao invente um segmento diferente do produto real
 
 Descricao:
 <COLAR DESCRICAO DA TASK>
@@ -153,7 +154,10 @@ Modelo AGY:
 <COLAR AGYMODEL>
 
 Origem do modelo:
-<user|heuristic>
+<user|heuristic|adaptive>
+
+Evidencia do routing adaptativo:
+<COLAR agyModelEvidence quando adaptive | N/A>
 
 Fan-out de subagentes:
 <COLAR: "agyParallel: yes — entregaveis independentes: <lista>" | "agyParallel: no">
@@ -177,6 +181,7 @@ Regras:
 - se a API vier de DTO C# ou mapper compartilhado, destaque qualquer dependencia de serializacao;
 - use o bridge com `--model <AGY_MODEL>`;
 - quando `agyParallel: yes`, decomponha os entregaveis listados em subtarefas Gemini nativas (`DefineSubagent`/`invoke_subagent`/`ManageSubagents`), execute-as concorrentemente e agregue os resultados; entregaveis dependentes ou que compartilhem estado ficam no subagente principal sem fan-out;
+- o `antigravity-coder` avalia proativamente oportunidades de imagery (hero, banners, ilustracoes de empty/error state, icones de produto/servico) e pode devolver um bloco `IMAGE_SUGGESTIONS` na resposta — **nao gere imagens sem aprovacao**: se o bloco vier, repasse-o integralmente ao orquestrador no item 14 do retorno; o orquestrador (nunca o subagente) apresenta as opcoes ao usuario via `AskUserQuestion` antes de qualquer `--generate-image`;
 - se houver cota, retorne `Status: QUOTA_EXAUSTED`;
 - se houver autenticacao pendente, retorne `Status: AUTH_REQUIRED`;
 - se o `agy` nao existir no PATH do ambiente, retorne `Status: AGY_MISSING`;
@@ -200,7 +205,21 @@ Retorno:
 12. Conversation IDs dos subagentes: <lista | N/A>
 13. Tokens usados: input=<N> output=<N> cache_read=<N> total=<N>
     (informe N/A se a plataforma nao expor o dado)
+14. IMAGE_SUGGESTIONS: <bloco retornado pelo antigravity-coder, verbatim | "N/A (nenhuma oportunidade de imagery identificada)">
 ```
+
+### 2a. Tratamento de `IMAGE_SUGGESTIONS` (imagery/icones — pos-retorno da task front-end)
+
+Se o item 14 do retorno da Secao 2 vier preenchido (nao `N/A`), o orquestrador segue este fluxo **antes de considerar a task concluida**:
+
+1. Apresente cada entrada do bloco ao usuario via `AskUserQuestion` (`multiSelect: true`), um `option` por imagem sugerida (label = `label`, description = `prompt` resumido).
+2. Para cada opcao aprovada, delegue de volta ao `cc-antigravity-plugin:antigravity-coder` (uma chamada por imagem — o bridge nao mistura `--generate-image` com `--parallel`):
+   ```text
+   --generate-image --output-dir <DIR DO label:file DA SUGESTAO> -- "<prompt da sugestao, refinado com sectorContext e paleta do design system>"
+   ```
+3. Apos gerar, confirme que o subagente colou o arquivo gerado no componente correspondente (import/`src`/`background-image`) — imagem gerada e nao referenciada em nenhum componente e uma pendencia, nao uma entrega.
+4. Registre em `subagents-context.md`: quais imagens foram sugeridas, quais o usuario aprovou, e o caminho final de cada arquivo gerado.
+5. Se o usuario nao aprovar nenhuma, registre a recusa e siga sem bloquear a task — imagery e um enriquecimento, nao um requisito obrigatorio, exceto quando o PRD/CA explicitamente exigir imagem de produto/servico.
 
 ## 3. SLOW_CHECKIN
 
@@ -229,13 +248,16 @@ Revise a implementacao back-end realizada pelos subagentes para a especificacao 
 
 Leia:
 - a especificacao (PRD/spec) ingerida
-- orchestration/<nome>/tasks-classification.md
-- orchestration/<nome>/waves.md
-- orchestration/<nome>/contracts/
+- .orchestration/<nome>/tasks-classification.md
+- .orchestration/<nome>/waves.md
+- .orchestration/<nome>/contracts/
+- .orchestration/<nome>/implementation-report.md secao 13 (matriz de rastreabilidade RF/CA -> evidencia)
 - diff git da branch atual (apenas arquivos back-end)
 
 Verifique:
 - aderencia a especificacao no escopo back-end;
+- **cada criterio de aceite (`CA`) das tasks back-end validado por inspecao direta do codigo** — nao delegue essa validacao a uma suite de testes; confirme o requisito olhando a implementacao real; confira a matriz de rastreabilidade contra o codigo real, nao apenas contra o texto do relatorio;
+- **`// TODO`, `NotImplementedException`, stub vazio ou placeholder no caminho de codigo de um `RF`/`CA` do escopo e achado CRITICO/bloqueante**, mesmo que o build passe;
 - contratos API (lado servidor);
 - wire format e casing JSON no payload emitido;
 - serializacao real contra TypeScript consumidor;
@@ -243,8 +265,7 @@ Verifique:
 - migrations, persistencia, indices e integridade referencial;
 - regressao no back-end;
 - seguranca;
-- build e testes back-end;
-- testes faltando;
+- build back-end sem erros;
 - pendencias antes do merge.
 
 Retorne:
@@ -280,29 +301,31 @@ Revise a implementacao front-end realizada pelos subagentes para a especificacao
 
 Leia:
 - a especificacao (PRD/spec) ingerida
-- orchestration/<nome>/tasks-classification.md
-- orchestration/<nome>/contracts/
+- .orchestration/<nome>/tasks-classification.md
+- .orchestration/<nome>/contracts/
+- .orchestration/<nome>/implementation-report.md secao 13 (matriz de rastreabilidade RF/CA -> evidencia)
 - diff/arquivos front-end alterados
 
 Verifique:
 - aderencia a especificacao no escopo front-end;
-- aderencia a cada task e criterio de aceite das tasks front-end;
+- **cada criterio de aceite (`CA`) das tasks front-end validado por inspecao direta do codigo/comportamento** — nao delegue essa validacao a uma suite de testes; confirme o requisito olhando a implementacao real; confira a matriz de rastreabilidade contra a tela/componente real, nao apenas contra o texto do relatorio;
+- **`// TODO`, placeholder de conteudo fixo (copy generico onde o requisito pede dado real) ou estado vazio nao implementado no caminho de um `RF`/`CA` do escopo e achado CRITICO/bloqueante**, mesmo que o build/typecheck/lint passem;
 - consumo correto do contrato API/UI: wire format, casing JSON e serializacao real contra o TypeScript consumidor;
 - estados de UI tratados (loading, erro, empty, sucesso);
 - tipagem TypeScript, build, typecheck e lint;
 - acessibilidade e consistencia visual quando aplicavel;
-- testes de componente/e2e executados e lacunas;
 - arquivos alterados fora do escopo;
 - regressao potencial em telas/fluxos existentes.
 
 Gate de design system (quando houver design system — Open Design):
 - o estilo consome `tokens.css` via custom properties (`var(--*)`); SEM hex/raio/espacamento inventado fora dos tokens;
 - componentes batem com seletores/estados de `components.html` (default/hover/focus/active/disabled/loading/empty/error);
+- **elementos interativos (botoes, links, cards clicaveis) tem estado `:hover`/`:focus` real, implementado como regra CSS/CSS-Modules/styled/Tailwind — NAO como `style={{}}` inline.** Inline style e estruturalmente incapaz de expressar `:hover`/`:focus`/`@keyframes`; se `components.html` especifica hover (ex.: `.btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }`), o componente entregue precisa do equivalente real, nao so o estado default. Grep rapido de sanidade: proporcao alta de `style={{` sem nenhuma regra `:hover`/`:focus` no CSS do projeto e sinal de gate falho;
 - accent usado no maximo 2x por pagina (hero + CTA) alem de links; sem flood; sem emoji como icone; sem sombra se Depth & Elevation = minimal;
-- telas-chave conferidas contra o diretorio `preview/` (diferenca de layout/hierarquia/contraste; abrir `colors.html`, `spacing.html` ou `typography.html` — so 1/152 systems tem `app.html`);
+- telas-chave conferidas contra o diretorio `preview/` (diferenca de layout/hierarquia/contraste; abrir `colors.html`, `spacing.html` ou `typography.html` conforme os arquivos disponiveis no system);
 - no modo Spec, os requisitos da capability `ui-design-system` (specs/ui-design-system/spec.md) sao atendidos (cada cenario);
 - anti-padroes da secao 9 do DESIGN.md ausentes do codigo final.
-- Trate violacao de design system como problema BLOQUEANTE quando contrariar requisito explicito (override sem justificativa, token inventado, accent flood).
+- Trate violacao de design system como problema BLOQUEANTE quando contrariar requisito explicito (override sem justificativa, token inventado, accent flood, elemento interativo sem hover/focus real).
 
 Regras de status:
 - se houver cota, retorne `Status: QUOTA_EXAUSTED`;
@@ -342,7 +365,7 @@ Se houver cota, retorne `Status: QUOTA_EXHAUSTED`.
 Se houver rede externa bloqueada, pacote ausente no cache local ou escrita fora do working directory permitido, retorne `Status: BLOCKED` com evidencia.
 ```
 
-> Ajustes pontuais de front-end voltam para o AGY (`cc-antigravity-plugin:antigravity-agent`) com `--model <agyModel>`, nao para o Codex.
+> Ajustes pontuais de front-end voltam para o AGY (`cc-antigravity-plugin:antigravity-coder`) com `--model <agyModel>`, nao para o Codex. `antigravity-agent` e somente leitura e nao pode aplicar ajustes.
 
 ## 7. Fallback de review sem agente disponivel
 

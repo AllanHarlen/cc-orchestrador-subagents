@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AllanHarlen/cc-orchestrador-subagents/schemas/orchestration-event.schema.json",
+  "title": "Orchestrator durable event",
+  "type": "object",
+  "required": ["eventSchemaVersion", "eventId", "runId", "revision", "occurredAt", "type", "actor", "payload"],
+  "properties": {
+    "eventSchemaVersion": { "const": 1 },
+    "eventId": { "type": "string", "format": "uuid" },
+    "runId": { "type": "string", "minLength": 1 },
+    "revision": { "type": "integer", "minimum": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "type": {
+      "enum": [
+        "RUN_INITIALIZED", "TASKS_SYNCED", "PHASE_UPDATED", "COMPLETION_GATE_UPDATED",
+        "TASK_UPDATED", "TASK_HEARTBEAT", "TASK_SCOPE_RESOLVED", "TASK_LEASE_UPDATED",
+        "TASK_WORKSPACE_UPDATED", "STALL_SWEEP_COMPLETED", "RUN_RESUMED", "RUN_RECONCILED",
+        "RUN_CANCELLATION_REQUESTED", "RUN_STATUS_UPDATED"
+      ]
+    },
+    "actor": { "type": "string", "minLength": 1 },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}

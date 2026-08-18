@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AllanHarlen/cc-orchestrador-subagents/schemas/telemetry-event.schema.json",
+  "title": "Privacy-first orchestrator telemetry event",
+  "type": "object",
+  "required": ["schemaVersion", "eventId", "eventType", "occurredAt", "runId"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "eventId": { "type": "string", "minLength": 1 },
+    "eventType": { "enum": ["task_outcome", "task_attempt_outcome", "routing_decision"] },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "runId": { "type": "string", "minLength": 1 },
+    "taskId": { "type": ["string", "null"] },
+    "taskType": { "type": ["string", "null"] },
+    "complexity": { "type": ["string", "null"] },
+    "executor": { "type": ["string", "null"] },
+    "model": { "type": ["string", "null"] },
+    "attempt": { "type": ["integer", "null"], "minimum": 0 },
+    "startedAt": { "type": ["string", "null"], "format": "date-time" },
+    "completedAt": { "type": ["string", "null"], "format": "date-time" },
+    "durationMs": { "type": ["integer", "null"], "minimum": 0 },
+    "result": { "type": ["string", "null"] },
+    "reasonCode": { "type": ["string", "null"] },
+    "errorFingerprint": { "type": ["string", "null"] },
+    "reviewResult": { "type": ["string", "null"] },
+    "regressions": { "type": ["integer", "null"], "minimum": 0 },
+    "validationSummary": {
+      "type": ["object", "null"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string", "maxLength": 64 }
+      },
+      "additionalProperties": false
+    },
+    "filesChangedCount": { "type": ["integer", "null"], "minimum": 0 },
+    "contractCount": { "type": ["integer", "null"], "minimum": 0 },
+    "evidenceCount": { "type": ["integer", "null"], "minimum": 0 },
+    "workspaceId": { "type": ["string", "null"] },
+    "apiCalls": { "type": ["integer", "null"], "minimum": 0 },
+    "toolCalls": { "type": ["integer", "null"], "minimum": 0 },
+    "metadata": {
+      "type": ["object", "null"],
+      "properties": {
+        "finalAttempt": { "type": "boolean" },
+        "sourcePresent": { "type": "boolean" },
+        "firstPass": { "type": "boolean" },
+        "source": { "type": ["string", "null"], "maxLength": 512 },
+        "reason": { "type": ["string", "null"], "maxLength": 512 },
+        "heuristicBaseline": { "type": ["string", "null"], "maxLength": 512 },
+        "fidelityFloor": { "type": ["string", "null"], "maxLength": 512 },
+        "historicalSamples": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "not": {
+    "anyOf": [
+      { "required": ["prompt"] },
+      { "required": ["content"] },
+      { "required": ["sourceCode"] },
+      { "required": ["diff"] },
+      { "required": ["secret"] },
+      { "required": ["rawOutput"] }
+    ]
+  },
+  "additionalProperties": false
+}

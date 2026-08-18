@@ -4,6 +4,14 @@ Este arquivo expande as fases do `SKILL.md`.
 
 O orquestrador atua somente em projetos com PRD/especificacao ja pronta, em desenvolvimento complexo. Ele nao faz discovery, nao cria plano OpenSpec e nao reabre o entendimento da demanda. Todos os artefatos de coordenacao ficam em `.orchestration/<nome>/`, onde `<nome>` e um identificador descritivo em kebab-case: em **modo conjunto** e o `<slug>` do Pensador (sem `-vN`); em **modo independente** e derivado do PRD. Ver `references/handoff-contract.md`.
 
+## Checkpoint transversal e resume
+
+Toda fase e toda task sao transicoes da state machine descrita em `persistent-state.md`. O orquestrador grava primeiro em `events.jsonl` e somente depois publica a mudanca; `state.json` e um snapshot reparavel, nao uma segunda fonte manual.
+
+Antes de iniciar uma fase, execute `orchestration-state.mjs phase --status RUNNING`. Ao concluir, persista `DONE`; em bloqueio/interrupcao, persista o estado correspondente antes de parar. Um crash entre fases retoma da proxima entrada segura da sequencia explicita (`... 9, 9.5, 10, 11, 12`). Um crash com executor ativo transforma `RUNNING` em `UNKNOWN` ate a reconciliacao provar o resultado.
+
+`/orchestrator resume [runId]` segue o protocolo completo de `persistent-state.md`: replay, reconciliacao conservadora, probes de Codex/AGY, reconstrucao da wave e continuacao da ultima fase segura. Quando existir adapter, rode `orchestration-lifecycle.mjs tick --resume`; o resultado bruto e persistido antes da transicao. Resume nunca e atalho para redelegar trabalho cujo resultado ainda pode chegar.
+
 ## Fase 0 - Preflight
 
 Rode:
@@ -23,6 +31,21 @@ Regras:
 
 A especificacao chega por **duas vias** (ver `references/handoff-contract.md`). Antes de tratar a demanda como avulsa, detecte o modo.
 
+### 1.K Inicializar conhecimento comprovado do projeto
+
+Antes da classificacao, inicialize e audite a memoria pequena do projeto e atualize a projecao pesquisavel das runs anteriores:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestrator-knowledge.mjs" init
+node "${CLAUDE_SKILL_DIR}/scripts/inspect-project.mjs" --root "." --persist-knowledge
+node "${CLAUDE_SKILL_DIR}/scripts/orchestrator-knowledge.mjs" audit
+node "${CLAUDE_SKILL_DIR}/scripts/orchestrator-knowledge.mjs" history-project
+```
+
+Leia `.orchestrator/project-memory.md` junto da especificacao. Somente fatos `VALIDATED` com fonte `FILE`, `CONTRACT`, `TEST` aprovado, `RUN_EVENT` ou `USER` entram nessa projecao. Se `audit` marcar `STALE`/`CONFLICT`, exclua o fato da classificacao ate nova validacao. Busque `history-search` apenas por fingerprints, stacks ou problemas relevantes e mantenha o resultado condensado.
+
+Na primeira run do projeto, confira se o `.gitignore` ja cobre os caminhos que nunca devem ser versionados (`.orchestrator/worktrees/`, `.orchestrator/backups/`, `.orchestrator/history.db`, `.orchestrator/telemetry.jsonl`, `*.db-wal`, `*.db-shm`). Se nao cobrir, proponha o bloco ao usuario antes de seguir — worktree versionada ou removida por `git clean` quebra a wave em execucao, e SQLite em WAL gera conflito binario. A tabela por caminho esta em `persistent-state.md`; nao altere o `.gitignore` do usuario sem aprovacao.
+
 ### 1.0 Detectar modo de operacao (conjunto vs independente)
 
 1. Procure `.pensador/*/handoff.json`.
@@ -33,6 +56,13 @@ A especificacao chega por **duas vias** (ver `references/handoff-contract.md`). 
    - `status: BLOCKED`/`PARTIAL` no upstream: pare e peca decisao ao usuario.
    - Sem `handoff.json` mas com `.pensador/<slug>-vN/`: fallback por convencao — leia `.pensador-progress.json` (`checkpointVersion: 2`) e o array `artifacts`; avise o usuario.
 3. **Modo independente:** sem `.pensador/`, o usuario fornece a especificacao via `@arquivo` ou texto no `/orquestrador`. `<nome>`/`<slug>` derivam do PRD.
+
+Assim que o slug estiver resolvido, crie `.orchestration/<slug>/` e inicialize o estado **antes** de ler/produzir novos artefatos dessa execucao:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" init \
+  --slug "<slug>" --dir ".orchestration/<slug>" --phase 1
+```
 
 ### 1.1 Ler a especificacao fornecida
 
@@ -52,7 +82,7 @@ A partir da especificacao, extraia diretamente:
 - tasks, fases ou ordem de implementacao quando o PRD ja as trouxer;
 - decisoes tecnicas firmes (arquitetura, bibliotecas, endpoints, telas, contratos, migrations);
 - restricoes de escopo, agente, tecnologia ou arquivo;
-- criterios de aceite, testes esperados e validacoes obrigatorias.
+- criterios de aceite (`CA`) e validacoes obrigatorias — usados depois nos gates de review (Fases 8/9), nao para gerar uma suite de testes.
 
 Quando o PRD ja lista tasks, preserve IDs, nomes e ordem para rastreabilidade. Quando o PRD descreve entregaveis sem IDs formais, derive uma lista de tasks objetiva a partir do texto, sem inventar escopo novo.
 
@@ -74,7 +104,7 @@ As unicas pausas legitimas em qualquer ponto da execucao sao por bloqueio real, 
 
 Reducao de escopo (implementar menos do que a especificacao pede) so e aceitavel quando o **proprio usuario** pedir isso explicitamente na mensagem que invocou o orquestrador — nunca por iniciativa do orquestrador, e nunca comunicada apenas no relatorio final depois do fato consumado.
 
-Ao final da Fase 1, o orquestrador deve conseguir produzir `tasks-classification.md` diretamente a partir da especificacao ingerida, cobrindo o escopo integral, e seguir sem pausa ate a Fase 11.
+Ao final da Fase 1, o orquestrador deve conseguir produzir `tasks-classification.md` a partir da especificacao ingerida mais fatos comprovados da Project Memory, cobrindo o escopo integral, e seguir sem pausa ate a Fase 12 e o fechamento terminal.
 
 ## Fase 2 - Classificacao das tasks
 
@@ -86,7 +116,11 @@ Para cada task extraida do PRD/spec, registre em `.orchestration/<nome>/tasks-cl
 - complexidade;
 - `contractRequired: yes|no`;
 - `assignedAgent`;
-- `routingReason`.
+- `routingReason`;
+- `expectedFiles` e/ou `validationPlan` (ao menos um e obrigatorio para reconciliacao);
+- `allowedPaths` para validar escopo e decidir isolamento;
+- `complexity`, `contractIds` e features de routing;
+- para AGY, `agyModel`, `agyModelSource` e, quando adaptativo, `agyModelEvidence`.
 
 ### Regra de roteamento por categoria
 
@@ -96,12 +130,13 @@ A categoria da task e a fonte da verdade para escolher agente. Nao reclassifique
 |---|---|---|
 | `BACKEND_ONLY` | `codex:codex-rescue` | `--effort medium` |
 | `DATABASE_ONLY` | `codex:codex-rescue` | `--effort medium` |
-| `TEST_ONLY` | `codex:codex-rescue` | `--effort medium` |
 | `REVIEW_ONLY` | `codex:codex-rescue` | `--effort high` |
-| `FRONTEND_ONLY` | `cc-antigravity-plugin:antigravity-agent` | AGY com `--model <agyModel>` |
-| `FULLSTACK` | `codex:codex-rescue` + `cc-antigravity-plugin:antigravity-agent` | Codex para back-end; AGY com `--model <agyModel>` para front-end |
+| `FRONTEND_ONLY` | `cc-antigravity-plugin:antigravity-coder` | AGY com `--model <agyModel>` |
+| `FULLSTACK` | `codex:codex-rescue` + `cc-antigravity-plugin:antigravity-coder` | Codex para back-end; AGY com `--model <agyModel>` para front-end |
 
 Se `FRONTEND_ONLY` aparecer com Codex como agente primario, corrija antes de montar waves. Codex so pode assumir front-end depois de `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, falha operacional de AGY ou decisao explicita do usuario, e isso deve ficar registrado em `monitoring.md`, `workflow-log.md` e `subagents-context.md`.
+
+**`antigravity-agent` e somente leitura.** Se `FRONTEND_ONLY` (ou a fatia front-end de `FULLSTACK`) aparecer com `assignedAgent: cc-antigravity-plugin:antigravity-agent`, isso e um erro de roteamento — corrija para `cc-antigravity-plugin:antigravity-coder` antes de montar waves. `antigravity-agent` so e valido como `assignedAgent` nas tasks de review (Fase 9), nunca em tasks que criam/editam arquivos.
 
 ### Regra de `agyParallel`
 
@@ -129,11 +164,30 @@ Agrupe tasks em `.orchestration/<nome>/waves.md`.
 
 Cada entrada de `waves.md` deve repetir `assignedAgent` vindo de `tasks-classification.md`. Depois de montar as waves, rode:
 
+1. Para cada task AGY sem override do usuario, chame `orchestration-router.mjs route` com `taskType`, `complexity`, piso heuristico, criticidade, design e historico de attempts. O router exige amostra comparavel e nunca reduz o piso. Se retornar `source: adaptive`, registre `agyModelEvidence`; se retornar fallback, mantenha `source: heuristic`.
+2. Valide o roteamento:
+
 ```bash
 node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" ".orchestration/<nome>"
 ```
 
 Se o validador falhar, corrija `tasks-classification.md` e `waves.md` antes de qualquer delegacao.
+
+Quando o validador passar, sincronize os artefatos com o snapshot. O parser aceita IDs como `T1`, `BE-01` e `FE-01`; tasks removidas do Markdown nao sao apagadas silenciosamente do historico.
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" sync \
+  --dir ".orchestration/<nome>"
+```
+
+Em seguida, planeje isolamento fisico usando `allowedPaths`:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-worktree.mjs" plan \
+  --dir ".orchestration/<nome>" --wave <N>
+```
+
+`ISOLATED` pode executar em worktree paralela; `SERIAL` (overlap) e `UNSCOPED` nao podem compartilhar a mesma execucao concorrente. O plano e persistido antes de qualquer mutacao Git. Leia `worktrees-routing.md`.
 
 Nao paralelize quando houver:
 
@@ -141,6 +195,8 @@ Nao paralelize quando houver:
 - schema indefinido;
 - arquivo central compartilhado;
 - autenticacao ou seguranca sem consolidacao.
+
+Se uma operacao de descoberta/comparacao exigir loops ou tres ou mais reads/greps, rode o script de intelligence correspondente em vez de expandir todos os arquivos no contexto.
 
 ## Fase 4 - Contratos API/UI e materializacao de design
 
@@ -159,6 +215,14 @@ Crie `.orchestration/<nome>/contracts/*.md` para:
 
 - toda task `FULLSTACK`;
 - todo par dependente `BACKEND_ONLY` + `FRONTEND_ONLY` que troque dados entre si.
+
+Valide cada contrato e o conjunto API/UI de forma deterministica:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/inspect-contract.mjs" --root "." --path ".orchestration/<nome>/contracts/<id>.md" --persist-knowledge
+node "${CLAUDE_SKILL_DIR}/scripts/inspect-api-ui.mjs" --root "." --backend <path> --frontend <path>
+node "${CLAUDE_SKILL_DIR}/scripts/validate-wire-format.mjs" --root "." --contract <path> --payload <path>
+```
 
 Todo contrato deve conter:
 
@@ -183,7 +247,20 @@ Quando houver DTO C# e consumidor TypeScript:
 
 ## Fase 5 - Delegacao paralela
 
-Antes de lancar subagentes, confirme que `validate-routing.mjs` passou. A delegacao precisa seguir `assignedAgent` dos artefatos validados.
+Antes de lancar subagentes, confirme que `validate-routing.mjs` passou e que o plano de worktrees da wave nao possui overlap sendo despachado em paralelo. A delegacao precisa seguir `assignedAgent` dos artefatos validados.
+
+Para cada task `ISOLATED`, crie a worktree antes do dispatch e use o path retornado como working directory do executor:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-worktree.mjs" create \
+  --dir ".orchestration/<nome>" --task <ID>
+```
+
+Adquira uma lease com owner estavel antes do dispatch; o Lifecycle Manager a renova quando observa atividade e a libera apos terminal/reconciliacao. Nunca aponte dois executores para a mesma workspace/lease.
+
+Para cada dispatch, persista a task como `RUNNING` **antes** de iniciar o executor. Inclua `executor`, `sessionId` do Agent/Codex ou `conversationId` do AGY assim que cada identificador existir. O engine captura `commitBefore` e incrementa `attempt` somente numa nova tentativa. Se o agendamento falhar antes do executor iniciar, registre `FAILED` com `reasonCode: DISPATCH_FAILED`; nao deixe a task eternamente `RUNNING`.
+
+Quando o executor retornar, converta sinais de quota/auth/tooling para `BLOCKED` + `reasonCode`, ou persista `DONE`/`FAILED`, **antes** de anunciar o retorno na conversa ou avancar a wave.
 
 ### Regra de limite de prompt AGY (28.000 chars)
 
@@ -207,7 +284,7 @@ Se o prompt montado **exceder 28.000 chars**:
 **Quando a task nao pode ser dividida por entregaveis** (descricao monolitica indivisivel):
 
 - Reduza `Arquivos e modulos relevantes` ao minimo critico para esta task; mova arquivos secundarios para `Fora do escopo`.
-- Se ainda exceder, troque o modelo AGY para `gemini-3.5-flash-low` e registre o motivo em `tasks-classification.md`.
+- Substitua listagens mecanicas extensas por um resumo deterministico de `scripts/intelligence` e referencias de path confinadas ao workspace; nao reduza o modelo, pois isso nao altera o limite da linha de comando e pode violar o piso de fidelidade.
 - Se persistir, registre `promptOverflow: true` em `tasks-classification.md` e peca decisao ao usuario antes de delegar.
 
 Para Codex:
@@ -218,11 +295,11 @@ Para Codex:
 - antes de executar instalacao/restore de pacotes, verifique se a task depende de rede externa ou de cache local; se falhar por rede bloqueada ou pacote ausente, pare como `BLOCKED`.
 - se houver erro de permissao ao escrever fora do working directory permitido, pare como `BLOCKED` e reporte o caminho alvo.
 
-Para Antigravity/AGY:
+Para Antigravity/AGY (implementacao):
 
-- delegue ao `cc-antigravity-plugin:antigravity-agent`;
+- delegue ao `cc-antigravity-plugin:antigravity-coder` (unico subagente AGY com permissao de escrita; `antigravity-agent` e somente leitura e nao deve receber tasks de implementacao);
 - passe `--model <agyModel>` para o bridge do plugin;
-- registre `agyModelSource: user|heuristic`;
+- registre `agyModelSource: user|heuristic|adaptive`; a opcao `adaptive` exige `agyModelEvidence` completo;
 - quando `agyParallel: yes`, passe tambem `--parallel` ao bridge; quando `agySubagentModel` for diferente de `inherit`, passe `--subagent-model <agySubagentModel>` (implica `--parallel`);
 - por padrao (`agySubagentModel: inherit`), omita `--subagent-model`; os subagentes herdam o modelo da sessao AGY principal;
 - `--agy-subagent-model` informado pelo usuario liga `--parallel` automaticamente;
@@ -234,7 +311,12 @@ Cada prompt deve incluir:
 - contrato quando `contractRequired=yes`;
 - escopo permitido;
 - wire format;
-- regra de validar casing JSON e serializacao.
+- regra de validar casing JSON e serializacao;
+- `sectorContext` (setor/industria do negocio, do PRD/`design-system.md` do Pensador) — orienta que imagery/iconografia fazem sentido para o produto real.
+
+### Imagery/icones (`IMAGE_SUGGESTIONS`)
+
+Todo prompt de task front-end usa o template da Secao 2 de `subagent-prompts.md`, que instrui o `antigravity-coder` a devolver um bloco `IMAGE_SUGGESTIONS` quando identificar oportunidades de imagem (hero, banners, ilustracoes de empty/error state, icones de produto/servico) — o `antigravity-coder` **nunca gera sem aprovacao previa**. Quando esse bloco vier preenchido na resposta, siga o fluxo da Secao 2a de `subagent-prompts.md` **antes de fechar a task**: apresente as opcoes ao usuario via `AskUserQuestion` (multiSelect), delegue apenas as aprovadas de volta ao `antigravity-coder` com `--generate-image`, confirme que o arquivo gerado foi fiado no componente, e registre o resultado em `subagents-context.md`. Nao marcar a task front-end como `DONE` com sugestoes de imagem pendentes de decisao do usuario.
 
 ### Verificacao de skills compativeis
 
@@ -250,19 +332,44 @@ O orquestrador consolida as skills utilizadas por subagente em `subagents-contex
 
 ## Fase 6 - Monitoramento
 
-Status validos:
+Estados canonicos persistidos:
 
 - `PENDING`
 - `RUNNING`
-- `PAUSED`
-- `CANCELLED`
-- `BLOCKED`
-- `NEEDS_SYNC`
 - `DONE`
 - `FAILED`
-- `QUOTA_EXAUSTED` (AGY)
-- `QUOTA_EXHAUSTED` (Codex)
-- `REVIEWED`
+- `BLOCKED`
+- `STALLED`
+- `CANCELLED`
+- `UNKNOWN`
+
+`PAUSED` descreve o run/interacao, nao uma conclusao de task. `NEEDS_SYNC`, `QUOTA_EXAUSTED`, `QUOTA_EXHAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT` e `REVIEWED` permanecem sinais operacionais em `reasonCode`/evidencia; nao criam estados concorrentes fora da state machine.
+
+### Heartbeat e stall
+
+Atualize heartbeat apenas quando houver progresso observavel (novo retorno/token, API call, tool call ou mudanca de `currentTool`). Poll sem mudanca nao renova `lastActivityAt`.
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" heartbeat \
+  --dir ".orchestration/<nome>" --task <ID> \
+  --api-calls <N> --tool-calls <N> --current-tool <tool> --in-tool <true|false>
+
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" sweep \
+  --dir ".orchestration/<nome>"
+```
+
+Defaults: 450s sem progresso fora de tool, 1200s dentro de tool e 120s de grace period. `STALLED` recomenda interrupcao + reconciliacao; nao significa `FAILED` e nao autoriza retry imediato. Heartbeat real durante a grace period pode reativar `STALLED -> RUNNING`.
+
+Prefira o manager continuo ao polling manual quando houver adapter configurado:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-lifecycle.mjs" watch \
+  --dir ".orchestration/<nome>" \
+  --adapter-config ".orchestrator/executor-control.json" \
+  --interval-seconds 30
+```
+
+O adapter recebe apenas placeholders allowlisted e roda sem shell. Cada probe bruto redigido e limitado e salvo em `executor-results/` antes de atualizar task, heartbeat, lease, history e telemetry. `interrupt`, `retry` e `cancel` exigem adapter ou `--external-confirmed`; nunca simule sucesso da acao externa. Veja `lifecycle-telemetry.md` e `assets/executor-control-config.schema.json`.
 
 ### Politica de quota
 
@@ -312,6 +419,13 @@ Status validos:
 
 ## Fase 7 - Integracao
 
+Para cada worktree isolada concluida, marque `ready` (commit recuperavel) e integre serialmente na branch de integracao. O root produtivo deve estar limpo fora dos metadados do orquestrador. Em conflito, persista `CONFLICT` e pare; nao aborte, escolha lado ou limpe a worktree silenciosamente.
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-worktree.mjs" ready --dir ".orchestration/<nome>" --task <ID>
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-worktree.mjs" integrate --dir ".orchestration/<nome>" --task <ID>
+```
+
 Valide:
 
 - aderencia a especificacao (PRD/spec) ingerida;
@@ -320,13 +434,31 @@ Valide:
 - casing JSON;
 - serializacao real;
 - arquivos alterados fora do escopo;
-- testes e build.
+- build (compilacao/typecheck/lint) sem erros.
+
+Use programmatic intelligence para a parte mecanica e persista os evidence IDs na task/gate:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/inspect-diff.mjs" --root "." --dir ".orchestration/<nome>" --task <ID> --base <commitBefore>
+node "${CLAUDE_SKILL_DIR}/scripts/validate-task-scope.mjs" --root "." --dir ".orchestration/<nome>" --task <ID>
+node "${CLAUDE_SKILL_DIR}/scripts/collect-test-results.mjs" --root "." --input <resultado> --dir ".orchestration/<nome>" --task <ID> --persist-knowledge --command "<comando>"
+```
+
+Depois de cada outcome/review, projete a telemetria metadata-only; chamadas repetidas sao idempotentes por event ID:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-telemetry.mjs" project --dir ".orchestration/<nome>"
+```
+
+Nao gere projeto de testes automatizados como parte da integracao. A validacao de que cada requisito (`RF`/`CA`) foi implementado corretamente e responsabilidade do review de codigo (Fases 8 e 9), nao de uma suite de testes.
+
+**Monte a matriz de rastreabilidade RF/CA → evidência aqui, nao no relatorio final.** Percorra cada `RF`/`CA` do escopo da especificacao e registre, em `implementation-report.md` secao 13, a task que o implementou e o arquivo/trecho de evidencia. Um `RF` sem entrega correspondente (ou com `// TODO`/placeholder/stub no caminho do requisito) e uma lacuna que precisa ser **sinalizada agora** — nao silenciosamente absorvida como "lacuna conhecida" no relatorio final sem passar pelo gate de review. Essa matriz alimenta diretamente as Fases 8 e 9.
 
 Se precisar ajuste, delegue para Codex com `--effort medium` (back-end) ou AGY (front-end), conforme a categoria.
 
 ## Fase 8 - Review back-end pos-implementacao (Codex)
 
-> **Ignorar quando nao houver back-end:** Se nao houver nenhuma task `BACKEND_ONLY`, `DATABASE_ONLY`, `TEST_ONLY` nem fatia back-end de `FULLSTACK`, pule a Fase 8 e registre `review-final.md` com a nota `"Sem back-end: review back-end nao aplicavel"`.
+> **Ignorar quando nao houver back-end:** Se nao houver nenhuma task `BACKEND_ONLY`, `DATABASE_ONLY` nem fatia back-end de `FULLSTACK`, pule a Fase 8 e registre `review-final.md` com a nota `"Sem back-end: review back-end nao aplicavel"`.
 
 Objetivo da fase: validar a implementacao **back-end** final contra a especificacao, os contratos, as tasks executadas e os retornos dos subagentes. Esta fase e read-only: nao edite codigo durante o review. Codex revisa **apenas back-end** — nunca front-end. Se houver defeitos, volte para a Fase 7 para integrar ajustes ou redelegar correcao.
 
@@ -338,24 +470,24 @@ Antes de delegar ao Codex ou fazer review interno, monte um pacote de contexto c
 - `tasks-classification.md`, `waves.md` e contratos em `contracts/*.md`;
 - `monitoring.md`, `workflow-log.md` e `subagents-context.md`;
 - resumo dos arquivos back-end alterados;
-- comandos de build, testes e validacoes executadas no back-end;
+- comandos de build e validacoes executadas no back-end;
 - falhas, bloqueios, fallbacks e decisoes do usuario durante a execucao.
 
 ### 8.2 Fluxo principal
 
 - delegue ao Codex com `--effort high`;
-- informe que o review e somente leitura e restrito ao back-end (controllers, services, repositorios, DTOs, migrations, testes, contratos do lado servidor);
+- informe que o review e somente leitura e restrito ao back-end (controllers, services, repositorios, DTOs, migrations, contratos do lado servidor);
 - exija achados com severidade, arquivo/trecho quando aplicavel, impacto e correcao esperada;
 - salve o resultado em `review-final.md`.
 
 O prompt do review back-end deve pedir verificacao explicita de:
 
 - aderencia a especificacao e ao escopo back-end;
-- aderencia a cada task e criterio de aceite das tasks back-end;
+- **cada criterio de aceite (`CA`) das tasks back-end validado por inspecao direta do codigo** — a validacao do requisito e responsabilidade deste review, nao de uma suite de testes gerada;
 - contratos API, wire format, status codes, casing JSON e serializacao real no lado servidor;
 - auth/autorizacao, validacoes e tratamento de erro no back-end;
 - migrations, persistencia, indices e integridade referencial quando houver banco;
-- testes executados, lacunas de teste e builds pendentes no back-end;
+- build back-end sem erros;
 - arquivos alterados fora do escopo;
 - regressao potencial em fluxos existentes do back-end.
 
@@ -373,6 +505,8 @@ O prompt do review back-end deve pedir verificacao explicita de:
 - `APROVADO_COM_RESSALVAS`: pode seguir somente se as ressalvas forem documentadas como nao bloqueantes;
 - `REPROVADO`: nao avance; volte para a Fase 7 ou redelegue ajustes ao Codex.
 
+**`REPROVADO` obrigatorio quando:** um `RF`/`CA` do escopo back-end nao tem evidencia na matriz de rastreabilidade (secao 13 do `implementation-report.md`), ou o caminho de codigo desse requisito contem `// TODO`, `NotImplementedException`, stub vazio ou placeholder equivalente. Isso vale mesmo que o build passe e nenhum outro achado de severidade tenha sido levantado — requisito nao implementado nao e "ressalva nao bloqueante", e reprovacao.
+
 ## Fase 9 - Review front-end pos-implementacao (AGY)
 
 > **Ignorar quando nao houver front-end:** Se nao houver nenhuma task `FRONTEND_ONLY` nem fatia front-end de `FULLSTACK`, pule a Fase 9 e registre `review-frontend.md` com a nota `"Sem front-end: review front-end nao aplicavel"`. Se nao existir `review-frontend.md`, basta registrar a ausencia em `workflow-log.md`.
@@ -387,7 +521,7 @@ Monte um pacote de contexto com:
 - `tasks-classification.md`, `waves.md` e contratos em `contracts/*.md`;
 - `subagents-context.md` das tasks front-end;
 - resumo dos arquivos front-end alterados;
-- comandos de build/typecheck/lint/testes executados no front-end.
+- comandos de build/typecheck/lint executados no front-end.
 
 ### 9.2 Fluxo principal
 
@@ -399,12 +533,11 @@ Monte um pacote de contexto com:
 O prompt do review front-end deve pedir verificacao explicita de:
 
 - aderencia a especificacao e ao escopo front-end;
-- aderencia a cada task e criterio de aceite das tasks front-end;
+- **cada criterio de aceite (`CA`) das tasks front-end validado por inspecao direta do codigo/comportamento** — nao delegue essa validacao a uma suite de testes; o revisor confirma o requisito olhando a implementacao (e, quando aplicavel, a Fase 9.5 exercitando o fluxo num navegador real);
 - consumo correto do contrato API/UI: wire format, casing JSON e serializacao real contra o TypeScript consumidor;
 - estados de UI tratados (loading, erro, empty, sucesso);
 - tipagem TypeScript, build, typecheck e lint;
 - acessibilidade e consistencia visual quando aplicavel;
-- testes de componente/e2e executados e lacunas;
 - arquivos alterados fora do escopo;
 - regressao potencial em telas/fluxos existentes.
 
@@ -422,6 +555,8 @@ O prompt do review front-end deve pedir verificacao explicita de:
 - `APROVADO_COM_RESSALVAS`: pode seguir somente se as ressalvas forem documentadas como nao bloqueantes;
 - `REPROVADO`: nao avance; volte para a Fase 7 e redelegue a correcao ao AGY.
 
+**`REPROVADO` obrigatorio quando:** um `RF`/`CA` do escopo front-end nao tem evidencia na matriz de rastreabilidade (secao 13 do `implementation-report.md`), ou o componente correspondente contem `// TODO`, texto placeholder fixo (ex.: copy em ingles genérico onde o requisito pede conteudo real do tenant/dominio) ou estado vazio nao implementado. Isso vale mesmo que o build/typecheck/lint passem — requisito nao implementado nao e "ressalva nao bloqueante", e reprovacao.
+
 Se houver achados bloqueantes em qualquer das fases de review (8 ou 9):
 
 1. registre os achados em `monitoring.md` e `workflow-log.md`;
@@ -438,18 +573,19 @@ Se houver achados bloqueantes em qualquer das fases de review (8 ou 9):
 **Como conduzir (o orquestrador faz diretamente, read-only sobre a app rodando):**
 
 1. **Suba a app de verdade** (ex.: `docker compose up --build`) e confirme os servicos saudaveis. Se subir a stack falhar, isso ja e um achado bloqueante — nao existe "APROVADO" para uma app que nao sobe.
-2. **Dirija os fluxos de usuario criticos** (os `UC-*`/caminhos-felizes da especificacao) num navegador real via **Playwright MCP** (ou ferramenta equivalente): navegue, preencha formularios, clique, submeta.
-3. **Em cada fluxo, verifique:**
+2. **Credenciais de seed/demo para fluxos autenticados.** Antes de tentar logar, confira se o PRD/spec documenta credenciais conhecidas de seed (ver seção "Observabilidade & Operação" do PRD). Se documentadas, use-as para exercitar os `UC-*` que exigem login. Se o ambiente tem seed/demo mas **nenhuma credencial documentada** (ex.: senha só como hash sem plaintext registrado), isso e uma lacuna real: registre-a explicitamente em `e2e-verification.md`, e prefira resolvê-la (redefinir a senha do seed para um valor conhecido e documentá-lo, com uma correção pela Fase 7) a simplesmente pular os fluxos autenticados. Só marque os fluxos autenticados como não verificados se resolver a credencial estiver fora do escopo da correção.
+3. **Dirija os fluxos de usuario criticos** (os `UC-*`/caminhos-felizes da especificacao, **incluindo os que exigem login** quando a credencial estiver disponível) num navegador real via **Playwright MCP** (ou ferramenta equivalente): navegue, preencha formularios, clique, submeta.
+4. **Em cada fluxo, verifique:**
    - console e network **sem erros de CORS** nem `net::ERR_FAILED`;
    - cada requisicao de API retorna 2xx **e a UI reflete o dado real** — desconfie de "200 mas a tela ficou vazia/inalterada", que e o sintoma classico de casing divergente ou campo `undefined`;
    - o **efeito final** de cada acao aconteceu de fato (o redirect abriu a aba/rota, o item entrou no carrinho, o registro apareceu na lista, o estado mudou) — nao apenas que a chamada retornou;
    - resolucao **multi-tenant / por host** funciona a partir do browser (o front informa o tenant certo ao back);
    - estados de tela (vazio/carregando/erro/sucesso) se comportam como especificado.
-4. **Capture evidencia**: screenshot e/ou o resumo de console+network dos fluxos exercitados, salvos em `.orchestration/<slug>/e2e-verification.md` (e screenshots em `.orchestration/<slug>/screenshots/`).
+5. **Capture evidencia**: screenshot e/ou o resumo de console+network dos fluxos exercitados, salvos em `.orchestration/<slug>/e2e-verification.md` (e screenshots em `.orchestration/<slug>/screenshots/`).
 
 **Achados desta fase sao BLOQUEANTES** como qualquer review: registre em `monitoring.md`/`workflow-log.md`, crie tasks de correcao, corrija pela Fase 7 e **re-verifique no navegador** antes de aprovar. So depois que os fluxos criticos passarem no navegador o orquestrador pode marcar a entrega como `DONE`. Se a ferramenta de navegador nao estiver disponivel no ambiente, **nao invente aprovacao**: registre a limitacao e marque o `handoff.json` como `PARTIAL` com o gap explicito ("verificacao E2E no navegador nao executada").
 
-## Fases 10 e 11 - Relatorio final e handoff
+## Fases 10, 11 e 12 - Relatorio, entrega duravel e learning
 
 Entregaveis obrigatorios (salve na **raiz de execucao do agente**, `.orchestration/<slug>/`):
 
@@ -457,6 +593,8 @@ Entregaveis obrigatorios (salve na **raiz de execucao do agente**, `.orchestrati
 - `subagents-context.md`
 - `implementation-report.md`
 - `handoff.json` — manifesto de handoff do estagio orchestrador (ver `references/handoff-contract.md`)
+- `learning-report.md` — candidatos comprovados extraidos na Fase 12; nenhuma promocao automatica
+- `state.json` + `events.jsonl` — estado/auditoria da execucao (nao entram no vocabulario de artefatos do handoff)
 
 ### Gravar `handoff.json` (para o Executor)
 
@@ -475,6 +613,32 @@ O relatorio final deve citar:
 - se houve fallback de review interno (back-end por `QUOTA_EXHAUSTED` no Codex; front-end por indisponibilidade do AGY);
 - para cada delegacao AGY com `agyParallel: yes`: numero de subagentes Gemini nativos e Conversation IDs reportados pelo AGY;
 - contagem de tokens por agente (tabela consolidada em `implementation-report.md` secao 11a e em `subagents-context.md` secao "Uso de Tokens por Agente"; quando houver fan-out, os tokens reportados pelo AGY sao o agregado da sessao).
+
+Na Fase 10, finalize reports/handoff e marque os gates `reports`/`handoff` com evidence IDs de arquivo. Na Fase 11, prepare a mensagem e instrucoes de negocio em artefato duravel, marque `delivery` e conclua a fase, mas **nao publique sucesso ainda**.
+
+Na Fase 12, extraia somente candidates suportados pelo event log/reviews:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-learning.mjs" run \
+  --dir ".orchestration/<slug>"
+
+node "${CLAUDE_SKILL_DIR}/scripts/orchestrator-knowledge.mjs" history-project \
+  --dir ".orchestration/<slug>"
+
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-telemetry.mjs" project \
+  --dir ".orchestration/<slug>"
+
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" audit \
+  --dir ".orchestration/<slug>"
+
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" run \
+  --dir ".orchestration/<slug>" --status DONE
+
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" verify \
+  --dir ".orchestration/<slug>"
+```
+
+`audit.complete` precisa ser `true`; falha de gate/integridade bloqueia a entrega. Nao corrija `revision`/`lastEventId` manualmente; reproduza o event log ou restaure um backup coerente. O `handoff.json` so pode usar `DONE` quando as tasks obrigatorias estiverem `DONE`, cada task tiver evidence plan e os gates aplicaveis tiverem passado com evidencia; `UNKNOWN`, `STALLED` ou `BLOCKED` pendente exige `PARTIAL`/`BLOCKED` com resumo explicito. Projete history/telemetry novamente depois do evento `RUN_STATUS_UPDATED(DONE)` para capturar o terminal e so entao publique a mensagem preparada na Fase 11.
 
 ### Contagem de tokens
 

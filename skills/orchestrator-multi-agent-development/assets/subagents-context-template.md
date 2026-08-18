@@ -11,7 +11,8 @@
 - **Subagentes executados:** `<N total>`
 - **Subagentes por tipo:**
   - `codex:codex-rescue`: `<N>`
-  - `cc-antigravity-plugin:antigravity-agent`: `<N>`
+  - `cc-antigravity-plugin:antigravity-coder` (implementacao front-end): `<N>`
+  - `cc-antigravity-plugin:antigravity-agent` (review front-end, somente leitura): `<N>`
 - **Fallbacks/handoffs realizados:** `<nenhum | resumo>`
 - **Gate do usuário:** `<ok | pausado | cancelado>`
 - **Pendências globais:** `<nenhuma | lista curta>`
@@ -28,12 +29,21 @@
 
 - **Onda:** `<wave>`
 - **Task:** `<ID e título>`
-- **Subagent type:** `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>`
+- **Subagent type:** `<codex:codex-rescue | cc-antigravity-plugin:antigravity-coder (implementacao) | cc-antigravity-plugin:antigravity-agent (review, somente leitura)>`
 - **Execucao:** `<--effort medium/high | AGY --model <agyModel> [--parallel] [--subagent-model <model>]>`
+- **Modelo / source / evidence:** `<modelo>` / `<user|heuristic|adaptive>` / `<agyModelEvidence|N/A>`
 - **Fan-out Gemini:** `<agyParallel: yes|no>`
 - **Subagentes Gemini nativos:** `<N | N/A>`
 - **Conversation IDs dos subagentes:** `<lista | N/A>`
-- **Status final:** `<DONE | BLOCKED | FAILED | QUOTA_EXHAUSTED | QUOTA_EXAUSTED | AUTH_REQUIRED | AGY_MISSING | TIMEOUT | NEEDS_SYNC | PAUSED | CANCELLED>`
+- **Status canônico final:** `<DONE | BLOCKED | FAILED | STALLED | UNKNOWN | CANCELLED>`
+- **reasonCode operacional:** `<N/A | QUOTA_EXHAUSTED | QUOTA_EXAUSTED | AUTH_REQUIRED | AGY_MISSING | TIMEOUT | NEEDS_SYNC>`
+- **Attempt / Session ID / Conversation ID:** `<N>` / `<id | N/A>` / `<id | N/A>`
+- **Attempt history:** `<status/reason/model/duration por attempt>`
+- **Lease:** `<owner / acquiredAt / expiresAt / releasedAt | N/A>`
+- **Workspace:** `<shared|isolated>` / `<path>` / `<branch>` / base `<sha>` / head `<sha>` / integration `<status>`
+- **commitBefore / commitAfter:** `<sha | N/A>` / `<sha | N/A>`
+- **startedAt / lastActivityAt:** `<ts | N/A>` / `<ts | N/A>`
+- **apiCalls / toolCalls / currentTool:** `<N>` / `<N>` / `<tool | N/A>`
 - **Tokens usados:**
   - Input: `<N ou N/A>`
   - Output: `<N ou N/A>`
@@ -46,8 +56,10 @@
   - `<decisão técnica ou UI/UX>`
 - **Testes/validações reportados:**
   - `<comando ou validação>: <resultado>`
+- **Evidence IDs / executor-results:** `<lista>` / `<paths persistidos antes do consumo>`
 - **Pendências reportadas:** `<nenhuma | lista>`
 - **Riscos reportados:** `<nenhum | lista>`
+- **Imagery sugerida (`IMAGE_SUGGESTIONS`):** `<N/A | lista: label, arquivo, aprovado(usuário)? sim/não, gerado? sim/não, fiada no componente? sim/não>`
 - **Evidência operacional:** `<mensagem curta quando houve falha/cota/bloqueio>`
 - **Limites de sandbox Codex:** `<N/A | nenhum | rede externa bloqueada | pacote ausente no cache | escrita fora do working directory>`
 - **Ação do orquestrador:** `<integrado | redelegado | contrato ajustado | decisão do usuário | pendente>`
@@ -71,6 +83,12 @@
 ## Contexto para Retomada
 
 <Explique em 5-10 linhas o estado atual da mudança para alguém retomar sem reler todos os retornos dos subagentes. Inclua o que já foi integrado, o que foi validado, o que ainda exige decisão e quais arquivos/contratos são fonte da verdade.>
+
+- **Run ID / revisão:** `<runId>` / `<revision>`
+- **resumeFromPhase / currentWave:** `<fase>` / `<wave>`
+- **Tasks UNKNOWN/STALLED:** `<lista | nenhuma>`
+- **Probes externos pendentes:** `<sessionId/conversationId + executor | nenhum>`
+- **Recomendação por task:** `<VERIFY_BEFORE_REEXECUTE | MONITOR | REEXECUTE | ...>`
 
 ## Cancelamento ou Pausa pelo Usuário
 

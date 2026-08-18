@@ -9,7 +9,9 @@
 - **Especificação fonte (PRD/spec):** `<caminho do arquivo ingerido>`
 - **Modo de execução:** `<orchestrator | goal>`
 - **Comando usado:** `<escreva /orchestrator ou /goal>`
-- **Status final:** `<DONE | DONE_WITH_PENDING_ITEMS | BLOCKED | PAUSED | CANCELLED | FAILED>`
+- **Status final:** `<DONE | DONE_WITH_PENDING_ITEMS | BLOCKED | PAUSED | CANCELLED | FAILED | STALLED | UNKNOWN>`
+- **Run ID / revisão final:** `<runId>` / `<revision>`
+- **Última fase segura / wave atual:** `<lastSafePhase>` / `<currentWave>`
 - **Início:** `<timestamp ou N/A>`
 - **Fim:** `<timestamp ou N/A>`
 - **Orquestrador:** `Claude Sonnet 4.6 medium`
@@ -23,6 +25,9 @@
   - `.orchestration/<nome>/workflow-log.md`
   - `.orchestration/<nome>/subagents-context.md`
   - `.orchestration/<nome>/implementation-report.md`
+  - `.orchestration/<nome>/state.json` + `events.jsonl`
+  - `.orchestration/<nome>/learning-report.md`
+  - `.orchestration/<nome>/evidence/`
 
 ## 2. Resumo Executivo do Workflow
 
@@ -43,8 +48,10 @@
 | `7 Integracao` | `<status>` | `<ts>` | `<entregas consolidadas>` | `<subagents-context.md>` | `<divergencias/fallbacks>` |
 | `8 Review back-end (Codex)` | `<status | N/A>` | `<ts>` | `<decisao Codex>` | `<review-final.md>` | `<bloqueantes se houver>` |
 | `9 Review front-end (AGY pro-high)` | `<status | N/A>` | `<ts>` | `<decisao AGY>` | `<review-frontend.md>` | `<bloqueantes se houver>` |
+| `9.5 E2E navegador` | `<status | N/A>` | `<ts>` | `<fluxos/topologia/waiver>` | `<e2e report>` | `<bloqueantes se houver>` |
 | `10 Contexto e relatorios` | `<status>` | `<ts>` | `<entregaveis finais>` | `<workflow-log/subagents-context/implementation-report>` | `<pendencias>` |
-| `11 Instrucoes de negocio` | `<status>` | `<ts>` | `<instrucoes entregues>` | `<implementation-report.md>` | `<observacao>` |
+| `11 Entrega duravel` | `<status>` | `<ts>` | `<mensagem preparada, ainda nao publicada>` | `<implementation-report.md/handoff.json>` | `<observacao>` |
+| `12 Learning e fechamento` | `<status>` | `<ts>` | `<candidates/history/telemetry/audit/run DONE/verify>` | `<learning-report.md>` | `<contradicoes/bloqueios>` |
 
 ## 4. Subagentes Acionados
 
@@ -52,7 +59,7 @@
 
 | Onda | Task | Subagent type | Execucao | Status final | Link/contexto |
 |---|---|---|---|---|---|
-| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-agent>` | `<--effort medium/high | AGY --model <agyModel>>` | `<status>` | `subagents-context.md#<secao>` |
+| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-coder (implementacao) | cc-antigravity-plugin:antigravity-agent (review)>` | `<--effort medium/high | AGY --model <agyModel>>` | `<status>` | `subagents-context.md#<secao>` |
 
 ## 5. Falhas Possíveis Monitoradas
 
@@ -63,6 +70,11 @@
 | Task bloqueada | `5-7` | subagente retorna `BLOCKED` | registrar evidência, atualizar `monitoring.md`, pedir decisão ou redelegar com escopo restrito |
 | Divergencia de contrato | `6-7` | nomes/tipos/endpoints diferentes entre back-end e front-end | marcar `NEEDS_SYNC`, decidir fonte da verdade e redelegar ajuste |
 | Falha de subagente | `5-7` | subagente retorna `FAILED` ou nao entrega artefatos | registrar causa, impacto e proxima acao antes de continuar |
+| Resultado indeterminado | `5-7`/resume | sessao anterior terminou sem resultado terminal duravel | marcar `UNKNOWN`, reconciliar executor + Git + arquivos + validacoes; nunca repetir cegamente |
+| Stall sem progresso | `5-7` | heartbeat congelado alem do threshold aplicavel | marcar `STALLED`, interromper, aguardar grace period e reconciliar antes de retry |
+| Adapter sem status autoritativo | `5-7`/resume | payload ausente/desconhecido | manter `UNKNOWN`; usar evidencia local apenas como corroboracao |
+| Conflito de worktree | `7` | integration status `CONFLICT` | persistir conflito, parar e resolver conscientemente; nunca abortar/limpar silenciosamente |
+| Memoria/recipe contraditoria | `1`/`12` | `CONFLICT` ou `needsReview` | excluir da memoria ativa/aplicacao e encaminhar ao Curator |
 | Cota esgotada AGY | `5-7`, `9` | `quota exceeded`, `rate limit`, `resource exhausted`, `daily limit` ou similar no bridge AGY | marcar `QUOTA_EXAUSTED` e aplicar fallback permitido (review front-end cai para review interno) |
 | Cota esgotada Codex | `5-7`, `8` | `quota exceeded`, `rate limit`, `resource exhausted`, `daily limit` ou similar no Codex | marcar `QUOTA_EXHAUSTED` e aplicar fallback permitido (review back-end cai para review interno) |
 | Falha de escrita/tool | `5-7` | erro de tool, terminal, escrita ou criação de arquivo | parar agente afetado, registrar parciais e handoff se seguro |
@@ -75,7 +87,7 @@
 
 | Timestamp | Fase | Evento | Evidência curta | Impacto | Status | Ação tomada | Próxima ação |
 |---|---|---|---|---|---|---|---|
-| `<ts>` | `<fase>` | `<falha ou N/A>` | `<mensagem curta>` | `<baixo/medio/alto>` | `<BLOCKED/FAILED/etc>` | `<fallback/redelegacao/pausa>` | `<proxima acao>` |
+| `<ts>` | `<fase>` | `<falha ou N/A>` | `<mensagem curta>` | `<baixo/medio/alto>` | `<BLOCKED/FAILED/STALLED/UNKNOWN/etc>` | `<fallback/redelegacao/pausa>` | `<proxima acao>` |
 
 Se nenhuma falha ocorreu, escreva: `Nenhuma falha operacional ocorreu durante esta execução.`
 
@@ -91,9 +103,14 @@ Se nenhuma falha ocorreu, escreva: `Nenhuma falha operacional ocorreu durante es
 |---|---|---|
 | Preflight | `<DONE/FAILED>` | `<resumo>` |
 | Routing (`validate-routing.mjs`) | `<PASSOU/FALHOU>` | `<resumo>` |
-| Testes/build/lint/typecheck | `<status>` | `<comandos e resultado>` |
+| Project Memory / history | `<VALIDATED/STALE/CONFLICT>` | `<audit/projection>` |
+| Worktree plan/integration | `<PASSOU/FALHOU/N/A>` | `<workspaces/commits/conflitos>` |
+| Programmatic intelligence | `<PASSOU/FALHOU>` | `<evidence IDs>` |
+| Build/lint/typecheck | `<status>` | `<comandos e resultado>` |
 | Review back-end (Codex `--effort high`) | `<APROVADO/APROVADO_COM_RESSALVAS/REPROVADO/N/A>` | `review-final.md` |
 | Review front-end (AGY `gemini-3.1-pro-high`) | `<APROVADO/APROVADO_COM_RESSALVAS/REPROVADO/N/A>` | `review-frontend.md` |
+| Telemetry metadata-only | `<PROJETADA/FALHOU>` | `<eventos/relatorio>` |
+| Phase 12 / completion audit / verify | `<DONE/FAILED>` | `<learning report/audit/verify>` |
 
 ## 9. Pausa, Cancelamento ou Bloqueio
 
@@ -116,3 +133,11 @@ Se nenhuma falha ocorreu, escreva: `Nenhuma falha operacional ocorreu durante es
 - [ ] Subagentes resumidos e ligados ao `subagents-context.md`
 - [ ] Validações finais registradas
 - [ ] `implementation-report.md` referencia este log
+- [ ] Integridade `state.json`/`events.jsonl` verificada e `runId` registrado
+- [ ] Nenhuma task `UNKNOWN`/`STALLED` foi reexecutada sem reconciliacao
+- [ ] Project Memory auditada e history projetado sem fatos nao comprovados
+- [ ] Worktrees/leases recuperadas, integradas ou explicitamente bloqueadas
+- [ ] Evidence IDs dos scripts deterministas registrados
+- [ ] Telemetria metadata-only projetada; nenhum conteudo do usuario persistido
+- [ ] Fase 12/learning-report concluida sem promocao automatica
+- [ ] `audit.complete=true`, run terminal e history/telemetry reprojetados antes da publicacao

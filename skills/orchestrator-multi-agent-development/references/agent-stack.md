@@ -6,9 +6,9 @@
 |---|---|---|---|---|
 | Orquestrador | Claude Sonnet 4.6 | voce mesmo | Medium | coordena e consolida |
 | Back-end | Codex padrao da conta | `codex:codex-rescue` | Medium | implementacao |
-| Front-end | AGY definido por override ou heuristica | `cc-antigravity-plugin:antigravity-agent` | - | usar `--model <agyModel>` no bridge |
+| Front-end | AGY por override, piso heuristico ou escalada adaptativa comprovada | `cc-antigravity-plugin:antigravity-coder` | - | usar `--model <agyModel>` no bridge; `adaptive` exige evidence; edita arquivos |
 | Review back-end pos-implementacao | Codex padrao da conta | `codex:codex-rescue` | High | read-only, apenas back-end |
-| Review front-end pos-implementacao | AGY `gemini-3.1-pro-high` | `cc-antigravity-plugin:antigravity-agent` | - | read-only, apenas front-end |
+| Review front-end pos-implementacao | AGY `gemini-3.1-pro-high` | `cc-antigravity-plugin:antigravity-agent` | - | read-only, apenas front-end — **nunca usar para implementar** |
 
 ## Invariante de roteamento
 
@@ -19,7 +19,6 @@ A categoria da task decide o agente. Nao use "parece setup", "parece infra" ou "
 | `FRONTEND_ONLY` | Antigravity/AGY |
 | `BACKEND_ONLY` | Codex |
 | `DATABASE_ONLY` | Codex |
-| `TEST_ONLY` | Codex |
 | `REVIEW_ONLY` | Codex |
 | `FULLSTACK` | Codex para back-end + Antigravity/AGY para front-end |
 
@@ -37,7 +36,7 @@ Codex so assume front-end como fallback operacional depois de `QUOTA_EXAUSTED`, 
 
 Nao fixe `--model` nos prompts do Codex. Use apenas:
 
-- `--effort medium` para implementacao, ajustes pontuais, testes e handoffs;
+- `--effort medium` para implementacao, ajustes pontuais e handoffs;
 - `--effort high` para review back-end pos-implementacao.
 
 Codex revisa apenas back-end. O review de front-end e sempre do AGY com `--model gemini-3.1-pro-high`.
@@ -57,7 +56,7 @@ O prompt de qualquer agente envolvido precisa receber:
 
 ### Antigravity/AGY
 
-Use AGY para qualquer task `FRONTEND_ONLY` e para a fatia front-end de `FULLSTACK`. Passe `--model <agyModel>` para o bridge do plugin, com escolha por override do usuario ou heuristica do orquestrador.
+Use `cc-antigravity-plugin:antigravity-coder` para qualquer task `FRONTEND_ONLY` e para a fatia front-end de `FULLSTACK` — e o unico subagente AGY com permissao de escrita (cria, edita, move e formata arquivos via o bridge nativo). Passe `--model <agyModel>` para o bridge do plugin, com escolha por override do usuario, piso heuristico ou escalada adaptativa comprovada por amostra comparavel. Nunca reduza o piso; `adaptive` exige `agyModelEvidence`. `cc-antigravity-plugin:antigravity-agent` e **somente leitura** (analise, planejamento, review); jamais delegue implementacao a ele.
 
 Quando a task listar **dois ou mais entregaveis independentes** (ex.: dois relatorios HTML, tres componentes React sem dependencia mutua), passe tambem `--parallel` para ativar o fan-out nativo de subagentes Gemini. O AGY decide a contagem, executa concorrentemente e agrega os resultados. Ao final, reporte os Conversation IDs de cada subagente em `subagents-context.md`.
 
@@ -72,10 +71,11 @@ Use para:
 - endpoints REST/GraphQL;
 - services, handlers e repositorios;
 - DTOs, mappers e validacoes;
-- testes unitarios e de integracao;
 - migrations simples;
 - ajustes pontuais;
 - handoffs apos falha operacional.
+
+**Nao delegar criacao de projeto/suite de testes automatizados.** Nem o orquestrador nem o Pensador geram projetos de teste (`*.Tests`, `__tests__/`, suites xUnit/Jest/Vitest dedicadas) como entregavel — isso e decisao do time do produto, fora deste fluxo. A validacao de cada requisito (`RF`/`CA` do PRD/spec) acontece **no review de codigo** (Fase 8 back-end, Fase 9 front-end): o revisor confere, por inspecao, se o comportamento exigido pelo criterio de aceite esta implementado corretamente — nao depende de uma suite de testes existir.
 
 Bloqueie e escale ao usuario quando o Codex depender de rede externa indisponivel para pacotes/restore, de pacote ausente do cache local, ou quando nao puder escrever fora do working directory permitido. Exemplos: NuGet `NU1301` em `https://api.nuget.org/v3/index.json` e `UnauthorizedAccessException`.
 

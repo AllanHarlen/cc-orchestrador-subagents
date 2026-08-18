@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AllanHarlen/cc-orchestrador-subagents/schemas/intelligence-result.schema.json",
+  "title": "Deterministic intelligence result",
+  "type": "object",
+  "required": ["schemaVersion", "kind", "summary", "details", "evidenceId", "generatedAt"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": {
+      "enum": [
+        "inspect-project", "inspect-contract", "inspect-api-ui", "inspect-diff",
+        "validate-wire-format", "validate-task-scope", "collect-test-results", "reconcile-run"
+      ]
+    },
+    "summary": { "type": "object" },
+    "details": { "type": "object" },
+    "evidenceId": { "type": "string", "pattern": "^intel-[a-z0-9-]+-[a-f0-9]{20}$" },
+    "generatedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

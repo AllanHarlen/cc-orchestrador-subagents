@@ -3,8 +3,8 @@
  * Validate generated orchestrator routing artifacts.
  *
  * Usage:
- *   node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" orchestration/<name>
- *   node scripts/validate-routing.mjs orchestration/<name>
+ *   node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" .orchestration/<name>
+ *   node scripts/validate-routing.mjs .orchestration/<name>
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -17,16 +17,27 @@ const CATEGORIES = [
   "DATABASE_ONLY",
   "REVIEW_ONLY",
   "DOCS_ONLY",
-  "TEST_ONLY",
 ];
 
-const TASK_RE = /\bT\d+\b/g;
-const FRONTEND_AGENT_RE = /\b(cc-antigravity-plugin:antigravity-agent|antigravity|agy)\b/i;
+// Mesma gramatica de ID do State Engine (scripts/lib/orchestration-state.mjs, TASK_ID_SOURCE).
+// Aceita T1, T12-A, BE-01, FE-001-B. Os dois parsers precisam concordar sobre o que e uma
+// task: um ID valido para o State Engine que este validador nao reconhecesse tornaria o gate
+// de roteamento inalcancavel para a classificacao inteira.
+// O lookahead descarta versao (`gemini-3.5`): sem ele, o nome de modelo AGY que aparece em
+// toda linha de roteamento seria lido como task e poderia virar o ID do bloco numa tabela.
+const TASK_ID_SOURCE = "(?:[A-Z]{1,8}-\\d{1,4}(?!\\.\\d)(?:-[A-Z0-9]+)?|T\\d+(?:-[A-Z0-9]+)?)";
+const TASK_RE = new RegExp(`\\b${TASK_ID_SOURCE}\\b`, "gi");
+const FRONTEND_AGENT_RE = /\b(cc-antigravity-plugin:antigravity-coder|antigravity|agy)\b/i;
+// antigravity-agent e o subagente somente-leitura do plugin AGY (analise/review). Ele nunca
+// pode receber task de implementacao; quem cria e edita arquivo e o antigravity-coder.
+const READ_ONLY_AGY_AGENT_RE = /\b(?:cc-antigravity-plugin:)?antigravity-agent\b/i;
 const CODEX_AGENT_RE = /\b(codex:codex-rescue|codex)\b/i;
 const CODEX_MEDIUM_RE = /--effort\s+medium/i;
 const CODEX_HIGH_RE = /--effort\s+high/i;
 const AGY_MODEL_RE = /(?:^|[\s|,])(?:agyModel(?!Source)|--agy-model|--model)\b\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
-const AGY_MODEL_SOURCE_RE = /agyModelSource\s*[:=]?\s*`?(user|heuristic)`?/i;
+const AGY_MODEL_SOURCE_RE = /agyModelSource\s*[:=]?\s*`?(user|heuristic|adaptive)`?/i;
+const AGY_ADAPTIVE_SOURCE_RE = /agyModelSource\s*[:=]?\s*`?adaptive`?/i;
+const AGY_ADAPTIVE_EVIDENCE_RE = /agyModelEvidence\s*[:=]?\s*`?[^`\n]+`?/i;
 const AGY_SUBAGENT_MODEL_RE = /agySubagentModel\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
 const ALLOWED_AGY_MODELS = new Set([
   "gemini-3.5-flash-low",
@@ -39,6 +50,14 @@ const ALLOWED_AGY_MODELS = new Set([
   "gpt-oss-120b-medium",
   "auto",
 ]);
+
+// Escada de capacidade (SKILL.md): flash-low < flash-medium < flash-high < pro-low < pro-high.
+// Tasks que implementam um design system (Open Design) exigem julgamento visual e nunca
+// podem usar os dois tiers mais baixos da escada Gemini — ver regra "Roteamento por
+// fidelidade de design" no SKILL.md. Modelos fora da escada Gemini (claude-*, gpt-oss,
+// auto) nao tem tier conhecido aqui; nao sao bloqueados por esta regra especifica.
+const LOW_TIER_AGY_MODELS = new Set(["gemini-3.5-flash-low", "gemini-3.5-flash-medium"]);
+const DESIGN_SYSTEM_SIGNAL_RE = /\b(tokens\.css|components\.html|design-systems?\/|DESIGN\.md|design[- ]system)\b/i;
 
 const targetDir = resolve(process.argv[2] ?? process.cwd());
 const requiredFiles = [
@@ -60,8 +79,8 @@ function readRequired(file) {
   return content.charCodeAt(0) === 0xFEFF ? content.slice(1) : content;
 }
 
-function uniqueMatches(text, regex) {
-  return [...new Set([...text.matchAll(regex)].map((match) => match[0]))];
+function uniqueTaskIds(text) {
+  return [...new Set([...text.matchAll(TASK_RE)].map((match) => match[0].toUpperCase()))];
 }
 
 function findCategory(text) {
@@ -105,18 +124,24 @@ function extractBlocks(content) {
     current = null;
   }
 
+  // Uma entrada de wave costuma ser um item de lista ("- FE-01 -> agente"), formato que o
+  // State Engine tambem aceita. O ID precisa abrir o item para que uma mencao no meio de uma
+  // frase ("depende de FE-01") nao quebre o bloco em que ela aparece.
+  const taskListItemRe = new RegExp(`^\\s*[-*+]\\s*\`?${TASK_ID_SOURCE}\\b`, "i");
+
   for (const line of lines) {
-    const ids = uniqueMatches(line, TASK_RE);
+    const ids = uniqueTaskIds(line);
     const isTaskHeading = ids.length > 0 && /^#{2,6}\s+/.test(line);
     const isTaskTableRow = ids.length > 0 && /^\s*\|/.test(line);
     const isTaskIdLine = ids.length > 0 && /\bID\b/i.test(line);
+    const isTaskListItem = ids.length > 0 && taskListItemRe.test(line);
 
     if (isTaskTableRow) {
       blocks.push({ ids: [ids[0]], text: line });
       continue;
     }
 
-    if (isTaskHeading || isTaskIdLine) {
+    if (isTaskHeading || isTaskIdLine || isTaskListItem) {
       pushCurrent();
       current = { ids: new Set([ids[0]]), lines: [line] };
       continue;
@@ -146,6 +171,10 @@ function validateBlock(source, block, categoryByTask) {
     const frontend = hasFrontendAgent(block.text);
     const codex = hasCodexAgent(block.text);
 
+    if (["FRONTEND_ONLY", "FULLSTACK"].includes(taskCategory) && READ_ONLY_AGY_AGENT_RE.test(block.text)) {
+      errors.push(`${source}: ${id} e ${taskCategory}, mas delega implementacao a cc-antigravity-plugin:antigravity-agent, que e somente leitura. Use cc-antigravity-plugin:antigravity-coder; antigravity-agent so e valido no review de front-end da Fase 9.`);
+    }
+
     const agyModel = extractAgyModel(block.text);
 
     if (frontend && !agyModel) {
@@ -156,13 +185,21 @@ function validateBlock(source, block, categoryByTask) {
       errors.push(`${source}: ${id} usa agyModel invalido (${agyModel}). Use um modelo da allowlist.`);
     }
 
+    if (frontend && agyModel && LOW_TIER_AGY_MODELS.has(agyModel) && DESIGN_SYSTEM_SIGNAL_RE.test(block.text)) {
+      errors.push(`${source}: ${id} implementa design system (tokens.css/components.html/DESIGN.md) mas usa agyModel de tier baixo (${agyModel}). Fidelidade visual exige no minimo gemini-3.5-flash-high (ver "Roteamento por fidelidade de design" no SKILL.md).`);
+    }
+
     const agySubagentModel = extractAgySubagentModel(block.text);
     if (agySubagentModel && agySubagentModel !== "inherit" && !ALLOWED_AGY_MODELS.has(agySubagentModel)) {
       errors.push(`${source}: ${id} usa agySubagentModel invalido (${agySubagentModel}). Use um modelo da allowlist ou "inherit".`);
     }
 
     if (frontend && !hasAgyModelSource(block.text)) {
-      errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModelSource=user|heuristic.`);
+      errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModelSource=user|heuristic|adaptive.`);
+    }
+
+    if (frontend && AGY_ADAPTIVE_SOURCE_RE.test(block.text) && !AGY_ADAPTIVE_EVIDENCE_RE.test(block.text)) {
+      errors.push(`${source}: ${id} usa routing adaptativo, mas nao registra agyModelEvidence auditavel.`);
     }
 
     if (taskCategory === "FRONTEND_ONLY") {
@@ -183,7 +220,7 @@ function validateBlock(source, block, categoryByTask) {
       }
     }
 
-    if (["BACKEND_ONLY", "DATABASE_ONLY", "TEST_ONLY"].includes(taskCategory)) {
+    if (["BACKEND_ONLY", "DATABASE_ONLY"].includes(taskCategory)) {
       if (!codex) {
         errors.push(`${source}: ${id} e ${taskCategory}, mas nao aponta para Codex.`);
       }
@@ -214,11 +251,11 @@ for (const block of classificationBlocks) {
 }
 
 if (classificationBlocks.length === 0) {
-  errors.push(`${classificationFile}: nenhum bloco de task T<N> encontrado.`);
+  errors.push(`${classificationFile}: nenhum bloco de task encontrado (IDs aceitos: T1, T12-A, BE-01, FE-001-B).`);
 }
 
 if (waveBlocks.length === 0) {
-  errors.push(`${wavesFile}: nenhum bloco de task T<N> encontrado.`);
+  errors.push(`${wavesFile}: nenhum bloco de task encontrado (IDs aceitos: T1, T12-A, BE-01, FE-001-B).`);
 }
 
 for (const block of classificationBlocks) {
