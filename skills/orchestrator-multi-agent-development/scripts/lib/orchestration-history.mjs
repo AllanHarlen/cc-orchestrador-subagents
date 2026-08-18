@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
+import { resolveArtifact } from "./artifact-layout.mjs";
 import { loadRun } from "./orchestration-state.mjs";
 import { projectKnowledgePaths } from "./project-knowledge.mjs";
 import {
@@ -460,8 +461,9 @@ export function projectRunHistory(projectRoot, artifactDir, options = {}) {
       }
 
       for (const [fileName, kind] of SEARCHABLE_ARTIFACTS) {
-        const path = join(directory, fileName);
-        if (!existsSync(path) || !statSync(path).isFile()) continue;
+        const resolvedArtifact = resolveArtifact(directory, fileName);
+        const path = resolvedArtifact?.path;
+        if (!path || !statSync(path).isFile()) continue;
         const content = readFileSync(path, "utf8");
         const hash = sha256(content);
         insertDocument(db, {
@@ -470,7 +472,7 @@ export function projectRunHistory(projectRoot, artifactDir, options = {}) {
           kind,
           title: `${state.runId} ${fileName}`,
           content,
-          sourceRef: fileName,
+          sourceRef: resolvedArtifact.relativePath,
           occurredAt: state.updatedAt,
         });
         if (kind.endsWith("review") || kind === "browser_e2e") {

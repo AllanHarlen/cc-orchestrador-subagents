@@ -1,7 +1,7 @@
 # Log de Workflow do Orquestrador - <NOME DA EXECUÇÃO>
 
 > Entregável final obrigatório. Salve na raiz de execução do agente.
-> Este arquivo registra a execução completa do orquestrador por fase. Use `monitoring.md` como fonte viva de eventos de ondas/subagentes e consolide aqui a linha do tempo auditável.
+> Este arquivo registra a execução completa do orquestrador por fase. Use `run/monitoring.md` como fonte viva de eventos de ondas/subagentes e consolide aqui a linha do tempo auditável.
 
 ## 1. Metadados da Execução
 
@@ -15,18 +15,19 @@
 - **Início:** `<timestamp ou N/A>`
 - **Fim:** `<timestamp ou N/A>`
 - **Orquestrador:** `Claude Sonnet 4.6 medium`
+- **Tokens consolidados da execução:** `<total | N/A>` (detalhe por agente em `report/implementation-report.md` seção 11a e `report/subagents-context.md`)
 - **Artefatos principais:**
-  - `.orchestration/<nome>/tasks-classification.md`
-  - `.orchestration/<nome>/waves.md`
+  - `.orchestration/<nome>/plan/tasks-classification.md`
+  - `.orchestration/<nome>/plan/waves.md`
   - `.orchestration/<nome>/contracts/`
-  - `.orchestration/<nome>/monitoring.md`
-  - `.orchestration/<nome>/review-final.md` (review back-end)
-  - `.orchestration/<nome>/review-frontend.md` (review front-end)
-  - `.orchestration/<nome>/workflow-log.md`
-  - `.orchestration/<nome>/subagents-context.md`
-  - `.orchestration/<nome>/implementation-report.md`
+  - `.orchestration/<nome>/run/monitoring.md`
+  - `.orchestration/<nome>/review/review-final.md` (review back-end)
+  - `.orchestration/<nome>/review/review-frontend.md` (review front-end)
+  - `.orchestration/<nome>/report/workflow-log.md`
+  - `.orchestration/<nome>/report/subagents-context.md`
+  - `.orchestration/<nome>/report/implementation-report.md`
   - `.orchestration/<nome>/state.json` + `events.jsonl`
-  - `.orchestration/<nome>/learning-report.md`
+  - `.orchestration/<nome>/learning/learning-report.md`
   - `.orchestration/<nome>/evidence/`
 
 ## 2. Resumo Executivo do Workflow
@@ -40,26 +41,26 @@
 | `-1 Goal autonomy` | `<N/A | DONE | BLOCKED>` | `<ts>` | `<usado ou N/A>` | `<links>` | `<observacao>` |
 | `0 Preflight` | `<DONE | FAILED>` | `<ts>` | `<resultado do preflight>` | `<N/A>` | `<falhas se houver>` |
 | `1 Ingestao da especificacao` | `<status>` | `<ts>` | `<PRD/spec ingerido>` | `<spec fonte>` | `<lacunas bloqueantes se houver>` |
-| `2 Classificacao` | `<status>` | `<ts>` | `<tasks classificadas>` | `.orchestration/<nome>/tasks-classification.md` | `<falhas se houver>` |
-| `3 Ondas` | `<status>` | `<ts>` | `<ondas definidas + validate-routing>` | `.orchestration/<nome>/waves.md` | `<restricoes/erros de roteamento>` |
+| `2 Classificacao` | `<status>` | `<ts>` | `<tasks classificadas>` | `.orchestration/<nome>/plan/tasks-classification.md` | `<falhas se houver>` |
+| `3 Ondas` | `<status>` | `<ts>` | `<ondas definidas + validate-routing>` | `.orchestration/<nome>/plan/waves.md` | `<restricoes/erros de roteamento>` |
 | `4 Contratos` | `<status>` | `<ts>` | `<contratos criados>` | `.orchestration/<nome>/contracts/*.md` | `<duvidas/decisoes>` |
-| `5 Delegacao paralela` | `<status>` | `<ts>` | `<subagentes lancados>` | `<monitoring.md>` | `<falhas se houver>` |
-| `6 Monitoramento` | `<status>` | `<ts>` | `<eventos principais>` | `<monitoring.md>` | `<SLOW_CHECKIN/cota/tools>` |
-| `7 Integracao` | `<status>` | `<ts>` | `<entregas consolidadas>` | `<subagents-context.md>` | `<divergencias/fallbacks>` |
-| `8 Review back-end (Codex)` | `<status | N/A>` | `<ts>` | `<decisao Codex>` | `<review-final.md>` | `<bloqueantes se houver>` |
-| `9 Review front-end (AGY pro-high)` | `<status | N/A>` | `<ts>` | `<decisao AGY>` | `<review-frontend.md>` | `<bloqueantes se houver>` |
+| `5 Delegacao paralela` | `<status>` | `<ts>` | `<subagentes lancados>` | `<run/monitoring.md>` | `<falhas se houver>` |
+| `6 Monitoramento` | `<status>` | `<ts>` | `<eventos principais>` | `<run/monitoring.md>` | `<SLOW_CHECKIN/cota/tools>` |
+| `7 Integracao` | `<status>` | `<ts>` | `<entregas consolidadas>` | `<report/subagents-context.md>` | `<divergencias/fallbacks>` |
+| `8 Review back-end (Codex)` | `<status | N/A>` | `<ts>` | `<decisao Codex>` | `<review/review-final.md>` | `<bloqueantes se houver>` |
+| `9 Review front-end (AGY pro-high)` | `<status | N/A>` | `<ts>` | `<decisao AGY>` | `<review/review-frontend.md>` | `<bloqueantes se houver>` |
 | `9.5 E2E navegador` | `<status | N/A>` | `<ts>` | `<fluxos/topologia/waiver>` | `<e2e report>` | `<bloqueantes se houver>` |
 | `10 Contexto e relatorios` | `<status>` | `<ts>` | `<entregaveis finais>` | `<workflow-log/subagents-context/implementation-report>` | `<pendencias>` |
-| `11 Entrega duravel` | `<status>` | `<ts>` | `<mensagem preparada, ainda nao publicada>` | `<implementation-report.md/handoff.json>` | `<observacao>` |
-| `12 Learning e fechamento` | `<status>` | `<ts>` | `<candidates/history/telemetry/audit/run DONE/verify>` | `<learning-report.md>` | `<contradicoes/bloqueios>` |
+| `11 Entrega duravel` | `<status>` | `<ts>` | `<mensagem preparada, ainda nao publicada>` | `<report/implementation-report.md/report/handoff.json>` | `<observacao>` |
+| `12 Learning e fechamento` | `<status>` | `<ts>` | `<candidates/history/telemetry/audit/run DONE/verify>` | `<learning/learning-report.md>` | `<contradicoes/bloqueios>` |
 
 ## 4. Subagentes Acionados
 
-> Resumo curto. O detalhe completo fica em `subagents-context.md`.
+> Resumo curto. O detalhe completo fica em `report/subagents-context.md`.
 
 | Onda | Task | Subagent type | Execucao | Status final | Link/contexto |
 |---|---|---|---|---|---|
-| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-coder (implementacao) | cc-antigravity-plugin:antigravity-agent (review)>` | `<--effort medium/high | AGY --model <agyModel>>` | `<status>` | `subagents-context.md#<secao>` |
+| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-coder (implementacao) | cc-antigravity-plugin:antigravity-agent (review)>` | `<--effort medium/high | AGY --model <agyModel>>` | `<status>` | `report/subagents-context.md#<secao>` |
 
 ## 5. Falhas Possíveis Monitoradas
 
@@ -67,7 +68,7 @@
 |---|---|---|---|
 | Preflight failed | `0` | `status: failed` no JSON do preflight | cancelar antes de delegar e orientar remediação |
 | Especificação insuficiente | `1` | lacuna bloqueante no PRD/spec | resolver via `AskUserQuestion` apenas a lacuna; não abrir discovery |
-| Task bloqueada | `5-7` | subagente retorna `BLOCKED` | registrar evidência, atualizar `monitoring.md`, pedir decisão ou redelegar com escopo restrito |
+| Task bloqueada | `5-7` | subagente retorna `BLOCKED` | registrar evidência, atualizar `run/monitoring.md`, pedir decisão ou redelegar com escopo restrito |
 | Divergencia de contrato | `6-7` | nomes/tipos/endpoints diferentes entre back-end e front-end | marcar `NEEDS_SYNC`, decidir fonte da verdade e redelegar ajuste |
 | Falha de subagente | `5-7` | subagente retorna `FAILED` ou nao entrega artefatos | registrar causa, impacto e proxima acao antes de continuar |
 | Resultado indeterminado | `5-7`/resume | sessao anterior terminou sem resultado terminal duravel | marcar `UNKNOWN`, reconciliar executor + Git + arquivos + validacoes; nunca repetir cegamente |
@@ -107,8 +108,8 @@ Se nenhuma falha ocorreu, escreva: `Nenhuma falha operacional ocorreu durante es
 | Worktree plan/integration | `<PASSOU/FALHOU/N/A>` | `<workspaces/commits/conflitos>` |
 | Programmatic intelligence | `<PASSOU/FALHOU>` | `<evidence IDs>` |
 | Build/lint/typecheck | `<status>` | `<comandos e resultado>` |
-| Review back-end (Codex `--effort high`) | `<APROVADO/APROVADO_COM_RESSALVAS/REPROVADO/N/A>` | `review-final.md` |
-| Review front-end (AGY `gemini-3.1-pro-high`) | `<APROVADO/APROVADO_COM_RESSALVAS/REPROVADO/N/A>` | `review-frontend.md` |
+| Review back-end (Codex `--effort high`) | `<APROVADO/APROVADO_COM_RESSALVAS/REPROVADO/N/A>` | `review/review-final.md` |
+| Review front-end (AGY `gemini-3.1-pro-high`) | `<APROVADO/APROVADO_COM_RESSALVAS/REPROVADO/N/A>` | `review/review-frontend.md` |
 | Telemetry metadata-only | `<PROJETADA/FALHOU>` | `<eventos/relatorio>` |
 | Phase 12 / completion audit / verify | `<DONE/FAILED>` | `<learning report/audit/verify>` |
 
@@ -125,14 +126,14 @@ Se nenhuma falha ocorreu, escreva: `Nenhuma falha operacional ocorreu durante es
 
 ## 10. Checklist Final do Log
 
-- [ ] `workflow-log.md` criado na raiz de execução do agente
+- [ ] `report/workflow-log.md` criado na raiz de execução do agente
 - [ ] Todas as fases aplicáveis registradas
 - [ ] Falhas possíveis consideradas
 - [ ] Falhas ocorridas registradas com evidência, impacto e ação
 - [ ] Pausa/cancelamento/bloqueio registrado ou marcado como `N/A`
-- [ ] Subagentes resumidos e ligados ao `subagents-context.md`
+- [ ] Subagentes resumidos e ligados ao `report/subagents-context.md`
 - [ ] Validações finais registradas
-- [ ] `implementation-report.md` referencia este log
+- [ ] `report/implementation-report.md` referencia este log
 - [ ] Integridade `state.json`/`events.jsonl` verificada e `runId` registrado
 - [ ] Nenhuma task `UNKNOWN`/`STALLED` foi reexecutada sem reconciliacao
 - [ ] Project Memory auditada e history projetado sem fatos nao comprovados

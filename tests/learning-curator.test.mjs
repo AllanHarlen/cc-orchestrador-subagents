@@ -78,8 +78,14 @@ test("Phase 12 persists candidates but never promotes them automatically", () =>
   const result = runLearningPhase(root, artifactDir, { now: "2026-08-17T12:00:00.000Z" });
   assert.equal(result.persisted, 1);
   assert.equal(result.candidates[0].status, "CANDIDATE");
-  assert.equal(existsSync(join(artifactDir, "learning-report.md")), true);
-  assert.match(readFileSync(join(artifactDir, "learning-report.md"), "utf8"), /automatically promoted: 0/);
+  const reportPath = join(artifactDir, "learning", "learning-report.md");
+  assert.equal(existsSync(reportPath), true, "layout 2 grava o learning-report em learning/");
+  assert.match(readFileSync(reportPath, "utf8"), /automatically promoted: 0/);
+  assert.equal(loadRun(artifactDir).state.layoutVersion, 2);
+  assert.match(
+    loadRun(artifactDir).state.completionGates.learning.evidence.join(" "),
+    /learning\/learning-report\.md/,
+  );
   assert.equal(loadRun(artifactDir).state.phase, 12);
   assert.equal(loadRun(artifactDir).state.completionGates.learning.status, "DONE");
   assert.equal(listRecipes(root).length, 0);

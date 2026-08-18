@@ -16,6 +16,13 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import {
+  ARTIFACT_LAYOUT_VERSION,
+  SUPPORTED_ARTIFACT_LAYOUT_VERSIONS,
+  artifactExists,
+  ensureArtifactLayout,
+  resolveArtifact,
+} from "./artifact-layout.mjs";
 
 export const STATE_SCHEMA_VERSION = 1;
 export const EVENT_SCHEMA_VERSION = 1;
@@ -1006,12 +1013,12 @@ function parseTaskPlanningMetadata(text) {
 
 export function parseTaskArtifacts(artifactDir) {
   const directory = resolve(artifactDir);
-  const classificationPath = join(directory, "tasks-classification.md");
-  const wavesPath = join(directory, "waves.md");
-  const classification = existsSync(classificationPath)
-    ? readFileSync(classificationPath, "utf8")
+  const classificationSource = resolveArtifact(directory, "tasks-classification.md");
+  const wavesSource = resolveArtifact(directory, "waves.md");
+  const classification = classificationSource
+    ? readFileSync(classificationSource.path, "utf8")
     : "";
-  const wavesText = existsSync(wavesPath) ? readFileSync(wavesPath, "utf8") : "";
+  const wavesText = wavesSource ? readFileSync(wavesSource.path, "utf8") : "";
   const taskBlocks = extractTaskBlocks(classification);
   const tasks = {};
 
@@ -1081,8 +1088,8 @@ export function parseTaskArtifacts(artifactDir) {
     tasks,
     waves,
     sources: {
-      classification: existsSync(classificationPath) ? "tasks-classification.md" : null,
-      waves: existsSync(wavesPath) ? "waves.md" : null,
+      classification: classificationSource?.relativePath ?? null,
+      waves: wavesSource?.relativePath ?? null,
     },
   };
 }
@@ -1256,6 +1263,10 @@ export function initRun(options) {
     const now = iso(options.now);
     const phase = Number(options.phase ?? 1);
     const git = inspectGit(projectRoot);
+    const layoutVersion = SUPPORTED_ARTIFACT_LAYOUT_VERSIONS.includes(Number(options.layoutVersion))
+      ? Number(options.layoutVersion)
+      : ARTIFACT_LAYOUT_VERSION;
+    ensureArtifactLayout(artifactDir, layoutVersion);
     const parsed = parseTaskArtifacts(artifactDir);
     const tasks = Object.fromEntries(
       Object.entries(parsed.tasks).map(([taskId, metadata]) => [taskId, initialTask(metadata, now)]),
@@ -1264,6 +1275,7 @@ export function initRun(options) {
     const currentWave = parsed.waves[0]?.id ?? null;
     const initial = {
       schemaVersion: STATE_SCHEMA_VERSION,
+      layoutVersion,
       runId,
       slug,
       artifactRoot: toPosix(relative(projectRoot, artifactDir) || "."),
@@ -1516,10 +1528,10 @@ const GATE_ARTIFACT_CANDIDATES = Object.freeze({
 function gateArtifactEvidence(artifactDir, gateId) {
   const alternatives = GATE_ARTIFACT_CANDIDATES[gateId] ?? [];
   for (const group of alternatives) {
-    const checked = group.map((name) => ({
-      path: name,
-      exists: existsSync(join(resolve(artifactDir), name)),
-    }));
+    const checked = group.map((name) => {
+      const resolved = resolveArtifact(artifactDir, name);
+      return { path: resolved?.relativePath ?? name, exists: resolved != null };
+    });
     if (checked.length > 0 && checked.every((entry) => entry.exists)) return checked;
   }
   return [];
@@ -2750,7 +2762,7 @@ function completionAudit(artifactDir, state) {
     "learning-report.md",
   ];
   const missingArtifacts = requiredArtifacts.filter(
-    (name) => !existsSync(join(resolve(artifactDir), name)),
+    (name) => !artifactExists(artifactDir, name),
   );
   const phaseComplete = Number(state.lastSafePhase) >= 12 &&
     Number(state.phase) === 12 &&

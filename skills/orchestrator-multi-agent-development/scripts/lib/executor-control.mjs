@@ -11,6 +11,8 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { artifactTreePath } from "./artifact-layout.mjs";
+
 export class ExecutorControlError extends Error {
   constructor(code, message, details = undefined) {
     super(message);
@@ -257,7 +259,7 @@ export function executeExecutorControl(config, executor, action, context, option
 }
 
 export function persistExecutorControlResult(artifactDir, taskId, result) {
-  const directory = join(resolve(artifactDir), "executor-results");
+  const directory = artifactTreePath(artifactDir, "executor-results").path;
   mkdirSync(directory, { recursive: true });
   const id = `executor-${String(taskId).toLowerCase()}-${Date.now()}-${randomUUID().slice(0, 8)}`;
   const path = join(directory, `${id}.json`);

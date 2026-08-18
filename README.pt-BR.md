@@ -29,15 +29,15 @@ Codex e Antigravity/AGY entram como subagentes especializados:
 - **Fase 2 - Classificação das tasks:** gera categoria, dependências, complexidade, contrato, `expectedFiles`/`validationPlan`, `allowedPaths`, agente e features de routing.
 - **Fase 3 - Ondas, routing e isolamento:** aplica pisos heurísticos, consulta evidência histórica quando suficiente, valida roteamento e separa worktrees isoladas de tasks serializadas por overlap.
 - **Fase 4 - Contratos API/UI:** cria e valida deterministicamente contratos, wire format, casing, exemplos, estados e permissões para toda troca front-back.
-- **Fase 5 - Delegação paralela:** cria worktrees elegíveis, adquire leases e envia tasks conforme `waves.md`; Codex não recebe `--model`, AGY recebe o modelo explicável selecionado.
+- **Fase 5 - Delegação paralela:** cria worktrees elegíveis, adquire leases e envia tasks conforme `plan/waves.md`; Codex não recebe `--model`, AGY recebe o modelo explicável selecionado.
 - **Fase 6 - Lifecycle Manager:** consulta adapters, persiste retornos antes de consumir, renova heartbeat/lease por atividade observável e trata stall/grace/interrupt/retry/cancel sem presumir resultado.
 - **Fase 7 - Integração:** integra worktrees serialmente e usa scripts determinísticos para diff, escopo, API/UI, wire format e resultados de validação antes dos ajustes por categoria.
-- **Fase 8 - Review back-end pós-implementação:** delega review final read-only ao Codex com `--effort high`, **somente do back-end**, e salva `review-final.md`. Se Codex ficar sem quota, o próprio Orchestrador faz review interno. Ignorada se não houver back-end.
-- **Fase 9 - Review front-end pós-implementação:** delega review final read-only ao AGY com `--model gemini-3.1-pro-high`, **somente do front-end**, e salva `review-frontend.md`. Se o AGY estiver indisponível, o Orchestrador faz review interno. **Ignorada se não houver task front-end.**
+- **Fase 8 - Review back-end pós-implementação:** delega review final read-only ao Codex com `--effort high`, **somente do back-end**, e salva `review/review-final.md`. Se Codex ficar sem quota, o próprio Orchestrador faz review interno. Ignorada se não houver back-end.
+- **Fase 9 - Review front-end pós-implementação:** delega review final read-only ao AGY com `--model gemini-3.1-pro-high`, **somente do front-end**, e salva `review/review-frontend.md`. Se o AGY estiver indisponível, o Orchestrador faz review interno. **Ignorada se não houver task front-end.**
 - **Fase 9.5 - E2E no navegador:** obrigatória sempre que a run tem front-end. Dirige os fluxos críticos em navegador real e verifica CORS, resolução de tenant/host, casing de resposta, estado da UI e o efeito final visível ao usuário. Topologia de mesma origem dispensa o gate por waiver explícito, com motivo registrado — nunca por derivação silenciosa.
-- **Fase 10 - Relatórios finais:** cria `workflow-log.md`, `subagents-context.md` e `implementation-report.md`, consolidando timeline, contratos, validações, subagentes, Conversation IDs do AGY e status de entrega.
+- **Fase 10 - Relatórios finais:** cria `report/workflow-log.md`, `report/subagents-context.md` e `report/implementation-report.md`, consolidando timeline, contratos, validações, subagentes, Conversation IDs do AGY e status de entrega.
 - **Fase 11 - Entrega durável:** prepara e persiste o resumo/instruções, sem anunciar sucesso antes dos gates finais.
-- **Fase 12 - Learning e fechamento:** cria `learning-report.md` e candidate lessons sem promoção automática, projeta history/telemetry, exige `audit.complete`, fecha/verifica a run e só então publica a entrega.
+- **Fase 12 - Learning e fechamento:** cria `learning/learning-report.md` e candidate lessons sem promoção automática, projeta history/telemetry, exige `audit.complete`, fecha/verifica a run e só então publica a entrega.
 
 Os artefatos de coordenação e relatórios finais ficam em `.orchestration/<nome>/`.
 
@@ -219,7 +219,7 @@ O **review front-end (Fase 9)** usa sempre `gemini-3.1-pro-high`, independenteme
 
 Quando uma task front-end produz dois ou mais entregáveis independentes (ex.: três componentes React, dois relatórios HTML), o orquestrador pode acionar o fan-out nativo do AGY via `DefineSubagent` dentro do prompt.
 
-O mecanismo é puramente intra-task: continua sendo 1 task = 1 delegação AGY; `monitoring.md`, contratos e `validate-routing.mjs` ficam intactos.
+O mecanismo é puramente intra-task: continua sendo 1 task = 1 delegação AGY; `run/monitoring.md`, contratos e `validate-routing.mjs` ficam intactos.
 
 ### Flags novas
 
@@ -248,7 +248,7 @@ O orquestrador liga `--parallel` automaticamente quando uma task `FRONTEND_ONLY`
 
 Entregáveis dependentes ou que compartilham estado permanecem no subagente AGY único, sem `--parallel`.
 
-### Campos novos em `tasks-classification.md` e `waves.md` (tasks AGY)
+### Campos novos em `plan/tasks-classification.md` e `plan/waves.md` (tasks AGY)
 
 - `agyParallel: yes|no`
 - `agyParallelSource: user|heuristic`
@@ -331,9 +331,9 @@ Antes de delegar qualquer task para AGY, o orquestrador monta o prompt completo 
 
 1. Divide os entregáveis da task em dois grupos independentes (A e B).
 2. Cria subtasks `<ID>-a` e `<ID>-b`, cada uma cobrindo um grupo.
-3. Atualiza `tasks-classification.md` e `waves.md`.
+3. Atualiza `plan/tasks-classification.md` e `plan/waves.md`.
 4. Remonta os dois prompts e valida que cada um está abaixo do limite.
-5. Registra a divisão em `monitoring.md` e `workflow-log.md` com o tamanho original e o motivo.
+5. Registra a divisão em `run/monitoring.md` e `report/workflow-log.md` com o tamanho original e o motivo.
 
 Se a task for monolítica e indivisível por entregáveis, o orquestrador tenta reduzir `Arquivos e módulos relevantes` e, como último recurso, registra `promptOverflow: true` e pede decisão ao usuário.
 
@@ -354,7 +354,7 @@ O orquestrador não continua editando código produtivo por conta própria.
 Se houver `QUOTA_EXHAUSTED`:
 
 - o orquestrador faz review interno read-only;
-- salva o resultado em `review-final.md`;
+- salva o resultado em `review/review-final.md`;
 - não edita código produtivo.
 
 ### AGY em review front-end
@@ -362,7 +362,7 @@ Se houver `QUOTA_EXHAUSTED`:
 Se houver `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING` ou `TIMEOUT`:
 
 - o orquestrador faz review interno read-only;
-- salva o resultado em `review-frontend.md`;
+- salva o resultado em `review/review-frontend.md`;
 - não edita código produtivo.
 
 ### Antigravity/AGY em implementação

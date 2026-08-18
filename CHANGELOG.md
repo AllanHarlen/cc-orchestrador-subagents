@@ -1,5 +1,54 @@
 # Changelog
 
+## [4.1.0] — 2026-08-18
+
+### Layout de artefatos por estágio do workflow
+
+O diretório de uma run deixou de ser uma pasta plana com 13 arquivos na raiz e passou a ser organizado por estágio. Runs criadas antes desta versão continuam funcionando sem migração.
+
+#### Layout 2
+
+Toda run nova nasce com `state.layoutVersion: 2` e grava:
+
+```text
+state.json  events.jsonl        raiz: identidade da run
+plan/       tasks-classification.md, waves.md
+contracts/  um arquivo por contrato
+run/        monitoring.md, lifecycle-probe.json, executor-results/, prompts/
+review/     review-final.md, review-frontend.md, e2e-verification.md, screenshots/
+report/     implementation-report.md, workflow-log.md, subagents-context.md, handoff.json
+evidence/   saída dos scripts de intelligence
+learning/   learning-report.md
+```
+
+`state.json`, `events.jsonl` e `.state.lock` permanecem na **raiz** da run, e o diretório da run continua sendo filho direto de `.orchestration/`. Isso não é estética: `nextRunId`, a descoberta de run do `resume`, a projeção de history e a de knowledge varrem filhos diretos procurando `state.json`. Aninhar ou arquivar uma run em subpasta a esconderia dessas quatro varreduras — e faria `nextRunId` reutilizar um `runId` já emitido no mesmo dia, violando a imutabilidade de run terminal introduzida no 4.0.0.
+
+#### Resolução de caminho centralizada
+
+- Novo `scripts/lib/artifact-layout.mjs` é a única fonte de path de artefato: `resolveArtifact`, `artifactWritePath`, `artifactTreePath`, `artifactRelativePath`, `artifactTreeRelativePath`, `detectArtifactLayout`, `ensureArtifactLayout`.
+- **Leitura** tenta layout 2 e cai para layout 1. Uma run antiga continua legível, e um artefato deixado manualmente no lugar antigo continua satisfazendo o gate — a evidência registra o caminho real (`file:review/review-final.md` ou `file:review-final.md`).
+- **Escrita** segue o layout declarado pela run e nunca duplica um artefato que já exista no outro layout; uma run em andamento não é reorganizada no meio do caminho.
+- Snapshot sem `layoutVersion` é layout 1 por definição. Sem snapshot legível, a inferência olha o diretório: presença de `plan/`/`report/` indica layout 2, presença de `events.jsonl` sem eles mantém layout 1.
+- `layoutVersion` entra em `state.json` via o payload de `RUN_INITIALIZED`, portanto sobrevive ao replay determinístico e não quebra `verify`. Adicionado ao `orchestration-state.schema.json` como propriedade opcional.
+
+#### Consumidores atualizados
+
+`orchestration-state.mjs` (parse de plano, mapa de artefato dos completion gates, artefatos obrigatórios de `run DONE`, `init`), `validate-routing.mjs`, `learning-recipes.mjs` (escrita e evidência do `learning-report.md`, varredura de reviews), `orchestration-history.mjs` (indexação FTS5 dos artefatos), `intelligence.mjs` (`evidence/`), `executor-control.mjs` (`executor-results/`), `lifecycle-manager.mjs` (`lifecycle-probe.json`) e `inspect-contract.mjs` (default de `contracts/`).
+
+#### Testes
+
+Novo `tests/artifact-layout.test.mjs` cobre: run nova declarando layout 2 com a árvore criada; `plan/` como fonte parseada de tasks/waves; plano deixado na raiz continuando legível; evidência de gate e audit apontando o layout que realmente contém o arquivo; mapeamento e detecção de layout; e não duplicação de artefato entre layouts. Suíte completa: 61 testes.
+
+#### Contagem de tokens: drift de template fechado
+
+O `workflow.md` já mandava consolidar tokens em `implementation-report.md` seção 11a e em `subagents-context.md` seção "Uso de Tokens por Agente", mas nenhuma das duas seções existia nos templates — só o campo `Tokens usados` por subagente. Ambas foram criadas com os nomes exatos que a referência cita, mais o total da execução em `workflow-log.md` seção 1. As regras agora são explícitas: dado não reportado é `N/A` e nunca `0`; papel que não executou na run é `N/A` na linha inteira; com `agyParallel: yes` o total do AGY já é o agregado da sessão e não se soma o fan-out por fora; rodadas de review repetidas por `REPROVADO` somam na mesma linha com a contagem de rodadas; e as duas tabelas precisam fechar no mesmo total.
+
+Tokens continuam **fora** de `.orchestrator/telemetry.jsonl`: `FORBIDDEN_FIELD_PATTERN` em `lib/telemetry.mjs` recusa qualquer campo cujo nome contenha `token`, e afrouxar essa regex enfraqueceria a proteção contra vazamento de token de autenticação. Agregação de tokens cross-run exigiria contadores com nome neutro (`usageInputUnits` e afins) no allowlist e um bump do `telemetry-event.schema.json` — não feito neste release.
+
+#### Sem migração automática
+
+Não existe conversão de layout 1 para 2. Mover arquivos de uma run existente e editar `layoutVersion` no snapshot faz `verify` reprovar, porque o snapshot passa a divergir do replay do event log. Runs antigas ficam no layout delas.
+
 ## [4.0.0] — 2026-08-17
 
 ### Sistema de engenharia persistente inspirado nos padrões do Hermes

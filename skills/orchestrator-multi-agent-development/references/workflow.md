@@ -2,6 +2,23 @@
 
 Este arquivo expande as fases do `SKILL.md`.
 
+## Layout do diretorio da run
+
+Toda run nova grava os artefatos agrupados por estagio (`state.layoutVersion: 2`). Os caminhos citados nas fases abaixo sao relativos a `.orchestration/<nome>/`:
+
+```text
+state.json                  events.jsonl                (raiz: identidade da run)
+plan/                       tasks-classification.md, waves.md
+contracts/                  um arquivo por contrato
+run/                        monitoring.md, lifecycle-probe.json, executor-results/, prompts/
+review/                     review-final.md, review-frontend.md, e2e-verification.md, screenshots/
+report/                     implementation-report.md, workflow-log.md, subagents-context.md, handoff.json
+evidence/                   saida dos scripts de intelligence
+learning/                   learning-report.md
+```
+
+`state.json` e `events.jsonl` nunca saem da raiz da run, e o diretorio da run e sempre filho direto de `.orchestration/`: e assim que `resume` e a numeracao de `runId` encontram a run. Runs criadas antes desta versao permanecem no layout plano e continuam legiveis sem migracao. Detalhes e regras de resolucao em `references/persistent-state.md`.
+
 O orquestrador atua somente em projetos com PRD/especificacao ja pronta, em desenvolvimento complexo. Ele nao faz discovery, nao cria plano OpenSpec e nao reabre o entendimento da demanda. Todos os artefatos de coordenacao ficam em `.orchestration/<nome>/`, onde `<nome>` e um identificador descritivo em kebab-case: em **modo conjunto** e o `<slug>` do Pensador (sem `-vN`); em **modo independente** e derivado do PRD. Ver `references/handoff-contract.md`.
 
 ## Checkpoint transversal e resume
@@ -52,7 +69,7 @@ Na primeira run do projeto, confira se o `.gitignore` ja cobre os caminhos que n
 2. **Modo conjunto (Pensador → Orchestrador):** se houver um handoff `stage: pensador` com `status: DONE`:
    - Para multiplos `slug`, confirme via `AskUserQuestion` qual demanda implementar.
    - Para o mesmo `slug` com varias versoes `-vN`, use a maior versao (confirme se houver duvida).
-   - Leia o `handoff.json` e trate os artefatos referenciados como fonte da verdade. Correlacione pelo `slug` e grave seus artefatos em `.orchestration/<slug>/` (sem `-vN`).
+   - Leia o `report/handoff.json` e trate os artefatos referenciados como fonte da verdade. Correlacione pelo `slug` e grave seus artefatos em `.orchestration/<slug>/` (sem `-vN`).
    - `status: BLOCKED`/`PARTIAL` no upstream: pare e peca decisao ao usuario.
    - Sem `handoff.json` mas com `.pensador/<slug>-vN/`: fallback por convencao — leia `.pensador-progress.json` (`checkpointVersion: 2`) e o array `artifacts`; avise o usuario.
 3. **Modo independente:** sem `.pensador/`, o usuario fornece a especificacao via `@arquivo` ou texto no `/orquestrador`. `<nome>`/`<slug>` derivam do PRD.
@@ -86,7 +103,7 @@ A partir da especificacao, extraia diretamente:
 
 Quando o PRD ja lista tasks, preserve IDs, nomes e ordem para rastreabilidade. Quando o PRD descreve entregaveis sem IDs formais, derive uma lista de tasks objetiva a partir do texto, sem inventar escopo novo.
 
-**Extraia o escopo completo, nao um subconjunto.** A lista de tasks desta fase deve cobrir tudo que a especificacao implica — nao apenas uma "primeira onda", "fundacao" ou MVP que o orquestrador julgue razoavel para uma unica execucao. A decisao de escopo ja foi tomada rio acima: no **modo conjunto** (integracao Pensador → Orquestrador), o Pensador ja conduziu a entrevista de descoberta com o usuario e o `handoff.json`/PRD/spec resultante ja reflete o escopo acordado; no **modo independente**, o proprio usuario definiu o escopo ao escrever ou fornecer o PRD/spec. Em nenhum dos dois casos cabe ao orquestrador redecidir o tamanho do trabalho — ver 1.3a abaixo.
+**Extraia o escopo completo, nao um subconjunto.** A lista de tasks desta fase deve cobrir tudo que a especificacao implica — nao apenas uma "primeira onda", "fundacao" ou MVP que o orquestrador julgue razoavel para uma unica execucao. A decisao de escopo ja foi tomada rio acima: no **modo conjunto** (integracao Pensador → Orquestrador), o Pensador ja conduziu a entrevista de descoberta com o usuario e o `report/handoff.json`/PRD/spec resultante ja reflete o escopo acordado; no **modo independente**, o proprio usuario definiu o escopo ao escrever ou fornecer o PRD/spec. Em nenhum dos dois casos cabe ao orquestrador redecidir o tamanho do trabalho — ver 1.3a abaixo.
 
 ### 1.3 Lacunas bloqueantes
 
@@ -94,7 +111,7 @@ Se a especificacao tiver uma lacuna que impeca classificar e delegar com seguran
 
 ### 1.3a Execucao continua ate a conclusao integral
 
-Depois de extrair a lista completa de tasks (1.2), monte as ondas necessarias (Fase 3) e execute-as **sequencialmente ate a ultima**, sem pausar entre ondas para perguntar ao usuario se deve continuar. Isso vale mesmo quando a especificacao gerar tasks suficientes para varias ondas com dependencias fortes entre blocos (ex.: um PRD de produto inteiro com multiplos dominios funcionais): o orquestrador planeja o breakdown completo em `tasks-classification.md`/`waves.md` e delega onda apos onda ate esgotar o escopo, sem checkpoint de "posso continuar?" no meio do caminho.
+Depois de extrair a lista completa de tasks (1.2), monte as ondas necessarias (Fase 3) e execute-as **sequencialmente ate a ultima**, sem pausar entre ondas para perguntar ao usuario se deve continuar. Isso vale mesmo quando a especificacao gerar tasks suficientes para varias ondas com dependencias fortes entre blocos (ex.: um PRD de produto inteiro com multiplos dominios funcionais): o orquestrador planeja o breakdown completo em `plan/tasks-classification.md`/`plan/waves.md` e delega onda apos onda ate esgotar o escopo, sem checkpoint de "posso continuar?" no meio do caminho.
 
 As unicas pausas legitimas em qualquer ponto da execucao sao por bloqueio real, ja cobertas em outras secoes deste documento:
 
@@ -104,11 +121,11 @@ As unicas pausas legitimas em qualquer ponto da execucao sao por bloqueio real, 
 
 Reducao de escopo (implementar menos do que a especificacao pede) so e aceitavel quando o **proprio usuario** pedir isso explicitamente na mensagem que invocou o orquestrador — nunca por iniciativa do orquestrador, e nunca comunicada apenas no relatorio final depois do fato consumado.
 
-Ao final da Fase 1, o orquestrador deve conseguir produzir `tasks-classification.md` a partir da especificacao ingerida mais fatos comprovados da Project Memory, cobrindo o escopo integral, e seguir sem pausa ate a Fase 12 e o fechamento terminal.
+Ao final da Fase 1, o orquestrador deve conseguir produzir `plan/tasks-classification.md` a partir da especificacao ingerida mais fatos comprovados da Project Memory, cobrindo o escopo integral, e seguir sem pausa ate a Fase 12 e o fechamento terminal.
 
 ## Fase 2 - Classificacao das tasks
 
-Para cada task extraida do PRD/spec, registre em `.orchestration/<nome>/tasks-classification.md`:
+Para cada task extraida do PRD/spec, registre em `.orchestration/<nome>/plan/tasks-classification.md`:
 
 - categoria;
 - dependencias;
@@ -134,13 +151,13 @@ A categoria da task e a fonte da verdade para escolher agente. Nao reclassifique
 | `FRONTEND_ONLY` | `cc-antigravity-plugin:antigravity-coder` | AGY com `--model <agyModel>` |
 | `FULLSTACK` | `codex:codex-rescue` + `cc-antigravity-plugin:antigravity-coder` | Codex para back-end; AGY com `--model <agyModel>` para front-end |
 
-Se `FRONTEND_ONLY` aparecer com Codex como agente primario, corrija antes de montar waves. Codex so pode assumir front-end depois de `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, falha operacional de AGY ou decisao explicita do usuario, e isso deve ficar registrado em `monitoring.md`, `workflow-log.md` e `subagents-context.md`.
+Se `FRONTEND_ONLY` aparecer com Codex como agente primario, corrija antes de montar waves. Codex so pode assumir front-end depois de `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, falha operacional de AGY ou decisao explicita do usuario, e isso deve ficar registrado em `run/monitoring.md`, `report/workflow-log.md` e `report/subagents-context.md`.
 
 **`antigravity-agent` e somente leitura.** Se `FRONTEND_ONLY` (ou a fatia front-end de `FULLSTACK`) aparecer com `assignedAgent: cc-antigravity-plugin:antigravity-agent`, isso e um erro de roteamento — corrija para `cc-antigravity-plugin:antigravity-coder` antes de montar waves. `antigravity-agent` so e valido como `assignedAgent` nas tasks de review (Fase 9), nunca em tasks que criam/editam arquivos.
 
 ### Regra de `agyParallel`
 
-Para tasks `FRONTEND_ONLY` ou fatia front-end de `FULLSTACK`, avalie se ha dois ou mais entregaveis independentes nos criterios de aceite. Se sim, prefira **uma** task com `agyParallel: yes` em vez de N tasks AGY separadas. Registre em `tasks-classification.md`:
+Para tasks `FRONTEND_ONLY` ou fatia front-end de `FULLSTACK`, avalie se ha dois ou mais entregaveis independentes nos criterios de aceite. Se sim, prefira **uma** task com `agyParallel: yes` em vez de N tasks AGY separadas. Registre em `plan/tasks-classification.md`:
 
 - `agyParallel: yes|no`
 - `agyParallelSource: user|heuristic` (quando `yes`)
@@ -160,9 +177,9 @@ Exemplos:
 
 ## Fase 3 - Ondas
 
-Agrupe tasks em `.orchestration/<nome>/waves.md`.
+Agrupe tasks em `.orchestration/<nome>/plan/waves.md`.
 
-Cada entrada de `waves.md` deve repetir `assignedAgent` vindo de `tasks-classification.md`. Depois de montar as waves, rode:
+Cada entrada de `plan/waves.md` deve repetir `assignedAgent` vindo de `plan/tasks-classification.md`. Depois de montar as waves, rode:
 
 1. Para cada task AGY sem override do usuario, chame `orchestration-router.mjs route` com `taskType`, `complexity`, piso heuristico, criticidade, design e historico de attempts. O router exige amostra comparavel e nunca reduz o piso. Se retornar `source: adaptive`, registre `agyModelEvidence`; se retornar fallback, mantenha `source: heuristic`.
 2. Valide o roteamento:
@@ -171,7 +188,7 @@ Cada entrada de `waves.md` deve repetir `assignedAgent` vindo de `tasks-classifi
 node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" ".orchestration/<nome>"
 ```
 
-Se o validador falhar, corrija `tasks-classification.md` e `waves.md` antes de qualquer delegacao.
+Se o validador falhar, corrija `plan/tasks-classification.md` e `plan/waves.md` antes de qualquer delegacao.
 
 Quando o validador passar, sincronize os artefatos com o snapshot. O parser aceita IDs como `T1`, `BE-01` e `FE-01`; tasks removidas do Markdown nao sao apagadas silenciosamente do historico.
 
@@ -275,9 +292,9 @@ Se o prompt montado **exceder 28.000 chars**:
 3. Crie duas subtasks derivadas da original:
    - **Task `<ID>-a`**: herda todos os metadados da task original (categoria, agente, contrato, stack, escopo); `Descricao` e criterios de aceite cobrem apenas o Grupo A.
    - **Task `<ID>-b`**: mesmo metadados; `Descricao` e criterios de aceite cobrem apenas o Grupo B.
-4. Atualize `tasks-classification.md` e `waves.md` substituindo a task original pelas duas subtasks; mantenha a mesma wave se forem independentes.
+4. Atualize `plan/tasks-classification.md` e `plan/waves.md` substituindo a task original pelas duas subtasks; mantenha a mesma wave se forem independentes.
 5. Remonte os dois prompts e confirme que cada um esta abaixo de 28.000 chars. Se ainda exceder, repita a divisao.
-6. Registre a divisao em `monitoring.md` e `workflow-log.md` com:
+6. Registre a divisao em `run/monitoring.md` e `report/workflow-log.md` com:
    - task original e motivo (prompt excedeu N chars);
    - subtasks geradas e criterios de aceite de cada uma.
 
@@ -285,7 +302,7 @@ Se o prompt montado **exceder 28.000 chars**:
 
 - Reduza `Arquivos e modulos relevantes` ao minimo critico para esta task; mova arquivos secundarios para `Fora do escopo`.
 - Substitua listagens mecanicas extensas por um resumo deterministico de `scripts/intelligence` e referencias de path confinadas ao workspace; nao reduza o modelo, pois isso nao altera o limite da linha de comando e pode violar o piso de fidelidade.
-- Se persistir, registre `promptOverflow: true` em `tasks-classification.md` e peca decisao ao usuario antes de delegar.
+- Se persistir, registre `promptOverflow: true` em `plan/tasks-classification.md` e peca decisao ao usuario antes de delegar.
 
 Para Codex:
 
@@ -316,7 +333,7 @@ Cada prompt deve incluir:
 
 ### Imagery/icones (`IMAGE_SUGGESTIONS`)
 
-Todo prompt de task front-end usa o template da Secao 2 de `subagent-prompts.md`, que instrui o `antigravity-coder` a devolver um bloco `IMAGE_SUGGESTIONS` quando identificar oportunidades de imagem (hero, banners, ilustracoes de empty/error state, icones de produto/servico) — o `antigravity-coder` **nunca gera sem aprovacao previa**. Quando esse bloco vier preenchido na resposta, siga o fluxo da Secao 2a de `subagent-prompts.md` **antes de fechar a task**: apresente as opcoes ao usuario via `AskUserQuestion` (multiSelect), delegue apenas as aprovadas de volta ao `antigravity-coder` com `--generate-image`, confirme que o arquivo gerado foi fiado no componente, e registre o resultado em `subagents-context.md`. Nao marcar a task front-end como `DONE` com sugestoes de imagem pendentes de decisao do usuario.
+Todo prompt de task front-end usa o template da Secao 2 de `subagent-prompts.md`, que instrui o `antigravity-coder` a devolver um bloco `IMAGE_SUGGESTIONS` quando identificar oportunidades de imagem (hero, banners, ilustracoes de empty/error state, icones de produto/servico) — o `antigravity-coder` **nunca gera sem aprovacao previa**. Quando esse bloco vier preenchido na resposta, siga o fluxo da Secao 2a de `subagent-prompts.md` **antes de fechar a task**: apresente as opcoes ao usuario via `AskUserQuestion` (multiSelect), delegue apenas as aprovadas de volta ao `antigravity-coder` com `--generate-image`, confirme que o arquivo gerado foi fiado no componente, e registre o resultado em `report/subagents-context.md`. Nao marcar a task front-end como `DONE` com sugestoes de imagem pendentes de decisao do usuario.
 
 ### Verificacao de skills compativeis
 
@@ -328,7 +345,7 @@ Todo subagente em background deve, como **primeiro passo antes de implementar**,
 4. use as skills compativeis durante a implementacao;
 5. registre no retorno quais skills foram utilizadas (campo obrigatorio no retorno de Codex e Gemini).
 
-O orquestrador consolida as skills utilizadas por subagente em `subagents-context.md`.
+O orquestrador consolida as skills utilizadas por subagente em `report/subagents-context.md`.
 
 ## Fase 6 - Monitoramento
 
@@ -369,7 +386,7 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-lifecycle.mjs" watch \
   --interval-seconds 30
 ```
 
-O adapter recebe apenas placeholders allowlisted e roda sem shell. Cada probe bruto redigido e limitado e salvo em `executor-results/` antes de atualizar task, heartbeat, lease, history e telemetry. `interrupt`, `retry` e `cancel` exigem adapter ou `--external-confirmed`; nunca simule sucesso da acao externa. Veja `lifecycle-telemetry.md` e `assets/executor-control-config.schema.json`.
+O adapter recebe apenas placeholders allowlisted e roda sem shell. Cada probe bruto redigido e limitado e salvo em `run/executor-results/` antes de atualizar task, heartbeat, lease, history e telemetry. `interrupt`, `retry` e `cancel` exigem adapter ou `--external-confirmed`; nunca simule sucesso da acao externa. Veja `lifecycle-telemetry.md` e `assets/executor-control-config.schema.json`.
 
 ### Politica de quota
 
@@ -400,7 +417,7 @@ O adapter recebe apenas placeholders allowlisted e roda sem shell. Cada probe br
 
 - `QUOTA_EXHAUSTED` no Codex durante review back-end:
   - faca review interno read-only no orquestrador;
-  - salve o resultado em `review-final.md`;
+  - salve o resultado em `review/review-final.md`;
   - nao edite codigo produtivo.
 
 ### Politica de sandbox Codex
@@ -452,13 +469,13 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-telemetry.mjs" project --dir ".o
 
 Nao gere projeto de testes automatizados como parte da integracao. A validacao de que cada requisito (`RF`/`CA`) foi implementado corretamente e responsabilidade do review de codigo (Fases 8 e 9), nao de uma suite de testes.
 
-**Monte a matriz de rastreabilidade RF/CA → evidência aqui, nao no relatorio final.** Percorra cada `RF`/`CA` do escopo da especificacao e registre, em `implementation-report.md` secao 13, a task que o implementou e o arquivo/trecho de evidencia. Um `RF` sem entrega correspondente (ou com `// TODO`/placeholder/stub no caminho do requisito) e uma lacuna que precisa ser **sinalizada agora** — nao silenciosamente absorvida como "lacuna conhecida" no relatorio final sem passar pelo gate de review. Essa matriz alimenta diretamente as Fases 8 e 9.
+**Monte a matriz de rastreabilidade RF/CA → evidência aqui, nao no relatorio final.** Percorra cada `RF`/`CA` do escopo da especificacao e registre, em `report/implementation-report.md` secao 13, a task que o implementou e o arquivo/trecho de evidencia. Um `RF` sem entrega correspondente (ou com `// TODO`/placeholder/stub no caminho do requisito) e uma lacuna que precisa ser **sinalizada agora** — nao silenciosamente absorvida como "lacuna conhecida" no relatorio final sem passar pelo gate de review. Essa matriz alimenta diretamente as Fases 8 e 9.
 
 Se precisar ajuste, delegue para Codex com `--effort medium` (back-end) ou AGY (front-end), conforme a categoria.
 
 ## Fase 8 - Review back-end pos-implementacao (Codex)
 
-> **Ignorar quando nao houver back-end:** Se nao houver nenhuma task `BACKEND_ONLY`, `DATABASE_ONLY` nem fatia back-end de `FULLSTACK`, pule a Fase 8 e registre `review-final.md` com a nota `"Sem back-end: review back-end nao aplicavel"`.
+> **Ignorar quando nao houver back-end:** Se nao houver nenhuma task `BACKEND_ONLY`, `DATABASE_ONLY` nem fatia back-end de `FULLSTACK`, pule a Fase 8 e registre `review/review-final.md` com a nota `"Sem back-end: review back-end nao aplicavel"`.
 
 Objetivo da fase: validar a implementacao **back-end** final contra a especificacao, os contratos, as tasks executadas e os retornos dos subagentes. Esta fase e read-only: nao edite codigo durante o review. Codex revisa **apenas back-end** — nunca front-end. Se houver defeitos, volte para a Fase 7 para integrar ajustes ou redelegar correcao.
 
@@ -467,8 +484,8 @@ Objetivo da fase: validar a implementacao **back-end** final contra a especifica
 Antes de delegar ao Codex ou fazer review interno, monte um pacote de contexto com:
 
 - especificacao original (PRD/spec) ingerida na Fase 1;
-- `tasks-classification.md`, `waves.md` e contratos em `contracts/*.md`;
-- `monitoring.md`, `workflow-log.md` e `subagents-context.md`;
+- `plan/tasks-classification.md`, `plan/waves.md` e contratos em `contracts/*.md`;
+- `run/monitoring.md`, `report/workflow-log.md` e `report/subagents-context.md`;
 - resumo dos arquivos back-end alterados;
 - comandos de build e validacoes executadas no back-end;
 - falhas, bloqueios, fallbacks e decisoes do usuario durante a execucao.
@@ -478,7 +495,7 @@ Antes de delegar ao Codex ou fazer review interno, monte um pacote de contexto c
 - delegue ao Codex com `--effort high`;
 - informe que o review e somente leitura e restrito ao back-end (controllers, services, repositorios, DTOs, migrations, contratos do lado servidor);
 - exija achados com severidade, arquivo/trecho quando aplicavel, impacto e correcao esperada;
-- salve o resultado em `review-final.md`.
+- salve o resultado em `review/review-final.md`.
 
 O prompt do review back-end deve pedir verificacao explicita de:
 
@@ -494,22 +511,22 @@ O prompt do review back-end deve pedir verificacao explicita de:
 ### 8.3 Fluxo de fallback
 
 - se o review Codex vier com `QUOTA_EXHAUSTED`, o orquestrador faz review interno read-only do back-end;
-- registre no proprio `review-final.md` que o review foi fallback interno do orquestrador por indisponibilidade de quota do Codex;
+- registre no proprio `review/review-final.md` que o review foi fallback interno do orquestrador por indisponibilidade de quota do Codex;
 - mantenha as mesmas secoes obrigatorias do fluxo principal.
 
 ### 8.4 Resultado e loop de correcao
 
-`review-final.md` deve terminar com uma decisao:
+`review/review-final.md` deve terminar com uma decisao:
 
 - `APROVADO`: pode seguir para a Fase 9;
 - `APROVADO_COM_RESSALVAS`: pode seguir somente se as ressalvas forem documentadas como nao bloqueantes;
 - `REPROVADO`: nao avance; volte para a Fase 7 ou redelegue ajustes ao Codex.
 
-**`REPROVADO` obrigatorio quando:** um `RF`/`CA` do escopo back-end nao tem evidencia na matriz de rastreabilidade (secao 13 do `implementation-report.md`), ou o caminho de codigo desse requisito contem `// TODO`, `NotImplementedException`, stub vazio ou placeholder equivalente. Isso vale mesmo que o build passe e nenhum outro achado de severidade tenha sido levantado — requisito nao implementado nao e "ressalva nao bloqueante", e reprovacao.
+**`REPROVADO` obrigatorio quando:** um `RF`/`CA` do escopo back-end nao tem evidencia na matriz de rastreabilidade (secao 13 do `report/implementation-report.md`), ou o caminho de codigo desse requisito contem `// TODO`, `NotImplementedException`, stub vazio ou placeholder equivalente. Isso vale mesmo que o build passe e nenhum outro achado de severidade tenha sido levantado — requisito nao implementado nao e "ressalva nao bloqueante", e reprovacao.
 
 ## Fase 9 - Review front-end pos-implementacao (AGY)
 
-> **Ignorar quando nao houver front-end:** Se nao houver nenhuma task `FRONTEND_ONLY` nem fatia front-end de `FULLSTACK`, pule a Fase 9 e registre `review-frontend.md` com a nota `"Sem front-end: review front-end nao aplicavel"`. Se nao existir `review-frontend.md`, basta registrar a ausencia em `workflow-log.md`.
+> **Ignorar quando nao houver front-end:** Se nao houver nenhuma task `FRONTEND_ONLY` nem fatia front-end de `FULLSTACK`, pule a Fase 9 e registre `review/review-frontend.md` com a nota `"Sem front-end: review front-end nao aplicavel"`. Se nao existir `review/review-frontend.md`, basta registrar a ausencia em `report/workflow-log.md`.
 
 Objetivo da fase: validar a implementacao **front-end** final. O review e feito pelo **AGY** com `--model gemini-3.1-pro-high`, em modo read-only. Codex nunca participa desta fase.
 
@@ -518,8 +535,8 @@ Objetivo da fase: validar a implementacao **front-end** final. O review e feito 
 Monte um pacote de contexto com:
 
 - especificacao original (PRD/spec) ingerida na Fase 1;
-- `tasks-classification.md`, `waves.md` e contratos em `contracts/*.md`;
-- `subagents-context.md` das tasks front-end;
+- `plan/tasks-classification.md`, `plan/waves.md` e contratos em `contracts/*.md`;
+- `report/subagents-context.md` das tasks front-end;
 - resumo dos arquivos front-end alterados;
 - comandos de build/typecheck/lint executados no front-end.
 
@@ -528,7 +545,7 @@ Monte um pacote de contexto com:
 - delegue ao `cc-antigravity-plugin:antigravity-agent` com `--model gemini-3.1-pro-high`;
 - informe que o review e somente leitura — o AGY nao modifica arquivos;
 - exija achados com severidade, arquivo/trecho quando aplicavel, impacto e correcao esperada;
-- salve o resultado em `review-frontend.md`.
+- salve o resultado em `review/review-frontend.md`.
 
 O prompt do review front-end deve pedir verificacao explicita de:
 
@@ -544,22 +561,22 @@ O prompt do review front-end deve pedir verificacao explicita de:
 ### 9.3 Fluxo de fallback
 
 - se o review AGY vier com `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING` ou `TIMEOUT`, o orquestrador faz review interno read-only do front-end;
-- registre em `review-frontend.md` que o review foi fallback interno do orquestrador por indisponibilidade do AGY, com o status cru retornado pelo bridge;
+- registre em `review/review-frontend.md` que o review foi fallback interno do orquestrador por indisponibilidade do AGY, com o status cru retornado pelo bridge;
 - mantenha as mesmas secoes obrigatorias do fluxo principal.
 
 ### 9.4 Resultado e loop de correcao
 
-`review-frontend.md` deve terminar com uma decisao:
+`review/review-frontend.md` deve terminar com uma decisao:
 
 - `APROVADO`: pode seguir para a Fase 10;
 - `APROVADO_COM_RESSALVAS`: pode seguir somente se as ressalvas forem documentadas como nao bloqueantes;
 - `REPROVADO`: nao avance; volte para a Fase 7 e redelegue a correcao ao AGY.
 
-**`REPROVADO` obrigatorio quando:** um `RF`/`CA` do escopo front-end nao tem evidencia na matriz de rastreabilidade (secao 13 do `implementation-report.md`), ou o componente correspondente contem `// TODO`, texto placeholder fixo (ex.: copy em ingles genérico onde o requisito pede conteudo real do tenant/dominio) ou estado vazio nao implementado. Isso vale mesmo que o build/typecheck/lint passem — requisito nao implementado nao e "ressalva nao bloqueante", e reprovacao.
+**`REPROVADO` obrigatorio quando:** um `RF`/`CA` do escopo front-end nao tem evidencia na matriz de rastreabilidade (secao 13 do `report/implementation-report.md`), ou o componente correspondente contem `// TODO`, texto placeholder fixo (ex.: copy em ingles genérico onde o requisito pede conteudo real do tenant/dominio) ou estado vazio nao implementado. Isso vale mesmo que o build/typecheck/lint passem — requisito nao implementado nao e "ressalva nao bloqueante", e reprovacao.
 
 Se houver achados bloqueantes em qualquer das fases de review (8 ou 9):
 
-1. registre os achados em `monitoring.md` e `workflow-log.md`;
+1. registre os achados em `run/monitoring.md` e `report/workflow-log.md`;
 2. crie ou atualize tasks de correcao com agente responsavel pela categoria;
 3. execute a correcao pela Fase 7;
 4. repita o review focando nas areas alteradas e nos achados anteriores.
@@ -573,7 +590,7 @@ Se houver achados bloqueantes em qualquer das fases de review (8 ou 9):
 **Como conduzir (o orquestrador faz diretamente, read-only sobre a app rodando):**
 
 1. **Suba a app de verdade** (ex.: `docker compose up --build`) e confirme os servicos saudaveis. Se subir a stack falhar, isso ja e um achado bloqueante — nao existe "APROVADO" para uma app que nao sobe.
-2. **Credenciais de seed/demo para fluxos autenticados.** Antes de tentar logar, confira se o PRD/spec documenta credenciais conhecidas de seed (ver seção "Observabilidade & Operação" do PRD). Se documentadas, use-as para exercitar os `UC-*` que exigem login. Se o ambiente tem seed/demo mas **nenhuma credencial documentada** (ex.: senha só como hash sem plaintext registrado), isso e uma lacuna real: registre-a explicitamente em `e2e-verification.md`, e prefira resolvê-la (redefinir a senha do seed para um valor conhecido e documentá-lo, com uma correção pela Fase 7) a simplesmente pular os fluxos autenticados. Só marque os fluxos autenticados como não verificados se resolver a credencial estiver fora do escopo da correção.
+2. **Credenciais de seed/demo para fluxos autenticados.** Antes de tentar logar, confira se o PRD/spec documenta credenciais conhecidas de seed (ver seção "Observabilidade & Operação" do PRD). Se documentadas, use-as para exercitar os `UC-*` que exigem login. Se o ambiente tem seed/demo mas **nenhuma credencial documentada** (ex.: senha só como hash sem plaintext registrado), isso e uma lacuna real: registre-a explicitamente em `review/e2e-verification.md`, e prefira resolvê-la (redefinir a senha do seed para um valor conhecido e documentá-lo, com uma correção pela Fase 7) a simplesmente pular os fluxos autenticados. Só marque os fluxos autenticados como não verificados se resolver a credencial estiver fora do escopo da correção.
 3. **Dirija os fluxos de usuario criticos** (os `UC-*`/caminhos-felizes da especificacao, **incluindo os que exigem login** quando a credencial estiver disponível) num navegador real via **Playwright MCP** (ou ferramenta equivalente): navegue, preencha formularios, clique, submeta.
 4. **Em cada fluxo, verifique:**
    - console e network **sem erros de CORS** nem `net::ERR_FAILED`;
@@ -581,24 +598,24 @@ Se houver achados bloqueantes em qualquer das fases de review (8 ou 9):
    - o **efeito final** de cada acao aconteceu de fato (o redirect abriu a aba/rota, o item entrou no carrinho, o registro apareceu na lista, o estado mudou) — nao apenas que a chamada retornou;
    - resolucao **multi-tenant / por host** funciona a partir do browser (o front informa o tenant certo ao back);
    - estados de tela (vazio/carregando/erro/sucesso) se comportam como especificado.
-5. **Capture evidencia**: screenshot e/ou o resumo de console+network dos fluxos exercitados, salvos em `.orchestration/<slug>/e2e-verification.md` (e screenshots em `.orchestration/<slug>/screenshots/`).
+5. **Capture evidencia**: screenshot e/ou o resumo de console+network dos fluxos exercitados, salvos em `.orchestration/<slug>/review/e2e-verification.md` (e screenshots em `.orchestration/<slug>/review/screenshots/`).
 
-**Achados desta fase sao BLOQUEANTES** como qualquer review: registre em `monitoring.md`/`workflow-log.md`, crie tasks de correcao, corrija pela Fase 7 e **re-verifique no navegador** antes de aprovar. So depois que os fluxos criticos passarem no navegador o orquestrador pode marcar a entrega como `DONE`. Se a ferramenta de navegador nao estiver disponivel no ambiente, **nao invente aprovacao**: registre a limitacao e marque o `handoff.json` como `PARTIAL` com o gap explicito ("verificacao E2E no navegador nao executada").
+**Achados desta fase sao BLOQUEANTES** como qualquer review: registre em `run/monitoring.md`/`report/workflow-log.md`, crie tasks de correcao, corrija pela Fase 7 e **re-verifique no navegador** antes de aprovar. So depois que os fluxos criticos passarem no navegador o orquestrador pode marcar a entrega como `DONE`. Se a ferramenta de navegador nao estiver disponivel no ambiente, **nao invente aprovacao**: registre a limitacao e marque o `report/handoff.json` como `PARTIAL` com o gap explicito ("verificacao E2E no navegador nao executada").
 
 ## Fases 10, 11 e 12 - Relatorio, entrega duravel e learning
 
 Entregaveis obrigatorios (salve na **raiz de execucao do agente**, `.orchestration/<slug>/`):
 
-- `workflow-log.md`
-- `subagents-context.md`
-- `implementation-report.md`
-- `handoff.json` — manifesto de handoff do estagio orchestrador (ver `references/handoff-contract.md`)
-- `learning-report.md` — candidatos comprovados extraidos na Fase 12; nenhuma promocao automatica
+- `report/workflow-log.md`
+- `report/subagents-context.md`
+- `report/implementation-report.md`
+- `report/handoff.json` — manifesto de handoff do estagio orchestrador (ver `references/handoff-contract.md`)
+- `learning/learning-report.md` — candidatos comprovados extraidos na Fase 12; nenhuma promocao automatica
 - `state.json` + `events.jsonl` — estado/auditoria da execucao (nao entram no vocabulario de artefatos do handoff)
 
-### Gravar `handoff.json` (para o Executor)
+### Gravar `report/handoff.json` (para o Executor)
 
-Ao fechar, grave `.orchestration/<slug>/handoff.json` com:
+Ao fechar, grave `.orchestration/<slug>/report/handoff.json` com:
 
 - `handoffVersion: 1`, `stage: "orchestrador"`, `slug` (sem `-vN`), `producer` (plugin + version), `artifactRoot: ".orchestration/<slug>"`, `status` (`DONE`/`PARTIAL`/`BLOCKED`), `summary`, timestamps.
 - `upstream`: em modo conjunto, aponta o `handoff.json` do Pensador (`.pensador/<slug>-vN/handoff.json`); em modo independente, `null`.
@@ -612,7 +629,7 @@ O relatorio final deve citar:
 - quais validacoes de wire format e serializacao foram feitas;
 - se houve fallback de review interno (back-end por `QUOTA_EXHAUSTED` no Codex; front-end por indisponibilidade do AGY);
 - para cada delegacao AGY com `agyParallel: yes`: numero de subagentes Gemini nativos e Conversation IDs reportados pelo AGY;
-- contagem de tokens por agente (tabela consolidada em `implementation-report.md` secao 11a e em `subagents-context.md` secao "Uso de Tokens por Agente"; quando houver fan-out, os tokens reportados pelo AGY sao o agregado da sessao).
+- contagem de tokens por agente, nos tres lugares previstos pelos templates: tabela consolidada em `report/implementation-report.md` secao "11a. Uso de tokens por agente", detalhe por agente/papel em `report/subagents-context.md` secao "Uso de Tokens por Agente" (alem do campo `Tokens usados` de cada bloco de subagente), e o total da execucao em `report/workflow-log.md` secao 1. As duas tabelas devem fechar no mesmo total. Quando houver fan-out, os tokens reportados pelo AGY sao o agregado da sessao — nao some os subagentes Gemini por fora. Dado nao reportado pelo agente ou nao exposto pela plataforma e `N/A`, nunca `0`.
 
 Na Fase 10, finalize reports/handoff e marque os gates `reports`/`handoff` com evidence IDs de arquivo. Na Fase 11, prepare a mensagem e instrucoes de negocio em artefato duravel, marque `delivery` e conclua a fase, mas **nao publique sucesso ainda**.
 
@@ -638,7 +655,7 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" verify \
   --dir ".orchestration/<slug>"
 ```
 
-`audit.complete` precisa ser `true`; falha de gate/integridade bloqueia a entrega. Nao corrija `revision`/`lastEventId` manualmente; reproduza o event log ou restaure um backup coerente. O `handoff.json` so pode usar `DONE` quando as tasks obrigatorias estiverem `DONE`, cada task tiver evidence plan e os gates aplicaveis tiverem passado com evidencia; `UNKNOWN`, `STALLED` ou `BLOCKED` pendente exige `PARTIAL`/`BLOCKED` com resumo explicito. Projete history/telemetry novamente depois do evento `RUN_STATUS_UPDATED(DONE)` para capturar o terminal e so entao publique a mensagem preparada na Fase 11.
+`audit.complete` precisa ser `true`; falha de gate/integridade bloqueia a entrega. Nao corrija `revision`/`lastEventId` manualmente; reproduza o event log ou restaure um backup coerente. O `report/handoff.json` so pode usar `DONE` quando as tasks obrigatorias estiverem `DONE`, cada task tiver evidence plan e os gates aplicaveis tiverem passado com evidencia; `UNKNOWN`, `STALLED` ou `BLOCKED` pendente exige `PARTIAL`/`BLOCKED` com resumo explicito. Projete history/telemetry novamente depois do evento `RUN_STATUS_UPDATED(DONE)` para capturar o terminal e so entao publique a mensagem preparada na Fase 11.
 
 ### Contagem de tokens
 

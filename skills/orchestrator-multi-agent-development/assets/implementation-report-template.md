@@ -26,17 +26,17 @@
 ## 4. Artefatos utilizados
 
 - especificação fonte (PRD/spec): `<caminho>`
-- `.orchestration/<nome>/tasks-classification.md`
-- `.orchestration/<nome>/waves.md`
+- `.orchestration/<nome>/plan/tasks-classification.md`
+- `.orchestration/<nome>/plan/waves.md`
 - `.orchestration/<nome>/contracts/`
-- `.orchestration/<nome>/monitoring.md`
-- `.orchestration/<nome>/review-final.md` (review back-end)
-- `.orchestration/<nome>/review-frontend.md` (review front-end)
-- `.orchestration/<nome>/workflow-log.md`
-- `.orchestration/<nome>/subagents-context.md`
+- `.orchestration/<nome>/run/monitoring.md`
+- `.orchestration/<nome>/review/review-final.md` (review back-end)
+- `.orchestration/<nome>/review/review-frontend.md` (review front-end)
+- `.orchestration/<nome>/report/workflow-log.md`
+- `.orchestration/<nome>/report/subagents-context.md`
 - `.orchestration/<nome>/state.json`
 - `.orchestration/<nome>/events.jsonl`
-- `.orchestration/<nome>/learning-report.md`
+- `.orchestration/<nome>/learning/learning-report.md`
 - `.orchestration/<nome>/evidence/`
 - `.orchestrator/project-memory.md` (projecao validada usada na classificacao)
 - `.orchestrator/history.db` / `.orchestrator/telemetry.jsonl` (projecoes cross-run)
@@ -119,6 +119,24 @@ Para cada contrato:
 |---|---|---|---|---|---|---|
 | `<T1>` | `codex:codex-rescue` | `<--effort medium/high \| AGY --model <agyModel> [--parallel]>` | `<N subagentes \| N/A>` | `<status>` | `<resumo>` | `<riscos>` |
 
+## 11a. Uso de tokens por agente
+
+> Consolide aqui o campo `Tokens usados` que cada subagente devolve (Codex: item 11 do retorno; AGY implementacao: item 13; reviews: item 6). O detalhe por subagente/task fica em `report/subagents-context.md`, e os dois artefatos devem fechar no mesmo total.
+
+| Agente | Papel | input | output | cache_read | total |
+|---|---|---|---|---|---|
+| `codex:codex-rescue` | implementacao back-end (`--effort medium`) | `<N>` | `<N>` | `<N>` | `<N>` |
+| `cc-antigravity-plugin:antigravity-coder` | implementacao front-end (`--model <agyModel>`) | `<N>` | `<N>` | `<N>` | `<N>` |
+| `codex:codex-rescue` | review back-end (`--effort high`) | `<N>` | `<N>` | `<N>` | `<N>` |
+| `cc-antigravity-plugin:antigravity-agent` | review front-end (`gemini-3.1-pro-high`) | `<N>` | `<N>` | `<N>` | `<N>` |
+| orquestrador | coordenacao, integracao e Fase 9.5 | `<N>` | `<N>` | `<N>` | `<N>` |
+| **Consolidado** | | `<N>` | `<N>` | `<N>` | `<N>` |
+
+- Use `N/A` quando o agente nao reportar ou a plataforma nao expuser o dado; nao escreva `0` no lugar de dado ausente.
+- Papel que nao executou nesta run: `N/A` na linha inteira (ex.: review back-end quando toda a atividade foi `FRONTEND_ONLY`).
+- Com `agyParallel: yes`, o valor devolvido pelo AGY ja e o agregado da sessao, incluindo os subagentes Gemini nativos — nao some os fan-outs por fora.
+- Se qualquer linha for `N/A`, o **Consolidado** e a soma das linhas conhecidas e precisa dizer isso: `<N> (exclui <papel> N/A)`.
+
 ## 12. Validações
 
 > Nem o orquestrador nem os subagentes geram projeto/suite de testes automatizados como entregavel desta execucao. A validacao de que cada requisito foi implementado corretamente esta na secao 13 (Criterios de aceite), verificada por review de codigo — nao aqui.
@@ -171,13 +189,13 @@ Regras:
 
 ### Review back-end
 - origem: `<Codex | fallback interno do orquestrador | N/A (sem back-end)>`
-- arquivo: `review-final.md`
+- arquivo: `review/review-final.md`
 - decisão: `<APROVADO | APROVADO_COM_RESSALVAS | REPROVADO | N/A>`
 - houve `QUOTA_EXHAUSTED` no review Codex?: `<sim|nao>`
 
 ### Review front-end
 - origem: `<AGY gemini-3.1-pro-high | fallback interno do orquestrador | N/A (sem front-end)>`
-- arquivo: `review-frontend.md`
+- arquivo: `review/review-frontend.md`
 - decisão: `<APROVADO | APROVADO_COM_RESSALVAS | REPROVADO | N/A>`
 - houve `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no review AGY?: `<sim|nao>`
 

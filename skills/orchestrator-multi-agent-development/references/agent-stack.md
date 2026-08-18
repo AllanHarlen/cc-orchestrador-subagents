@@ -58,7 +58,7 @@ O prompt de qualquer agente envolvido precisa receber:
 
 Use `cc-antigravity-plugin:antigravity-coder` para qualquer task `FRONTEND_ONLY` e para a fatia front-end de `FULLSTACK` — e o unico subagente AGY com permissao de escrita (cria, edita, move e formata arquivos via o bridge nativo). Passe `--model <agyModel>` para o bridge do plugin, com escolha por override do usuario, piso heuristico ou escalada adaptativa comprovada por amostra comparavel. Nunca reduza o piso; `adaptive` exige `agyModelEvidence`. `cc-antigravity-plugin:antigravity-agent` e **somente leitura** (analise, planejamento, review); jamais delegue implementacao a ele.
 
-Quando a task listar **dois ou mais entregaveis independentes** (ex.: dois relatorios HTML, tres componentes React sem dependencia mutua), passe tambem `--parallel` para ativar o fan-out nativo de subagentes Gemini. O AGY decide a contagem, executa concorrentemente e agrega os resultados. Ao final, reporte os Conversation IDs de cada subagente em `subagents-context.md`.
+Quando a task listar **dois ou mais entregaveis independentes** (ex.: dois relatorios HTML, tres componentes React sem dependencia mutua), passe tambem `--parallel` para ativar o fan-out nativo de subagentes Gemini. O AGY decide a contagem, executa concorrentemente e agrega os resultados. Ao final, reporte os Conversation IDs de cada subagente em `report/subagents-context.md`.
 
 Quando o usuario passar `--agy-subagent-model <modelo>`, repasse como `--subagent-model <modelo>` ao bridge (implica `--parallel`). Por padrao (`agySubagentModel: inherit`), omita `--subagent-model`; os subagentes usam o mesmo modelo da sessao AGY principal.
 
@@ -94,8 +94,8 @@ Use para o review front-end pos-implementacao (Fase 9), em modo read-only. O AGY
 ## Politica de quota
 
 - `QUOTA_EXHAUSTED` em implementacao Codex: bloquear e pedir decisao ao usuario.
-- `QUOTA_EXHAUSTED` em review back-end Codex: fazer fallback de review interno read-only do orquestrador e salvar em `review-final.md`.
-- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no review front-end AGY: fazer fallback de review interno read-only do orquestrador e salvar em `review-frontend.md`.
+- `QUOTA_EXHAUSTED` em review back-end Codex: fazer fallback de review interno read-only do orquestrador e salvar em `review/review-final.md`.
+- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no review front-end AGY: fazer fallback de review interno read-only do orquestrador e salvar em `review/review-frontend.md`.
 - `QUOTA_EXAUSTED` em implementacao Antigravity/AGY: seguir a politica de fallback descrita em `workflow.md`.
 - `AUTH_REQUIRED`, `AGY_MISSING` e `TIMEOUT` em Antigravity/AGY: tratar como bloqueios operacionais e registrar evidencia.
 

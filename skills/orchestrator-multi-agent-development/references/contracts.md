@@ -12,7 +12,7 @@ Use um arquivo por task `FULLSTACK` ou por par dependente front-back quando a cl
 
 ## Quando `contractRequired` deve ser `yes`
 
-Marque `contractRequired: yes` em `tasks-classification.md` (Fase 2) quando houver qualquer um destes casos:
+Marque `contractRequired: yes` em `plan/tasks-classification.md` (Fase 2) quando houver qualquer um destes casos:
 
 - endpoint novo ou alterado;
 - resposta JSON consumida por tela, hook, store, form ou componente;
@@ -80,7 +80,7 @@ Antes de delegar em paralelo, confirme:
 Se algum subagente descobrir necessidade de mudanca:
 
 1. nao deixe o agente mudar unilateralmente;
-2. marque `NEEDS_SYNC` em `monitoring.md`;
+2. marque `NEEDS_SYNC` em `run/monitoring.md`;
 3. atualize o contrato;
 4. preserve a versao anterior em `<arquivo>.previous.md` quando a mudanca for relevante;
 5. notifique todos os agentes dependentes.

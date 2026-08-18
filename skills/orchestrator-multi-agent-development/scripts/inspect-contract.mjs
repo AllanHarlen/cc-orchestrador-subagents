@@ -3,6 +3,7 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
+import { artifactTreePath } from "./lib/artifact-layout.mjs";
 import { boolArg, executeJsonCli, parseArgs, required } from "./lib/cli-utils.mjs";
 import { addValidatedFact, renderProjectMemory } from "./lib/project-knowledge.mjs";
 import {
@@ -76,7 +77,7 @@ function inspect(path, relativePath) {
 function main(argv) {
   const args = parseArgs(argv);
   const root = resolve(args.root ?? process.cwd());
-  const defaultContracts = args.dir ? join(resolve(args.dir), "contracts") : null;
+  const defaultContracts = args.dir ? artifactTreePath(args.dir, "contracts").path : null;
   const inputs = args.path ?? args._[0] ?? (defaultContracts && existsSync(defaultContracts) ? defaultContracts : null);
   if (!inputs) required(args, "path");
   const files = collectInputFiles(root, inputs, { extensions: [".md", ".json"] });

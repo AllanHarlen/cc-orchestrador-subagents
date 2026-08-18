@@ -218,7 +218,7 @@ Se o item 14 do retorno da Secao 2 vier preenchido (nao `N/A`), o orquestrador s
    --generate-image --output-dir <DIR DO label:file DA SUGESTAO> -- "<prompt da sugestao, refinado com sectorContext e paleta do design system>"
    ```
 3. Apos gerar, confirme que o subagente colou o arquivo gerado no componente correspondente (import/`src`/`background-image`) — imagem gerada e nao referenciada em nenhum componente e uma pendencia, nao uma entrega.
-4. Registre em `subagents-context.md`: quais imagens foram sugeridas, quais o usuario aprovou, e o caminho final de cada arquivo gerado.
+4. Registre em `report/subagents-context.md`: quais imagens foram sugeridas, quais o usuario aprovou, e o caminho final de cada arquivo gerado.
 5. Se o usuario nao aprovar nenhuma, registre a recusa e siga sem bloquear a task — imagery e um enriquecimento, nao um requisito obrigatorio, exceto quando o PRD/CA explicitamente exigir imagem de produto/servico.
 
 ## 3. SLOW_CHECKIN
@@ -248,10 +248,10 @@ Revise a implementacao back-end realizada pelos subagentes para a especificacao 
 
 Leia:
 - a especificacao (PRD/spec) ingerida
-- .orchestration/<nome>/tasks-classification.md
-- .orchestration/<nome>/waves.md
+- .orchestration/<nome>/plan/tasks-classification.md
+- .orchestration/<nome>/plan/waves.md
 - .orchestration/<nome>/contracts/
-- .orchestration/<nome>/implementation-report.md secao 13 (matriz de rastreabilidade RF/CA -> evidencia)
+- .orchestration/<nome>/report/implementation-report.md secao 13 (matriz de rastreabilidade RF/CA -> evidencia)
 - diff git da branch atual (apenas arquivos back-end)
 
 Verifique:
@@ -278,7 +278,7 @@ Retorne:
    (informe N/A se a plataforma nao expor o dado)
 ```
 
-Salve o resultado em `review-final.md`.
+Salve o resultado em `review/review-final.md`.
 
 ## 5. Review front-end pos-implementacao - Antigravity (AGY) (Fase 9)
 
@@ -301,9 +301,9 @@ Revise a implementacao front-end realizada pelos subagentes para a especificacao
 
 Leia:
 - a especificacao (PRD/spec) ingerida
-- .orchestration/<nome>/tasks-classification.md
+- .orchestration/<nome>/plan/tasks-classification.md
 - .orchestration/<nome>/contracts/
-- .orchestration/<nome>/implementation-report.md secao 13 (matriz de rastreabilidade RF/CA -> evidencia)
+- .orchestration/<nome>/report/implementation-report.md secao 13 (matriz de rastreabilidade RF/CA -> evidencia)
 - diff/arquivos front-end alterados
 
 Verifique:
@@ -344,9 +344,9 @@ Retorne:
    (informe N/A se a plataforma nao expor o dado)
 ```
 
-Salve o resultado em `review-frontend.md`.
+Salve o resultado em `review/review-frontend.md`.
 
-> Se o AGY retornar `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING` ou `TIMEOUT`, o orquestrador faz review interno read-only do front-end e registra o fallback em `review-frontend.md`.
+> Se o AGY retornar `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING` ou `TIMEOUT`, o orquestrador faz review interno read-only do front-end e registra o fallback em `review/review-frontend.md`.
 
 ## 6. Ajustes pontuais - Codex
 
@@ -369,7 +369,7 @@ Se houver rede externa bloqueada, pacote ausente no cache local ou escrita fora 
 
 ## 7. Fallback de review sem agente disponivel
 
-- Review back-end com Codex em `QUOTA_EXHAUSTED`: o orquestrador faz review interno read-only, salva em `review-final.md` e deixa claro que foi fallback do orquestrador.
-- Review front-end com AGY em `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT`: o orquestrador faz review interno read-only, salva em `review-frontend.md` e deixa claro que foi fallback do orquestrador.
+- Review back-end com Codex em `QUOTA_EXHAUSTED`: o orquestrador faz review interno read-only, salva em `review/review-final.md` e deixa claro que foi fallback do orquestrador.
+- Review front-end com AGY em `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT`: o orquestrador faz review interno read-only, salva em `review/review-frontend.md` e deixa claro que foi fallback do orquestrador.
 
 Em nenhum caso o orquestrador redelega implementacao por conta propria nem troca modelo a esmo.

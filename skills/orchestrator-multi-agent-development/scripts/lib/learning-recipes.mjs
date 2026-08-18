@@ -6,8 +6,9 @@ import {
   renameSync,
   writeFileSync,
 } from "node:fs";
-import { basename, relative, sep, join, resolve } from "node:path";
+import { basename, dirname, relative, sep, join, resolve } from "node:path";
 
+import { artifactWritePath, resolveArtifact } from "./artifact-layout.mjs";
 import {
   findDurableRunEvent,
   openKnowledgeStore,
@@ -138,9 +139,9 @@ function evidenceForTask(events, taskId) {
 }
 
 function artifactEvidence(directory, fileName) {
-  const path = join(directory, fileName);
-  if (!existsSync(path)) return null;
-  return `file:${fileName}:sha256:${sha256(readFileSync(path)).slice(0, 20)}`;
+  const resolved = resolveArtifact(directory, fileName);
+  if (!resolved) return null;
+  return `file:${resolved.relativePath}:sha256:${sha256(readFileSync(resolved.path)).slice(0, 20)}`;
 }
 
 export function analyzeRunLearning(artifactDir) {
@@ -298,9 +299,11 @@ export function runLearningPhase(projectRoot, artifactDir, options = {}) {
   const analysis = analyzeRunLearning(directory);
   const now = options.now ?? new Date().toISOString();
   const persisted = upsertLessons(root, analysis.candidates, now);
-  const reportPath = join(directory, "learning-report.md");
+  const report = artifactWritePath(directory, "learning-report.md", analysis.state.layoutVersion);
+  const reportPath = report.path;
+  mkdirSync(dirname(reportPath), { recursive: true });
   atomicWrite(reportPath, renderLearningReport(analysis.state, analysis.candidates));
-  const reportEvidence = `file:learning-report.md:sha256:${sha256(readFileSync(reportPath)).slice(0, 20)}`;
+  const reportEvidence = `file:${report.relativePath}:sha256:${sha256(readFileSync(reportPath)).slice(0, 20)}`;
   updateCompletionGate(directory, "learning", "DONE", {
     projectRoot: root,
     actor: "learning-engine",

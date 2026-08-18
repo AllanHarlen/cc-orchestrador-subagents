@@ -56,7 +56,7 @@
   - Front-end: `cc-antigravity-plugin:antigravity-coder` (AGY com `--model <agyModel>`)
 - **Contrato:** `<contracts/T1.md | N/A>`
 - **Expected files / validation plan / allowed paths:** `<listas>`
-- **Evidence IDs / executor result:** `<lista>` / `<executor-results/...|N/A>`
+- **Evidence IDs / executor result:** `<lista>` / `<run/executor-results/...|N/A>`
 - **Wire format validado:** `<sim | nao | pendente>`
 - **Riscos atuais:** `<texto>`
 - **Supervisão operacional:**
@@ -82,8 +82,8 @@
 - `QUOTA_EXAUSTED` no Antigravity/AGY em implementação: registrar evidência e avaliar fallback para Codex.
 - `AUTH_REQUIRED`, `AGY_MISSING` e `TIMEOUT` no Antigravity/AGY: registrar evidência, marcar bloqueio operacional e definir a próxima ação.
 - `QUOTA_EXHAUSTED` no Codex em implementação ou ajuste: marcar `BLOCKED` e pedir decisão.
-- `QUOTA_EXHAUSTED` no Codex em review back-end: registrar fallback de review interno read-only do orquestrador em `review-final.md`.
-- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no AGY em review front-end (`gemini-3.1-pro-high`): registrar fallback de review interno read-only do orquestrador em `review-frontend.md`.
+- `QUOTA_EXHAUSTED` no Codex em review back-end: registrar fallback de review interno read-only do orquestrador em `review/review-final.md`.
+- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no AGY em review front-end (`gemini-3.1-pro-high`): registrar fallback de review interno read-only do orquestrador em `review/review-frontend.md`.
 
 ## Política de sandbox Codex
 

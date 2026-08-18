@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { artifactTreePath } from "./artifact-layout.mjs";
 import { loadRun, updateTaskStatus } from "./orchestration-state.mjs";
 import { stableJson } from "./sqlite-store.mjs";
 
@@ -154,7 +155,7 @@ function writeJsonAtomic(path, value) {
 export function persistIntelligenceEvidence(result, options = {}) {
   if (!options.artifactDir) return null;
   const artifactDir = resolve(options.artifactDir);
-  const evidenceDir = join(artifactDir, "evidence");
+  const evidenceDir = artifactTreePath(artifactDir, "evidence").path;
   const path = join(evidenceDir, `${result.evidenceId}.json`);
   writeJsonAtomic(path, result);
   let task = null;

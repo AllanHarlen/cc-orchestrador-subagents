@@ -20,9 +20,9 @@ Inicia o **Orquestrador Multiagentico de Desenvolvimento** a partir de um PRD ou
 7. Integracao recuperavel e validacao deterministica de diff/escopo/wire/testes
 8. Review back-end pos-implementacao (`codex:codex-rescue` com `--effort high`; somente back-end)
 9. Review front-end pos-implementacao (`cc-antigravity-plugin:antigravity-agent` com `--model gemini-3.1-pro-high`; ignorar se nao houver front-end)
-10. `workflow-log.md` + `subagents-context.md` + `implementation-report.md` + handoff
+10. `report/workflow-log.md` + `report/subagents-context.md` + `report/implementation-report.md` + handoff
 11. Entrega duravel ainda nao publicada
-12. `learning-report.md`, candidate lessons, history/telemetry, audit terminal e publicacao
+12. `learning/learning-report.md`, candidate lessons, history/telemetry, audit terminal e publicacao
 
 Cada run mantem `.orchestration/<slug>/state.json` e `events.jsonl`; o projeto mantem `.orchestrator/project-memory.md`, `knowledge.db`, `history.db`, `telemetry.jsonl` e `learned/`. Toda transicao terminal e persistida antes de ser anunciada; uma task cujo resultado nao puder ser determinado apos interrupcao fica `UNKNOWN`, nunca `FAILED` por suposicao. Memoria aceita apenas fatos com fonte comprovada, e learning nunca edita a skill automaticamente.
 
@@ -68,8 +68,8 @@ Modelos permitidos para `--agy-model` e `--agy-subagent-model`:
 Politica de cota:
 
 - `QUOTA_EXHAUSTED` em implementacao, ajuste pontual ou handoff via Codex: marque `BLOCKED`, registre evidencia e peca decisao ao usuario.
-- `QUOTA_EXHAUSTED` em review back-end Codex: faca fallback de review read-only pelo proprio orquestrador, sem editar codigo produtivo, e salve o resultado em `review-final.md`.
-- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` em review front-end AGY: faca fallback de review read-only pelo proprio orquestrador, sem editar codigo produtivo, e salve o resultado em `review-frontend.md`.
+- `QUOTA_EXHAUSTED` em review back-end Codex: faca fallback de review read-only pelo proprio orquestrador, sem editar codigo produtivo, e salve o resultado em `review/review-final.md`.
+- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` em review front-end AGY: faca fallback de review read-only pelo proprio orquestrador, sem editar codigo produtivo, e salve o resultado em `review/review-frontend.md`.
 - `QUOTA_EXAUSTED` no Antigravity/AGY em implementacao: registre o status cru retornado pelo bridge, o `reason`, o `model` e o retry sugerido `--continue`; avalie fallback para Codex apenas quando for seguro e documente o handoff.
 - `AUTH_REQUIRED` no Antigravity/AGY: marque bloqueio operacional e oriente o usuario a rodar `agy` interativamente uma vez.
 - `AGY_MISSING` no Antigravity/AGY: marque bloqueio operacional e mostre a remediacao de instalacao.
@@ -77,7 +77,7 @@ Politica de cota:
 
 Politica de sandbox Codex:
 
-- Rede externa bloqueada para pacote/restore, pacote ausente no cache local ou `UnauthorizedAccessException` fora do working directory permitido devem virar `BLOCKED`, com evidencia em `monitoring.md`, `workflow-log.md` e `subagents-context.md`.
+- Rede externa bloqueada para pacote/restore, pacote ausente no cache local ou `UnauthorizedAccessException` fora do working directory permitido devem virar `BLOCKED`, com evidencia em `run/monitoring.md`, `report/workflow-log.md` e `report/subagents-context.md`.
 - Nao tente contornar esses limites com retries longos, troca arbitraria de ferramenta ou escrita fora do escopo.
 - Para UI sem dependencia de rede, mantenha Antigravity/AGY como rota primaria; Codex so assume front-end com fallback documentado e escrita permitida.
 
@@ -107,7 +107,7 @@ Subcomandos reservados:
 Para trabalho independente entre turnos, o modo recomendado e envolver a demanda em `/goal`.
 
 ```text
-/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para orquestrar a especificacao: <PRD/spec>. Condicao de conclusao: preflight e SQLite/FTS5 OK; Project Memory auditada; especificacao ingerida; tasks classificadas com evidence plan/scope e roteamento validado; worktrees/lifecycle encerrados ou bloqueios documentados; reviews e E2E aplicaveis executados; reports/handoff e learning-report.md criados; Phase 12 concluida; history/telemetry projetados; audit.complete=true; run DONE e verify OK; so entao resultados e instrucoes publicados; ou pare preservando o estado sem presumir resultado.
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para orquestrar a especificacao: <PRD/spec>. Condicao de conclusao: preflight e SQLite/FTS5 OK; Project Memory auditada; especificacao ingerida; tasks classificadas com evidence plan/scope e roteamento validado; worktrees/lifecycle encerrados ou bloqueios documentados; reviews e E2E aplicaveis executados; reports/handoff e learning/learning-report.md criados; Phase 12 concluida; history/telemetry projetados; audit.complete=true; run DONE e verify OK; so entao resultados e instrucoes publicados; ou pare preservando o estado sem presumir resultado.
 ```
 
 ## Comportamento
@@ -178,7 +178,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-lifecycle.mjs" tick \
   --adapter-config ".orchestrator/executor-control.json"
 ```
 
-O manager persiste o retorno redigido/limitado do executor em `executor-results/` antes de atualizar o state. Sem adapter ou status autoritativo, mantenha `UNKNOWN`; Git/arquivos/testes sao corroboracao, nao substitutos de ownership externo.
+O manager persiste o retorno redigido/limitado do executor em `run/executor-results/` antes de atualizar o state. Sem adapter ou status autoritativo, mantenha `UNKNOWN`; Git/arquivos/testes sao corroboracao, nao substitutos de ownership externo.
 
 Nao redelegue task `UNKNOWN` ate confirmar que a sessao/conversation anterior nao segue ativa e avaliar mudancas parciais. Depois da reconciliacao, rode o preflight; se passar, carregue a skill e continue exatamente de `resumeFromPhase`/`currentWave`. Se o state engine retornar `RUN_NOT_FOUND`, informe o erro e encerre sem criar um run novo implicitamente.
 
@@ -256,7 +256,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-state.mjs" init \
   --slug "<nome>" --dir ".orchestration/<nome>" --phase 1
 ```
 
-Depois de gerar `tasks-classification.md` e `waves.md`, rode `node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs" ".orchestration/<nome>"` ou o caminho equivalente via `${CLAUDE_SKILL_DIR}`. Se falhar, corrija os artefatos antes de delegar.
+Depois de gerar `plan/tasks-classification.md` e `plan/waves.md`, rode `node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs" ".orchestration/<nome>"` ou o caminho equivalente via `${CLAUDE_SKILL_DIR}`. Se falhar, corrija os artefatos antes de delegar.
 
 Depois que o roteamento passar, sincronize tasks/waves no snapshot:
 
@@ -282,13 +282,13 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-state.mjs" audit --dir ".orche
 
 Somente com `audit.complete: true`, todas as tasks/gates/evidencias/artefatos completos e Phase 12 `DONE`, marque `run --status DONE`, rode `verify`, reprojete history/telemetry e publique a mensagem ao usuario. Candidate lessons nunca sao promovidas automaticamente nem alteram `SKILL.md`.
 
-As tasks `FRONTEND_ONLY` e a fatia front-end de `FULLSTACK` devem registrar `agyModel` e `agyModelSource: user|heuristic|adaptive` em `tasks-classification.md` e `waves.md`; `adaptive` sem `agyModelEvidence` e invalido.
+As tasks `FRONTEND_ONLY` e a fatia front-end de `FULLSTACK` devem registrar `agyModel` e `agyModelSource: user|heuristic|adaptive` em `plan/tasks-classification.md` e `plan/waves.md`; `adaptive` sem `agyModelEvidence` e invalido.
 
 Antes de iniciar cada fase e antes de lancar ou redelegar subagentes, faca um gate operacional:
 
 - Se a mensagem mais recente do usuario indicar cancelamento, pausa, reprovacao do plano/contrato ou problema bloqueante, interrompa imediatamente.
 - Nao invoque novos subagentes, nao edite implementacao e nao avance de fase.
-- Atualize `monitoring.md`, `workflow-log.md` e `subagents-context.md` com `CANCELLED` ou `PAUSED` quando ja houver artefatos.
+- Atualize `run/monitoring.md`, `report/workflow-log.md` e `report/subagents-context.md` com `CANCELLED` ou `PAUSED` quando ja houver artefatos.
 
 ### Passo 5 - Reportar updates
 
@@ -301,7 +301,7 @@ Mantenha o usuario informado com mensagens curtas:
 - `especificacao ingerida; classificando tasks em .orchestration/<nome>`
 - `wave <N>: <X> tasks isoladas em worktrees e <Y> serializadas por overlap/escopo`
 - `lancei <N> subagentes em paralelo para a onda <N>, aviso quando completarem`
-- no fim: caminhos do `workflow-log.md`, `implementation-report.md`, `subagents-context.md` e `learning-report.md` + resumo e instrucoes de negocio
+- no fim: caminhos do `report/workflow-log.md`, `report/implementation-report.md`, `report/subagents-context.md` e `learning/learning-report.md` + resumo e instrucoes de negocio
 - no fim: confirme `audit.complete: true`, Phase 12, history/telemetry projetados, `runId` terminal e `verify` aprovado
 
 ## Quando o usuario invocar sem argumento

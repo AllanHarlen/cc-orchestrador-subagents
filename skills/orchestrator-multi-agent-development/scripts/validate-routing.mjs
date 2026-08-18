@@ -10,6 +10,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
+import {
+  ARTIFACT_LAYOUT_VERSION,
+  artifactRelativePath,
+  resolveArtifact,
+} from "./lib/artifact-layout.mjs";
+
 const CATEGORIES = [
   "BACKEND_ONLY",
   "FRONTEND_ONLY",
@@ -60,10 +66,13 @@ const LOW_TIER_AGY_MODELS = new Set(["gemini-3.5-flash-low", "gemini-3.5-flash-m
 const DESIGN_SYSTEM_SIGNAL_RE = /\b(tokens\.css|components\.html|design-systems?\/|DESIGN\.md|design[- ]system)\b/i;
 
 const targetDir = resolve(process.argv[2] ?? process.cwd());
-const requiredFiles = [
-  join(targetDir, "tasks-classification.md"),
-  join(targetDir, "waves.md"),
-];
+// Aceita layout 1 (artefatos na raiz da run) e layout 2 (`plan/`). Quando o
+// arquivo nao existe em nenhum dos dois, o erro aponta o caminho do layout atual.
+const requiredFiles = ["tasks-classification.md", "waves.md"].map(
+  (name) =>
+    resolveArtifact(targetDir, name)?.path ??
+    join(targetDir, ...artifactRelativePath(name, ARTIFACT_LAYOUT_VERSION).split("/")),
+);
 
 const errors = [];
 const warnings = [];

@@ -32,12 +32,12 @@ Codex and Antigravity/AGY enter as specialized sub-agents:
 - **Phase 5 - Parallel delegation:** creates eligible worktrees, acquires leases, and dispatches tasks; Codex receives no `--model`, while AGY receives an explainable selected model.
 - **Phase 6 - Lifecycle Manager:** polls adapters, persists results before consuming them, renews heartbeat/lease on observable activity, and handles stall/grace/interrupt/retry/cancel without assuming outcomes.
 - **Phase 7 - Integration:** serially integrates worktrees and uses deterministic scripts for diff, scope, API/UI, wire format, and validation results before category-specific corrections.
-- **Phase 8 - Back-end post-implementation review:** delegates final read-only review to Codex with `--effort high`, **back-end only**, and saves `review-final.md`. If Codex runs out of quota, the Orchestrator itself does internal review. Skipped when there is no back-end.
-- **Phase 9 - Front-end post-implementation review:** delegates final read-only review to AGY with `--model gemini-3.1-pro-high`, **front-end only**, and saves `review-frontend.md`. If AGY is unavailable, the Orchestrator does internal review. **Skipped when there is no front-end task.**
+- **Phase 8 - Back-end post-implementation review:** delegates final read-only review to Codex with `--effort high`, **back-end only**, and saves `review/review-final.md`. If Codex runs out of quota, the Orchestrator itself does internal review. Skipped when there is no back-end.
+- **Phase 9 - Front-end post-implementation review:** delegates final read-only review to AGY with `--model gemini-3.1-pro-high`, **front-end only**, and saves `review/review-frontend.md`. If AGY is unavailable, the Orchestrator does internal review. **Skipped when there is no front-end task.**
 - **Phase 9.5 - Browser E2E:** required whenever the run has front-end. Drives critical flows in a real browser and verifies CORS, tenant/host resolution, response casing, UI state and the final user-visible effect. A same-origin topology waives the gate explicitly, with a recorded reason — never by silent derivation.
-- **Phase 10 - Final reports:** creates `workflow-log.md`, `subagents-context.md` and `implementation-report.md`, consolidating timeline, contracts, validations, sub-agents, AGY Conversation IDs and delivery status.
+- **Phase 10 - Final reports:** creates `report/workflow-log.md`, `report/subagents-context.md` and `report/implementation-report.md`, consolidating timeline, contracts, validations, sub-agents, AGY Conversation IDs and delivery status.
 - **Phase 11 - Durable delivery:** prepares and persists the summary/instructions without announcing success before final gates.
-- **Phase 12 - Learning and closure:** creates `learning-report.md` and candidate lessons without automatic promotion, projects history/telemetry, requires `audit.complete`, closes/verifies the run, and only then publishes delivery.
+- **Phase 12 - Learning and closure:** creates `learning/learning-report.md` and candidate lessons without automatic promotion, projects history/telemetry, requires `audit.complete`, closes/verifies the run, and only then publishes delivery.
 
 Coordination artifacts and final reports live under `.orchestration/<name>/`.
 
@@ -219,7 +219,7 @@ The **front-end review (Phase 9)** always uses `gemini-3.1-pro-high`, regardless
 
 When a front-end task produces two or more independent deliverables (e.g., three React components, two HTML reports), the orchestrator can activate AGY's native fan-out via `DefineSubagent` inside the prompt.
 
-The mechanism is purely intra-task: it remains 1 task = 1 AGY delegation; `monitoring.md`, contracts and `validate-routing.mjs` remain intact.
+The mechanism is purely intra-task: it remains 1 task = 1 AGY delegation; `run/monitoring.md`, contracts and `validate-routing.mjs` remain intact.
 
 ### New Flags
 
@@ -248,7 +248,7 @@ The orchestrator turns on `--parallel` automatically when a `FRONTEND_ONLY` task
 
 Dependent deliverables or those sharing state remain in the single AGY sub-agent, without `--parallel`.
 
-### New Fields in `tasks-classification.md` and `waves.md` (AGY Tasks)
+### New Fields in `plan/tasks-classification.md` and `plan/waves.md` (AGY Tasks)
 
 - `agyParallel: yes|no`
 - `agyParallelSource: user|heuristic`
@@ -331,9 +331,9 @@ Before delegating any task to AGY, the orchestrator assembles the complete promp
 
 1. Divides the task's deliverables into two independent groups (A and B).
 2. Creates subtasks `<ID>-a` and `<ID>-b`, each covering one group.
-3. Updates `tasks-classification.md` and `waves.md`.
+3. Updates `plan/tasks-classification.md` and `plan/waves.md`.
 4. Reassembles the two prompts and validates that each is below the limit.
-5. Records the split in `monitoring.md` and `workflow-log.md` with original size and reason.
+5. Records the split in `run/monitoring.md` and `report/workflow-log.md` with original size and reason.
 
 If the task is monolithic and indivisible by deliverables, the orchestrator tries to reduce `Relevant files and modules` and, as a last resort, records `promptOverflow: true` and requests user decision.
 
@@ -354,7 +354,7 @@ The orchestrator does not continue editing productive code on its own.
 If `QUOTA_EXHAUSTED`:
 
 - the orchestrator does internal read-only review;
-- saves the result in `review-final.md`;
+- saves the result in `review/review-final.md`;
 - does not edit productive code.
 
 ### AGY on Front-end Review
@@ -362,7 +362,7 @@ If `QUOTA_EXHAUSTED`:
 If `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING` or `TIMEOUT`:
 
 - the orchestrator does internal read-only review;
-- saves the result in `review-frontend.md`;
+- saves the result in `review/review-frontend.md`;
 - does not edit productive code.
 
 ### Antigravity/AGY on Implementation

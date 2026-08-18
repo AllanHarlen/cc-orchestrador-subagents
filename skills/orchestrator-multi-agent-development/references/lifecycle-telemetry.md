@@ -16,7 +16,7 @@ Status Codex/AGY são normalizados por adapters conservadores. Payload desconhec
 
 Placeholders disponíveis em `args` e `cwd`: `taskId`, `executor`, `sessionId`, `conversationId`, `attempt`, `projectRoot`, `artifactDir`, `reason`. `command` é fixo, nunca interpolado; a execução usa `shell: false`; `cwd` deve permanecer dentro do projeto. Timeout, buffer e o resultado estruturado devolvido ao contexto têm limites explícitos (o último, 128 KiB). stdout JSON é preferido; stderr/output são limitados e secrets conhecidos são redigidos. O schema está em `assets/executor-control-config.schema.json`.
 
-O lifecycle persiste a resposta em `executor-results/` antes de heartbeat/reconcile. `interrupt` e `retry` exigem adapter ou confirmação explícita de uma ação externa já realizada.
+O lifecycle persiste a resposta em `run/executor-results/` antes de heartbeat/reconcile. `interrupt` e `retry` exigem adapter ou confirmação explícita de uma ação externa já realizada.
 
 ## Scheduler
 

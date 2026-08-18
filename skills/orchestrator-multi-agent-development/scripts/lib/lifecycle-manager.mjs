@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
+import { artifactExists, artifactWritePath } from "./artifact-layout.mjs";
 import { adaptProbeSet } from "./executor-adapters.mjs";
 import {
   executeExecutorControl,
@@ -213,7 +214,8 @@ export function tickLifecycle(artifactDir, options = {}) {
   const directory = resolve(artifactDir);
   const projectRoot = resolve(options.projectRoot ?? join(directory, "..", ".."));
   const { probe, controlResults } = normalizedProbe(directory, projectRoot, options);
-  const probePath = join(directory, "lifecycle-probe.json");
+  const probePath = artifactWritePath(directory, "lifecycle-probe.json").path;
+  mkdirSync(dirname(probePath), { recursive: true });
   // Hermes-style delivery invariant: persist the normalized external result
   // before any state transition or user-facing recommendation consumes it.
   writeAtomic(probePath, probe);
@@ -469,5 +471,5 @@ export async function watchLifecycle(artifactDir, options = {}) {
 }
 
 export function lifecycleProbeExists(artifactDir) {
-  return existsSync(join(resolve(artifactDir), "lifecycle-probe.json"));
+  return artifactExists(artifactDir, "lifecycle-probe.json");
 }

@@ -31,7 +31,7 @@ node "${CLAUDE_SKILL_DIR}/scripts/inspect-project.mjs" --root . --persist-knowle
 node "${CLAUDE_SKILL_DIR}/scripts/orchestrator-knowledge.mjs" audit --root .
 ```
 
-Leia `project-memory.md` junto com PRD/handoff antes de gerar `tasks-classification.md`. A projeção é limitada por quantidade/tamanho; detalhes antigos permanecem pesquisáveis, não no prompt permanente.
+Leia `project-memory.md` junto com PRD/handoff antes de gerar `plan/tasks-classification.md`. A projeção é limitada por quantidade/tamanho; detalhes antigos permanecem pesquisáveis, não no prompt permanente.
 
 ## Comandos de fatos
 

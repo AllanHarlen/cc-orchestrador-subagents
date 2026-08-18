@@ -64,6 +64,23 @@
 - **Limites de sandbox Codex:** `<N/A | nenhum | rede externa bloqueada | pacote ausente no cache | escrita fora do working directory>`
 - **Ação do orquestrador:** `<integrado | redelegado | contrato ajustado | decisão do usuário | pendente>`
 
+## Uso de Tokens por Agente
+
+> Agregado dos campos **Tokens usados** dos blocos acima, uma linha por agente/papel. A mesma consolidação vai para `report/implementation-report.md` seção 11a; os dois precisam fechar no mesmo total.
+
+| Agente | Papel | Tasks | input | output | cache_read | total |
+|---|---|---|---|---|---|---|
+| `codex:codex-rescue` | implementacao back-end (`--effort medium`) | `<IDs>` | `<N>` | `<N>` | `<N>` | `<N>` |
+| `cc-antigravity-plugin:antigravity-coder` | implementacao front-end (`--model <agyModel>`) | `<IDs>` | `<N>` | `<N>` | `<N>` | `<N>` |
+| `codex:codex-rescue` | review back-end (`--effort high`) | `<N rodadas>` | `<N>` | `<N>` | `<N>` | `<N>` |
+| `cc-antigravity-plugin:antigravity-agent` | review front-end (`gemini-3.1-pro-high`) | `<N rodadas>` | `<N>` | `<N>` | `<N>` | `<N>` |
+| orquestrador | coordenacao, integracao e Fase 9.5 | `<N/A>` | `<N>` | `<N>` | `<N>` | `<N>` |
+| **Consolidado** | | | `<N>` | `<N>` | `<N>` | `<N>` |
+
+- `N/A` para dado nao reportado pelo agente ou nao exposto pela plataforma; nunca `0` no lugar de ausente.
+- Com `agyParallel: yes`, o total do AGY e o agregado da sessao (inclui os subagentes Gemini nativos); registre o numero de subagentes na coluna Tasks em vez de somar por fora.
+- Rodadas de review repetidas por `REPROVADO` somam na mesma linha; registre quantas foram.
+
 ## Decisões Cruzadas Entre Subagentes
 
 > Use quando back-end/front-end divergirem ou quando um handoff mudar a execução.

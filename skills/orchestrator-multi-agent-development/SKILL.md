@@ -18,7 +18,7 @@ A especificacao chega por **duas vias** (ver `references/handoff-contract.md`):
 - **Modo independente:** o usuario fornece a demanda/PRD/spec direto via `/orquestrador "..."`, mencao de arquivo (`@arquivo`) ou envio do PRD/spec.
 - **Modo conjunto (Pensador → Orchestrador):** o Pensador ja produziu os artefatos. Na Fase 1, antes de pedir a especificacao ao usuario, procure `.pensador/*/handoff.json` (`stage: pensador`, `status: DONE`). Se existir, ingira PRD/Spec + `api-contract` + `design-system-files` como fonte da verdade e correlacione pelo `slug`; grave seus proprios artefatos em `.orchestration/<slug>/`. Ver Fase 1 em `references/workflow.md`.
 
-Ao concluir, o orquestrador grava um `handoff.json` em `.orchestration/<slug>/` (secoes 4-5 do handoff contract) para o Executor consumir na etapa de correcao e ajustes finos.
+Ao concluir, o orquestrador grava um `report/handoff.json` em `.orchestration/<slug>/` (secoes 4-5 do handoff contract) para o Executor consumir na etapa de correcao e ajustes finos.
 
 ## Regras centrais
 
@@ -38,7 +38,7 @@ Ao concluir, o orquestrador grava um `handoff.json` em `.orchestration/<slug>/` 
 14. Quando toda a atividade for `FRONTEND_ONLY` (todas as tasks classificadas como tal), o Codex nao participa do fluxo: a Fase 8 (review back-end) e ignorada e o review fica inteiramente com o AGY na Fase 9.
 15. **Design system (Open Design) e contrato visual, nao decoracao.** Quando a especificacao tiver design system — `design-system.md` (modo PRD) ou `design.md` + `specs/ui-design-system/spec.md` (modo Spec OpenSpec) — o orquestrador primeiro **materializa** os arquivos verbatim do Pensador (`design-system-files`, em `.pensador/<slug>-vN/design-systems/<id>/`) para o alvo real via `materializeInto` (ex.: `packages/ui/design-systems/<id>/` — `tokens.css`, `components.html`, `preview/`; ver Fase 4.0 e `references/handoff-contract.md` secao 6). Em seguida **passa os caminhos materializados no prompt de toda task front-end** e exige que o AGY **consuma `tokens.css` (sem inventar tokens)** e bata os componentes com `components.html`. Na Fase 9, o review aplica o **gate de design**: `tokens.css` consumido via `var(--*)`, accent contido (≤ 2x/pagina), telas-chave conferidas contra o diretorio `preview/` (os arquivos variam por system, dos ~150 curados: `colors.html`, `spacing.html`, `typography.html` — so 1 system (`default`) tem `app.html`), anti-padroes da secao 9 ausentes; violacao de requisito explicito e BLOQUEANTE.
 16. **Execucao continua ate a conclusao integral do que ja foi elaborado — sem corte unilateral de escopo, sem pausa para perguntar sobre fasear.** Na Fase 1.2, extraia da especificacao **todas** as tasks implicadas — nunca reduza para uma "primeira onda", "fundacao" ou MVP que o orquestrador julgue razoavel para uma unica execucao. A decisao de escopo ja foi tomada rio acima (pelo Pensador, na integracao Pensador → Orquestrador — o Pensador ja conduziu a entrevista de descoberta com o usuario no modo conjunto —, ou pelo proprio usuario ao escrever/fornecer o PRD/spec no modo independente) — o papel do orquestrador e **implementar o que ja foi decidido ate o fim**, nao redecidir o tamanho do trabalho nem pausar no meio para confirmar se deve continuar. Quando a especificacao gerar tasks suficientes para multiplas ondas de execucao, o orquestrador monta as ondas (Fase 3) e as executa **sequencialmente ate a ultima**, sem parar entre elas para perguntar ao usuario se deve prosseguir. Pausas so acontecem por bloqueio real: lacuna bloqueante da Fase 1.3, bloqueio de sandbox/quota (secoes dedicadas deste documento), ou reprovacao em review (Fase 8/9, que aciona o loop de correcao da Fase 7 antes de seguir). Reducao de escopo so e aceitavel quando o **proprio usuario** pedir explicitamente, na mensagem que invocou o orquestrador — nunca por iniciativa do orquestrador.
-17. **Verificacao E2E no navegador real e OBRIGATORIA antes de qualquer "APROVADO" quando front-end e back-end sao deploys/origens separados.** `dotnet build`, `npm run build`, `tsc`, `curl` e leitura de codigo **NAO provam que o produto funciona** — sao cegos a uma classe inteira de defeitos de integracao que so aparecem quando um navegador real dirige a app rodando. Falhas reais observadas em producao que passaram por 3 rodadas de review "APROVADO" e so foram pegas com o Playwright MCP: **(a) CORS ausente** — o back respondia 200 no `curl`, mas o browser bloqueava toda chamada cross-origin no preflight, deixando a vitrine publica inteira quebrada; **(b) resolucao de tenant/host a partir do browser** — o front chamava a API numa origem sem o subdominio do tenant, recebendo `400 tenant_required`, algo que o `curl` mascarava porque eu passava o `Host` manualmente; **(c) mismatch de CASING no corpo de resposta** — o back serializava `whatsAppRedirectUrl` e o front lia `whatsappRedirectUrl`; a chamada retornava `200`, o campo vinha `undefined`, e a acao (redirect pro WhatsApp) **falhava silenciosamente sem nenhum erro**. Portanto, na Fase 9.5 (ver `references/workflow.md`), o orquestrador **deve dirigir a app rodando num navegador real** (Playwright MCP ou equivalente) exercitando os fluxos de usuario criticos ponta a ponta e checando: (1) console/network sem erros de CORS; (2) cada `fetch` retorna 2xx **e** a UI reflete o dado real (nao "200 mas tela vazia/silenciosamente quebrada"); (3) casing de cada campo de resposta consumido bate com o TS consumidor; (4) resolucao multi-tenant/host funciona a partir do browser; (5) o efeito final de cada acao acontece de fato (redirect abriu, item apareceu no carrinho, registro apareceu na lista). "APROVADO" sem essa verificacao no navegador e proibido para produto com front separado do back. Se a ferramenta de navegador nao estiver disponivel, registre isso como limitacao explicita e marque a entrega como `PARTIAL` (nao `DONE`) no `handoff.json`, nunca como verificada.
+17. **Verificacao E2E no navegador real e OBRIGATORIA antes de qualquer "APROVADO" quando front-end e back-end sao deploys/origens separados.** `dotnet build`, `npm run build`, `tsc`, `curl` e leitura de codigo **NAO provam que o produto funciona** — sao cegos a uma classe inteira de defeitos de integracao que so aparecem quando um navegador real dirige a app rodando. Falhas reais observadas em producao que passaram por 3 rodadas de review "APROVADO" e so foram pegas com o Playwright MCP: **(a) CORS ausente** — o back respondia 200 no `curl`, mas o browser bloqueava toda chamada cross-origin no preflight, deixando a vitrine publica inteira quebrada; **(b) resolucao de tenant/host a partir do browser** — o front chamava a API numa origem sem o subdominio do tenant, recebendo `400 tenant_required`, algo que o `curl` mascarava porque eu passava o `Host` manualmente; **(c) mismatch de CASING no corpo de resposta** — o back serializava `whatsAppRedirectUrl` e o front lia `whatsappRedirectUrl`; a chamada retornava `200`, o campo vinha `undefined`, e a acao (redirect pro WhatsApp) **falhava silenciosamente sem nenhum erro**. Portanto, na Fase 9.5 (ver `references/workflow.md`), o orquestrador **deve dirigir a app rodando num navegador real** (Playwright MCP ou equivalente) exercitando os fluxos de usuario criticos ponta a ponta e checando: (1) console/network sem erros de CORS; (2) cada `fetch` retorna 2xx **e** a UI reflete o dado real (nao "200 mas tela vazia/silenciosamente quebrada"); (3) casing de cada campo de resposta consumido bate com o TS consumidor; (4) resolucao multi-tenant/host funciona a partir do browser; (5) o efeito final de cada acao acontece de fato (redirect abriu, item apareceu no carrinho, registro apareceu na lista). "APROVADO" sem essa verificacao no navegador e proibido para produto com front separado do back. Se a ferramenta de navegador nao estiver disponivel, registre isso como limitacao explicita e marque a entrega como `PARTIAL` (nao `DONE`) no `report/handoff.json`, nunca como verificada.
 18. **Toda execucao e uma state machine persistente.** Inicialize `state.json`/`events.jsonl` assim que o slug for conhecido, persista cada fase/dispatch/heartbeat/resultado via `scripts/orchestration-state.mjs` e verifique a integridade antes da entrega. O event log e gravado antes do snapshot; nao edite esses arquivos manualmente.
 19. **Resultado indeterminado e `UNKNOWN`, nunca falha presumida.** Em `/orchestrator resume`, tasks que ficaram `RUNNING` passam primeiro a `UNKNOWN`; reconcilie status do executor, Git, arquivos e validacoes antes de decidir `DONE`, `FAILED`, `BLOCKED` ou reexecucao. Git diff/arquivo existente isoladamente nao prova sucesso.
 20. **Project Memory aceita somente fatos comprovados.** Antes da classificacao, carregue `.orchestrator/project-memory.md`; inclua fatos apenas com fonte `FILE`, `CONTRACT`, `TEST` aprovado, `RUN_EVENT` duravel ou declaracao `USER`. Inferencia, probabilidade e teste falhando nunca entram no contexto persistente. Audite fingerprints e conflitos antes de usar a memoria.
@@ -48,7 +48,8 @@ Ao concluir, o orquestrador grava um `handoff.json` em `.orchestration/<slug>/` 
 24. **Paralelismo elegivel usa worktree fisica.** Depois de conhecer `allowedPaths`, rode o planner de worktrees. Tasks sem arquivos compartilhados podem executar em branches/worktrees isoladas; overlap ou escopo desconhecido serializa a execucao. Conflito de integracao fica persistido e nunca e resolvido/abortado silenciosamente.
 25. **Routing adaptativo e conservador e explicavel.** Override do usuario e pisos de fidelidade continuam soberanos. Historico so altera o modelo com amostra comparavel suficiente por `taskType` + `complexity`, ganho mensuravel e evidencia registrada em `agyModelEvidence`; sem isso, use a heuristica.
 26. **Telemetria e metadata-only.** Registre IDs, categorias, modelo, tentativa, duracao, resultado, review, regressao, contadores e fingerprints. Prompt, conteudo, source code, diff, raw output, credentials e secrets sao proibidos, inclusive aninhados. Retencao e dry-run por padrao e cria backup antes de aplicar.
-27. **Learning produz candidatos, nunca regras globais automaticas.** A Fase 12 gera `learning-report.md` a partir de evidencia duravel, sem editar `SKILL.md`. Uma lesson so vira Learned Recipe apos validacao independente; triggers sao deterministas, outcomes sao medidos e o Curator controla `ACTIVE`, `STALE`, `ARCHIVED`, pinning, contradicoes, backup e rollback.
+27. **Learning produz candidatos, nunca regras globais automaticas.** A Fase 12 gera `learning/learning-report.md` a partir de evidencia duravel, sem editar `SKILL.md`. Uma lesson so vira Learned Recipe apos validacao independente; triggers sao deterministas, outcomes sao medidos e o Curator controla `ACTIVE`, `STALE`, `ARCHIVED`, pinning, contradicoes, backup e rollback.
+28. **O diretorio da run tem layout fixo por estagio do workflow.** Toda run nova nasce com `state.layoutVersion: 2` e grava os artefatos agrupados: `plan/` (classificacao e waves), `contracts/`, `run/` (monitoring, probes, `executor-results/`, `prompts/`), `review/` (reviews, E2E, `screenshots/`), `report/` (relatorios e `handoff.json`), `evidence/` e `learning/`. `state.json` e `events.jsonl` ficam sempre na **raiz** da run, porque e por eles que `resume` e a numeracao de `runId` descobrem a run — nunca mova esses dois nem aninhe o diretorio da run dentro de `.orchestration/`. Runs criadas antes desta versao continuam no layout plano (`layoutVersion` ausente) e seguem sendo lidas sem migracao; nao converta uma run existente. Ver `references/persistent-state.md`.
 
 ## Fase 0 - Preflight
 
@@ -110,7 +111,7 @@ Trate como `BLOCKED` operacional no Codex:
 - pacote necessario ausente do cache local;
 - `UnauthorizedAccessException` ou erro equivalente ao escrever fora do working directory permitido.
 
-Nao tente contornar o sandbox com retries longos, troca arbitraria de ferramenta ou escrita em caminho alternativo fora do escopo. Registre a evidencia em `monitoring.md`, `workflow-log.md` e `subagents-context.md`, depois peca decisao do usuario. Para UI sem dependencia de rede, preserve AGY como executor primario.
+Nao tente contornar o sandbox com retries longos, troca arbitraria de ferramenta ou escrita em caminho alternativo fora do escopo. Registre a evidencia em `run/monitoring.md`, `report/workflow-log.md` e `report/subagents-context.md`, depois peca decisao do usuario. Para UI sem dependencia de rede, preserve AGY como executor primario.
 
 ## Politica de quota
 
@@ -121,7 +122,7 @@ Nao tente contornar o sandbox com retries longos, troca arbitraria de ferramenta
 - `AUTH_REQUIRED` no Antigravity/AGY:
   - marque bloqueio operacional;
   - oriente o usuario a rodar `agy` interativamente uma vez;
-  - mantenha a evidencia em `monitoring.md`.
+  - mantenha a evidencia em `run/monitoring.md`.
 - `AGY_MISSING` no Antigravity/AGY:
   - marque bloqueio operacional;
   - registre a remediacao de instalacao;
@@ -137,12 +138,12 @@ Nao tente contornar o sandbox com retries longos, troca arbitraria de ferramenta
 
 - `QUOTA_EXHAUSTED` no Codex em review back-end:
   - faca review interno read-only no orquestrador;
-  - salve em `review-final.md`;
+  - salve em `review/review-final.md`;
   - nao edite codigo produtivo.
 
 - `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING` ou `TIMEOUT` no AGY em review front-end:
   - faca review interno read-only no orquestrador;
-  - salve em `review-frontend.md`;
+  - salve em `review/review-frontend.md`;
   - nao edite codigo produtivo.
 
 ## Estado persistente e retomada
@@ -156,7 +157,7 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" init \
   --slug "<slug>" --dir ".orchestration/<slug>" --phase 1
 ```
 
-Depois de criar `tasks-classification.md` e `waves.md`, execute `sync`. Envolva cada fase com checkpoints `RUNNING`/`DONE`; antes de delegar, registre a task `RUNNING` com executor e identificadores; durante monitoramento, use `heartbeat` apenas para progresso observavel e `sweep` para detectar stall. Persista o estado terminal antes de publicar o retorno na conversa.
+Depois de criar `plan/tasks-classification.md` e `plan/waves.md`, execute `sync`. Envolva cada fase com checkpoints `RUNNING`/`DONE`; antes de delegar, registre a task `RUNNING` com executor e identificadores; durante monitoramento, use `heartbeat` apenas para progresso observavel e `sweep` para detectar stall. Persista o estado terminal antes de publicar o retorno na conversa.
 
 Estados canonicos de task: `PENDING`, `RUNNING`, `DONE`, `FAILED`, `BLOCKED`, `STALLED`, `CANCELLED`, `UNKNOWN`. Registre `QUOTA_*`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT` e `NEEDS_SYNC` em `reasonCode`, mapeados para um estado canonico.
 
@@ -218,7 +219,7 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-learning.mjs" run \
   --dir ".orchestration/<slug>"
 ```
 
-A Fase 12 e completion gate obrigatorio. Ela cria candidates e `learning-report.md`; nao promove recipes automaticamente. Promocao exige `lesson-validate` seguido de `recipe-promote`. O Curator e dry-run por padrao, cria backup antes de mutar e nunca apaga recipes arquivadas. Aplicacao, pin, archive, activate ou rollback sao operacoes explicitas.
+A Fase 12 e completion gate obrigatorio. Ela cria candidates e `learning/learning-report.md`; nao promove recipes automaticamente. Promocao exige `lesson-validate` seguido de `recipe-promote`. O Curator e dry-run por padrao, cria backup antes de mutar e nunca apaga recipes arquivadas. Aplicacao, pin, archive, activate ou rollback sao operacoes explicitas.
 
 ## Contratos front-back
 
@@ -257,13 +258,14 @@ Em stacks C# + TypeScript, destaque explicitamente:
 8. Review back-end pos-implementacao (Codex `--effort high`; ignorar se nao houver back-end)
 9. Review front-end pos-implementacao (AGY `--model gemini-3.1-pro-high`; ignorar se nao houver front-end)
 9.5. **Verificacao E2E no navegador real (Playwright MCP) dos fluxos criticos — OBRIGATORIA quando front e back sao deploys/origens separados; ver regra 17 e `references/workflow.md`**
-10. Gerar `workflow-log.md`, `subagents-context.md`, `implementation-report.md` na raiz de execucao (`.orchestration/<slug>/`); consolidar contagem de tokens por agente; gravar o `handoff.json` do estagio orchestrador (para o Executor) conforme `references/handoff-contract.md`
+10. Gerar `report/workflow-log.md`, `report/subagents-context.md`, `report/implementation-report.md` na raiz de execucao (`.orchestration/<slug>/`); consolidar contagem de tokens por agente; gravar o `report/handoff.json` do estagio orchestrador (para o Executor) conforme `references/handoff-contract.md`
 11. Preparar e persistir a entrega/instrucoes de negocio, sem publicar sucesso antes dos gates finais
-12. Gerar `learning-report.md` e candidate lessons; projetar history/telemetry, auditar gates, marcar a run `DONE`, verificar integridade e somente entao publicar a entrega
+12. Gerar `learning/learning-report.md` e candidate lessons; projetar history/telemetry, auditar gates, marcar a run `DONE`, verificar integridade e somente entao publicar a entrega
 
 ## Checklist minimo
 
 - [ ] preflight executado
+- [ ] artefatos gravados no layout da run (`plan/`, `contracts/`, `run/`, `review/`, `report/`, `evidence/`, `learning/`), com `state.json` e `events.jsonl` na raiz
 - [ ] `state.json` e `events.jsonl` inicializados assim que o slug foi conhecido; event log nunca editado manualmente
 - [ ] cada fase, dispatch, heartbeat relevante e resultado terminal persistido por `orchestration-state.mjs`
 - [ ] tasks interrompidas/reabertas foram marcadas `UNKNOWN` e reconciliadas antes de qualquer reexecucao
@@ -278,9 +280,9 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] todas as tasks implicadas pela especificacao foram extraidas (sem corte unilateral de escopo) e todas as ondas sao executadas sequencialmente ate a conclusao, sem pausa para perguntar sobre fasear
 - [ ] `autoRemediation` verificado
 - [ ] atividade classificada como FRONTEND_ONLY → Codex excluido do fluxo (Fase 8 ignorada; review fica com AGY na Fase 9)
-- [ ] `tasks-classification.md` com `contractRequired`
+- [ ] `plan/tasks-classification.md` com `contractRequired`
 - [ ] cada task possui `expectedFiles` ou `validationPlan`, `allowedPaths`, `complexity`, `contractIds` quando aplicavel e metadados suficientes para reconciliacao/telemetria
-- [ ] `tasks-classification.md` e `waves.md` com agente derivado da categoria
+- [ ] `plan/tasks-classification.md` e `plan/waves.md` com agente derivado da categoria
 - [ ] operacoes com >= 3 reads/greps, loops ou comparacoes mecanicas usaram `scripts/intelligence`; outputs versionados/evidence IDs foram preservados
 - [ ] planner de worktrees executado; tasks com scope sobreposto/indeterminado foram serializadas e tasks isoladas registram base/head/integration/cleanup recuperaveis
 - [ ] `validate-routing.mjs` executado antes da delegacao
@@ -293,23 +295,23 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] bloqueios de sandbox Codex tratados como `BLOCKED` com evidencia
 - [ ] validacao de wire format e serializacao registrada
 - [ ] politica de quota aplicada corretamente
-- [ ] `implementation-report.md` secao 13 (matriz RF/CA -> evidencia) preenchida para **todo** RF/CA do escopo, montada na Fase 7 (nao retroativamente); `// TODO`/placeholder/stub no caminho de um RF do escopo tratado como achado CRITICO nas Fases 8/9, nao como "lacuna conhecida" silenciosa
-- [ ] `review-final.md` criado (review back-end), inclusive em fallback interno; N/A se nao houver back-end
-- [ ] `review-frontend.md` criado (review front-end pelo AGY com gemini-3.1-pro-high), inclusive em fallback interno; N/A se nao houver front-end
+- [ ] `report/implementation-report.md` secao 13 (matriz RF/CA -> evidencia) preenchida para **todo** RF/CA do escopo, montada na Fase 7 (nao retroativamente); `// TODO`/placeholder/stub no caminho de um RF do escopo tratado como achado CRITICO nas Fases 8/9, nao como "lacuna conhecida" silenciosa
+- [ ] `review/review-final.md` criado (review back-end), inclusive em fallback interno; N/A se nao houver back-end
+- [ ] `review/review-frontend.md` criado (review front-end pelo AGY com gemini-3.1-pro-high), inclusive em fallback interno; N/A se nao houver front-end
 - [ ] quando houver design system: prompts front-end carregam os caminhos de `tokens.css`/`components.html`/`design-system.md` (ou `design.md` + `specs/ui-design-system/` no modo Spec) e o diretorio `preview/`
 - [ ] tasks que implementam design system nao usam `gemini-3.5-flash-medium`/`flash-low` (minimo `gemini-3.5-flash-high`; `gemini-3.1-pro-high` quando a fidelidade visual for critica) — **`validate-routing.mjs` reprova automaticamente** tier baixo em task que cita `tokens.css`/`components.html`/`DESIGN.md`/`design-system`
 - [ ] Fase 9 aplicou o gate de design (tokens via `var(--*)`, componentes batendo com estados de `components.html`, **elementos interativos com `:hover`/`:focus` reais via CSS — nunca so `style={{}}` inline**, accent ≤ 2x, diff vs diretorio `preview/`, anti-padroes secao 9); violacao de requisito explicito tratada como BLOQUEANTE
 - [ ] prompts de task front-end carregam `sectorContext` e instruem o `antigravity-coder` a devolver `IMAGE_SUGGESTIONS`; quando o bloco vier preenchido, as opcoes foram apresentadas ao usuario via `AskUserQuestion` (multiSelect) e apenas as aprovadas foram geradas (`--generate-image`) e fiadas nos componentes antes de fechar a task (ver `references/workflow.md` "Imagery/icones")
-- [ ] **Fase 9.5: quando front e back sao separados, os fluxos criticos foram exercitados num navegador real (Playwright MCP), sem erro de CORS, com a UI refletindo dados reais e o efeito final de cada acao confirmado; evidencia em `e2e-verification.md`. Sem essa verificacao, a entrega NAO pode ser marcada `DONE` — no maximo `PARTIAL` com o gap registrado** (N/A se nao houver front separado do back)
+- [ ] **Fase 9.5: quando front e back sao separados, os fluxos criticos foram exercitados num navegador real (Playwright MCP), sem erro de CORS, com a UI refletindo dados reais e o efeito final de cada acao confirmado; evidencia em `review/e2e-verification.md`. Sem essa verificacao, a entrega NAO pode ser marcada `DONE` — no maximo `PARTIAL` com o gap registrado** (N/A se nao houver front separado do back)
 - [ ] fluxos criticos que exigem login foram cobertos na Fase 9.5 usando credenciais de seed documentadas no PRD; se o ambiente tem seed/demo mas nenhuma credencial conhecida (so hash sem plaintext), isso foi tratado como lacuna real — corrigido (senha de seed redefinida e documentada) quando possivel, ou registrado explicitamente como fluxo autenticado nao verificado
 - [ ] entregaveis finais preenchidos na raiz de execucao
-- [ ] `handoff.json` do estagio orchestrador gravado em `.orchestration/<slug>/` (para o Executor), com `upstream` apontando o handoff do Pensador quando em modo conjunto
-- [ ] contagem de tokens por agente consolidada em `implementation-report.md` e `subagents-context.md`
-- [ ] `tasks-classification.md` e `waves.md` registram `agyModel` e `agyModelSource` nas tasks AGY
+- [ ] `report/handoff.json` do estagio orchestrador gravado em `.orchestration/<slug>/` (para o Executor), com `upstream` apontando o handoff do Pensador quando em modo conjunto
+- [ ] contagem de tokens por agente consolidada em `report/implementation-report.md` e `report/subagents-context.md`
+- [ ] `plan/tasks-classification.md` e `plan/waves.md` registram `agyModel` e `agyModelSource` nas tasks AGY
 - [ ] decisoes `agyModelSource: adaptive` possuem `agyModelEvidence`, amostra comparavel e respeitam override/piso heuristico; sem evidencia, o fallback foi heuristic
 - [ ] lifecycle polling usou adapter configurado ou manteve `UNKNOWN`; interrupt/retry/cancel real nunca foi presumido apenas pelo estado local
 - [ ] `.orchestrator/telemetry.jsonl` recebeu apenas metadados allowlisted; prompt, conteudo, diff, source, raw output e secrets nao foram persistidos/exportados
-- [ ] Fase 12 criou `learning-report.md`; lessons ficaram CANDIDATE ate validacao independente e nenhuma alteracao automatica foi feita no `SKILL.md`
+- [ ] Fase 12 criou `learning/learning-report.md`; lessons ficaram CANDIDATE ate validacao independente e nenhuma alteracao automatica foi feita no `SKILL.md`
 - [ ] Learned Recipes aplicadas foram selecionadas por trigger deterministico e tiveram outcome registrado; Curator permaneceu dry-run salvo acao explicita, com backup antes de mutacao
 - [ ] `orchestrator-knowledge.mjs history-project` e `orchestration-telemetry.mjs project` projetaram o resultado terminal da run
 - [ ] `orchestration-state.mjs audit --dir ".orchestration/<slug>"` retornou `complete: true`

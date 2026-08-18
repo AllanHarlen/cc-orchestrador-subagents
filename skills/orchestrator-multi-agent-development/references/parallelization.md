@@ -2,7 +2,7 @@
 
 ## Regra basica
 
-A categoria declarada em `tasks-classification.md` (derivada do PRD/spec ingerido) e a fonte da verdade. Nao mude o agente porque a task de front-end parece "setup", "infra" ou "simples para Codex".
+A categoria declarada em `plan/tasks-classification.md` (derivada do PRD/spec ingerido) e a fonte da verdade. Nao mude o agente porque a task de front-end parece "setup", "infra" ou "simples para Codex".
 
 | Categoria | Agentes tipicos |
 |---|---|
@@ -12,7 +12,7 @@ A categoria declarada em `tasks-classification.md` (derivada do PRD/spec ingerid
 | `DATABASE_ONLY` | 1 Codex com `--effort medium` |
 | `REVIEW_ONLY` | 1 Codex com `--effort high` |
 
-Depois de gerar `waves.md`, rode `validate-routing.mjs`. Se uma task `FRONTEND_ONLY` estiver apontando para Codex como agente primario, a wave esta invalida.
+Depois de gerar `plan/waves.md`, rode `validate-routing.mjs`. Se uma task `FRONTEND_ONLY` estiver apontando para Codex como agente primario, a wave esta invalida.
 
 Depois de `sync`, rode `orchestration-worktree.mjs plan`. O planner usa `allowedPaths` (fallback `expectedFiles`) e devolve:
 
@@ -42,7 +42,7 @@ O orquestrador opera com dois niveis ortogonais de paralelismo:
 Regras para o nivel intra-AGY:
 
 - Aplicar `--parallel` apenas quando a task lista **dois ou mais entregaveis independentes** nos criterios de aceite e nenhum deles viola as restricoes da lista "Nao paralelizar quando".
-- Continua sendo **1 task = 1 delegacao AGY**: o modelo de rastreamento em `monitoring.md`, `subagents-context.md` e `waves.md` nao muda.
+- Continua sendo **1 task = 1 delegacao AGY**: o modelo de rastreamento em `run/monitoring.md`, `report/subagents-context.md` e `plan/waves.md` nao muda.
 - `agySubagentModel: inherit` omite `--subagent-model`; os subagentes herdam o `agyModel` da sessao principal.
 - Entregaveis dependentes ou que compartilham estado permanecem no subagente AGY unico, sem `--parallel`.
 
