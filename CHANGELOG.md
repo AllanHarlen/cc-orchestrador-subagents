@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Stack de agentes configurável (`project-config`)
+
+A stack deixou de ser fixa em Codex/AGY. Quatro papéis — `backendExecutor`, `frontendExecutor`, `backendReviewer`, `frontendReviewer` — cada um `codex`, `agy` ou `claude-code`, formam a Project_Config do projeto, persistida em `.orchestrator/project-config.md` e derivada por `scripts/lib/project-config.mjs`, a única fonte da verdade de perguntas, defaults, CLIs obrigatórias e roteamento. Um projeto com os quatro papéis em `claude-code` roda o workflow inteiro sem Codex nem AGY instalados; o Executor `claude-code` delega implementação a um subagente do próprio Claude Code pela ferramenta `Agent` e roda review em modo somente leitura, gravando em `review/review-final.md`/`review/review-frontend.md`.
+
+- Novo subcomando `/orchestrator project-config` (e alias `/orchestrador project-config`): mostra e altera a configuração vigente e revalida o ambiente, sem iniciar run, criar `.orchestration/<slug>/` nem ler PRD.
+- Nova CLI `scripts/project-config.mjs` (`show`, `write`, `validate`, `required-clis`).
+- `preflight.mjs` publica o bloco `projectConfig` (papéis efetivos, `path`, `updatedAt`, `requiredCliSet`, `source: file|default`) e um array `warnings` no topo para reprovado opcional/MCP ausente; `failed` só contém reprovado obrigatório, decidido pelo Required_CLI_Set da Project_Config.
+- Preflight agora detecta dois MCPs opcionais — Codebase Memory MCP (`codebase-memory-mcp`) e Context7 — nenhum bloqueante; ver `references/mcp-context.md` para o protocolo de uso de cada um.
+- `validate-routing.mjs` valida `executor`/`executorSource` por task contra a derivação da Project_Config, mantendo a heurística legada por menção de agente para artefato sem o campo `executor`.
+- `orchestration-state.mjs`: `state.json` grava um snapshot da Project_Config na inicialização da run; `resume` reporta `projectConfigDrift` quando o arquivo mudou desde então; nova operação `project-config-apply --scope pending` adota a configuração atual só em tasks ainda não despachadas, preservando o Executor de toda task já despachada.
+- Telemetria projeta `metadata.executorSource` junto do `executor` efetivo de cada task.
+- Novas referências `references/project-config.md` e `references/mcp-context.md`.
+- O Dependency_Installer (`scripts/lib/dependency-plan.mjs`) agora também oferece, junto de cada CLI reprovada, o plugin do Claude Code que a conecta — `openai-codex` (`codex-plugin-cc`) para `codex`, `cc-antigravity-plugin` para `agy` — quando `checks.plugins.*` do preflight reprova esse plugin. As duas reprovações são independentes: CLI instalada não implica plugin instalado, e vice-versa.
+
 ## [4.1.0] — 2026-08-18
 
 ### Layout de artefatos por estágio do workflow

@@ -51,7 +51,8 @@
         "reason": { "type": ["string", "null"], "maxLength": 512 },
         "heuristicBaseline": { "type": ["string", "null"], "maxLength": 512 },
         "fidelityFloor": { "type": ["string", "null"], "maxLength": 512 },
-        "historicalSamples": { "type": "integer", "minimum": 0 }
+        "historicalSamples": { "type": "integer", "minimum": 0 },
+        "executorSource": { "type": ["string", "null"], "maxLength": 64 }
       },
       "additionalProperties": false
     }

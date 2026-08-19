@@ -2,16 +2,27 @@
 /**
  * Preflight check for cc-orchestrador-subagents.
  *
- * Validates that every dependency the orchestrator needs is present:
- *  - CLIs on PATH: agy, codex
- *  - Claude Code plugins: cc-antigravity-plugin, openai-codex
+ * Validates that every dependency the orchestrator needs is present, with the
+ * Required_CLI_Set derived from the Project_Config of the target project:
+ *  - The Project_Config itself (`.orchestrator/project-config.md`), when present
+ *  - CLIs on PATH: agy, codex (required only when some role uses them)
+ *  - Claude Code plugins: cc-antigravity-plugin, openai-codex (same condition)
  *  - A compatible Bash permission for the Codex companion runtime
  *  - A summary of the broader agent permission profile when available
  *  - Claude Code hook settings compatible with /goal
- *  - Optional Context7 MCP configuration (reported, never blocking)
+ *  - Optional MCP servers: codebase-memory and context7 (reported, never blocking)
  *
- * Outputs a JSON report to stdout and exits with code 0 if every required
- * dependency is OK; exits with code 1 otherwise.
+ * Report contract:
+ *  - `projectConfig` carries the four effective roles, the file path, `updatedAt`,
+ *    the derived `requiredCliSet` and `source` ("file" or "default").
+ *  - Every check under `runtime`, `cli`, `plugins`, `permissions` and `config`
+ *    carries `required: true|false`.
+ *  - `failed` holds only failing **required** checks; failing optional checks and
+ *    missing MCPs go to `warnings` with a `reason`
+ *    (`NOT_DETECTED`, `TIMEOUT` or `NOT_REQUIRED_BY_PROJECT_CONFIG`).
+ *  - Exit code is 0 if and only if `status === "ok"`. A warning never changes it.
+ *
+ * Outputs a JSON report to stdout.
  *
  * Usage:
  *   node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" [--json] [--silent]
@@ -23,9 +34,19 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { detectMcpServers } from "./lib/mcp-detect.mjs";
+import {
+  DEFAULT_PROJECT_CONFIG,
+  PROJECT_CONFIG_RELATIVE_PATH,
+  ProjectConfigError,
+  ROLES,
+  deriveRequiredCliSet,
+  readProjectConfig,
+} from "./lib/project-config.mjs";
+
 const HOME = homedir();
+const PROJECT_ROOT = process.cwd();
 const PLUGINS_CACHE = join(HOME, ".claude", "plugins", "cache");
-const SKILLS_DIR = join(HOME, ".claude", "skills");
 const PROJECT_CLAUDE_DIR = join(process.cwd(), ".claude");
 const PROJECT_SETTINGS_FILE = join(PROJECT_CLAUDE_DIR, "settings.json");
 const MIN_ANTIGRAVITY_PLUGIN_VERSION = "3.6.0";
@@ -434,84 +455,92 @@ function summarizePermissionProfile(settings) {
   };
 }
 
-function checkContext7Mcp() {
-  const evidence = [];
+/**
+ * Resolves the Project_Config of the target project before any other check.
+ *
+ * The Project_Config decides which CLIs (and their plugins) are required, so it
+ * has to be resolved first (Req 5.1). Three outcomes:
+ *
+ *  - File present and valid: roles come from the file, `source: "file"`.
+ *  - File absent: roles come from the default stack `codex`/`agy`/`codex`/`agy`,
+ *    `source: "default"` (Req 5.6).
+ *  - File present and invalid: the parser error becomes a failing **required**
+ *    check (`checks.config.project-config`), which makes `status` be `failed`,
+ *    and the Required_CLI_Set falls back to the default only so the report stays
+ *    complete (Req 3.10). The file is never rewritten: reading it does not touch
+ *    the filesystem.
+ */
+function resolveProjectConfigState(projectRoot) {
+  try {
+    const resolved = readProjectConfig(projectRoot);
+    const requiredCliSet = deriveRequiredCliSet(resolved.config);
+    const roles = {};
+    for (const role of ROLES) roles[role] = resolved.config[role];
 
-  const skillCandidates = [
-    join(SKILLS_DIR, "context7", "SKILL.md"),
-    join(SKILLS_DIR, "context7-mcp", "SKILL.md"),
-  ];
-  for (const file of skillCandidates) {
-    if (existsSync(file)) {
-      evidence.push({ type: "skill", path: file });
-    }
-  }
-
-  const directoryCandidates = [
-    join(HOME, ".gemini", "antigravity-cli", "mcp", "context7"),
-    join(HOME, ".gemini", "antigravity-cli", "plugins", "context7"),
-  ];
-  for (const dir of directoryCandidates) {
-    if (existsSync(dir)) {
-      evidence.push({ type: "mcp-directory", path: dir });
-    }
-  }
-
-  const configCandidates = [
-    join(process.cwd(), ".mcp.json"),
-    join(HOME, ".claude.json"),
-    join(HOME, ".claude", "mcp.json"),
-    join(HOME, ".config", "claude", "mcp.json"),
-    join(HOME, ".codex", "config.toml"),
-    join(HOME, ".gemini", "settings.json"),
-    join(HOME, ".gemini", "mcp.json"),
-    join(HOME, ".gemini", "antigravity-cli", "settings.json"),
-    join(HOME, ".gemini", "antigravity-cli", "import_manifest.json"),
-    join(HOME, ".gemini", "antigravity-cli", "plugins", "context7", "mcp_config.json"),
-  ];
-
-  for (const file of configCandidates) {
-    if (!existsSync(file)) continue;
-    try {
-      const contents = readFileSync(file, "utf8");
-      if (/\bcontext7\b|@upstash\/context7-mcp|mcp\.context7\.com|ctx7/i.test(contents)) {
-        evidence.push({ type: "mcp-config", path: file });
-      }
-    } catch (err) {
-      evidence.push({
-        type: "mcp-config-unreadable",
-        path: file,
-        error: err.message?.split(/\r?\n/)[0] ?? "cannot read file",
-      });
-    }
-  }
-
-  if (evidence.some((item) => item.type !== "mcp-config-unreadable")) {
     return {
-      ok: true,
-      optional: true,
-      evidence,
-      usage:
-        "When delegating Codex/Antigravity work involving libraries, frameworks, SDKs, APIs or cloud services, instruct the agent to use Context7 MCP before relying on memory.",
+      requiredCliSet,
+      block: {
+        source: resolved.source,
+        path: PROJECT_CONFIG_RELATIVE_PATH,
+        updatedAt: resolved.config.updatedAt ?? null,
+        roles,
+        requiredCliSet: [...requiredCliSet.clis],
+      },
+      check: {
+        ok: true,
+        required: true,
+        exists: resolved.exists,
+        source: resolved.source,
+        path: PROJECT_CONFIG_RELATIVE_PATH,
+      },
+    };
+  } catch (error) {
+    if (!(error instanceof ProjectConfigError)) throw error;
+
+    // Fallback apenas para manter o relatorio completo: o status ja e `failed`,
+    // entao nenhuma decisao de workflow e tomada a partir destes papeis.
+    const requiredCliSet = deriveRequiredCliSet(DEFAULT_PROJECT_CONFIG);
+    const path = error.details?.path ?? PROJECT_CONFIG_RELATIVE_PATH;
+
+    return {
+      requiredCliSet,
+      block: {
+        source: "default",
+        path: PROJECT_CONFIG_RELATIVE_PATH,
+        updatedAt: null,
+        roles: { ...DEFAULT_PROJECT_CONFIG },
+        requiredCliSet: [...requiredCliSet.clis],
+      },
+      check: {
+        ok: false,
+        required: true,
+        exists: true,
+        source: "invalid",
+        path,
+        code: error.code,
+        error: error.message,
+        field: error.details?.field ?? null,
+        received: error.details?.received ?? null,
+        accepted: error.details?.accepted ?? null,
+        expected: "um Project_Config_File valido ou nenhum arquivo",
+      },
     };
   }
-
-  return {
-    ok: false,
-    optional: true,
-    error: "Context7 MCP not detected in known Claude/Codex/Antigravity/project config locations.",
-    install: [
-      "npx ctx7 setup --claude",
-      'or: claude mcp add --scope user --header "CONTEXT7_API_KEY: YOUR_API_KEY" --transport http context7 https://mcp.context7.com/mcp',
-    ],
-  };
 }
+
+// A Project_Config e resolvida antes de qualquer outro check: e ela que decide
+// quais CLIs e plugins sao obrigatorios (Req 5.1).
+const projectConfigState = resolveProjectConfigState(PROJECT_ROOT);
+const requiredCliSet = projectConfigState.requiredCliSet;
 
 const initialCodexCompanionBash = checkCodexCompanionBashPermission();
 const autoRemediation = autoRemediateCodexCompanionBashPermission(initialCodexCompanionBash);
 const finalCodexCompanionBash = checkCodexCompanionBashPermission();
 
 const checks = {
+  config: {
+    "project-config": projectConfigState.check,
+  },
   runtime: {
     "node-sqlite-fts5": checkNodeSqlite(),
   },
@@ -536,26 +565,75 @@ const checks = {
     "goal-hooks-enabled": checkGoalHookSettings(),
   },
   optional: {
-    mcp: {
-      context7: checkContext7Mcp(),
-    },
+    mcp: detectMcpServers({ projectRoot: PROJECT_ROOT, home: HOME, platform: process.platform }),
   },
 };
 
+/**
+ * Obrigatoriedade por check.
+ *
+ * `cli.codex`/`plugins.openai-codex` sao obrigatorios se e somente se algum
+ * papel da Project_Config usa `codex`; `cli.agy`/`plugins.cc-antigravity-plugin`
+ * seguem a mesma regra para `agy` (Req 5.2 a 5.5). A decisao vem inteira de
+ * `deriveRequiredCliSet`: este script nao reimplementa a condicao.
+ *
+ * `config.project-config`, `runtime.node-sqlite-fts5` e os itens de
+ * `permissions` sao obrigatorios em qualquer configuracao (Req 5.8, D7).
+ */
+const REQUIRED_BY_CHECK = {
+  config: { "project-config": true },
+  runtime: { "node-sqlite-fts5": true },
+  cli: { agy: requiredCliSet.agy, codex: requiredCliSet.codex },
+  plugins: {
+    "cc-antigravity-plugin": requiredCliSet.agy,
+    "openai-codex": requiredCliSet.codex,
+  },
+  permissions: { "codex-companion-bash": true, "goal-hooks-enabled": true },
+};
+
+/** Categoria usada em `failed` e em `warnings` por grupo de checks. */
+const CATEGORY_LABEL = {
+  config: "config",
+  runtime: "runtime",
+  cli: "cli",
+  plugins: "plugin",
+  permissions: "permission",
+};
+
+/** Motivo de aviso para check reprovado que a Project_Config nao exige. */
+const NOT_REQUIRED_BY_PROJECT_CONFIG = "NOT_REQUIRED_BY_PROJECT_CONFIG";
+
 const failed = [];
+const warnings = [];
 
-for (const [name, result] of Object.entries(checks.runtime)) {
-  if (!result.ok) failed.push({ category: "runtime", name, ...result });
+// MCP ausente e sempre aviso, nunca bloqueio (Req 1.7): entra primeiro porque
+// contexto de codigo e documentacao valem para qualquer executor.
+for (const [name, result] of Object.entries(checks.optional.mcp)) {
+  if (result.ok) continue;
+  warnings.push({
+    category: "mcp",
+    name,
+    required: false,
+    reason: result.reason ?? "NOT_DETECTED",
+  });
 }
 
-for (const [name, result] of Object.entries(checks.cli)) {
-  if (!result.ok) failed.push({ category: "cli", name, ...result });
-}
-for (const [name, result] of Object.entries(checks.plugins)) {
-  if (!result.ok) failed.push({ category: "plugin", name, ...result });
-}
-for (const [name, result] of Object.entries(checks.permissions)) {
-  if (!result.ok) failed.push({ category: "permission", name, ...result });
+for (const [group, results] of Object.entries(REQUIRED_BY_CHECK)) {
+  for (const [name, required] of Object.entries(results)) {
+    const result = checks[group][name];
+    result.required = required;
+    if (result.ok) continue;
+    if (required) {
+      failed.push({ category: CATEGORY_LABEL[group], name, ...result });
+      continue;
+    }
+    warnings.push({
+      category: CATEGORY_LABEL[group],
+      name,
+      required: false,
+      reason: NOT_REQUIRED_BY_PROJECT_CONFIG,
+    });
+  }
 }
 
 const status = failed.length === 0 ? "ok" : "failed";
@@ -563,8 +641,10 @@ const status = failed.length === 0 ? "ok" : "failed";
 const report = {
   status,
   generatedAt: new Date().toISOString(),
+  projectConfig: projectConfigState.block,
   checks,
   autoRemediation,
+  warnings,
   failed,
   remediation: failed.length === 0 ? null : buildRemediation(failed),
 };
@@ -580,6 +660,19 @@ function buildRemediation(failures) {
 function remediationFor(f) {
   const key = `${f.category}:${f.name}`;
   switch (key) {
+    case "config:project-config":
+      return {
+        target: `Project config file: ${PROJECT_CONFIG_RELATIVE_PATH}`,
+        steps: [
+          `Corrija ${PROJECT_CONFIG_RELATIVE_PATH} conforme o erro do parser: ${f.error}`,
+          "Cada um dos seis campos ocupa uma linha de lista: - **<campo>**: <valor>.",
+          "Valores de executor e reviewer sao codex, agy ou claude-code, em minusculas.",
+          `Ou remova ${PROJECT_CONFIG_RELATIVE_PATH} para voltar a stack padrao codex/agy/codex/agy.`,
+          "Ou rode /orchestrator project-config para regravar o arquivo a partir de novas respostas.",
+          "Depois rode o preflight novamente.",
+        ],
+        docs: null,
+      };
     case "runtime:node-sqlite-fts5":
       return {
         target: "Node.js runtime with node:sqlite and FTS5",

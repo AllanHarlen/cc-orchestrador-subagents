@@ -51,7 +51,11 @@ Ao concluir, o orquestrador grava um `report/handoff.json` em `.orchestration/<s
 27. **Learning produz candidatos, nunca regras globais automaticas.** A Fase 12 gera `learning/learning-report.md` a partir de evidencia duravel, sem editar `SKILL.md`. Uma lesson so vira Learned Recipe apos validacao independente; triggers sao deterministas, outcomes sao medidos e o Curator controla `ACTIVE`, `STALE`, `ARCHIVED`, pinning, contradicoes, backup e rollback.
 28. **O diretorio da run tem layout fixo por estagio do workflow.** Toda run nova nasce com `state.layoutVersion: 2` e grava os artefatos agrupados: `plan/` (classificacao e waves), `contracts/`, `run/` (monitoring, probes, `executor-results/`, `prompts/`), `review/` (reviews, E2E, `screenshots/`), `report/` (relatorios e `handoff.json`), `evidence/` e `learning/`. `state.json` e `events.jsonl` ficam sempre na **raiz** da run, porque e por eles que `resume` e a numeracao de `runId` descobrem a run — nunca mova esses dois nem aninhe o diretorio da run dentro de `.orchestration/`. Runs criadas antes desta versao continuam no layout plano (`layoutVersion` ausente) e seguem sendo lidas sem migracao; nao converta uma run existente. Ver `references/persistent-state.md`.
 
-## Fase 0 - Preflight
+## Fase 0 - Preflight, configuracao do projeto e instalacao assistida
+
+A Fase 0 tem quatro etapas, nesta ordem: preflight, resolucao da Project_Config (0.5), instalacao assistida (0.6) e novo preflight. A coleta da configuracao vem **antes** de qualquer oferta de instalacao, porque o conjunto de CLIs obrigatorias (o Required_CLI_Set) depende dos papeis escolhidos. Numa run nova sem `.orchestrator/project-config.md` isso produz ate tres preflights. Quando o skill e carregado a partir de `/orchestrator` ou `/orchestrador`, essas quatro etapas ja foram conduzidas pelo comando (ver `commands/orchestrator.md`, Passo 1) e nao devem ser repetidas aqui.
+
+### 0.1 - Preflight
 
 Execute:
 
@@ -59,9 +63,25 @@ Execute:
 node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
 ```
 
-Use o JSON retornado como fonte da verdade.
+Use o JSON retornado como fonte da verdade. O relatorio traz o bloco `projectConfig` (os quatro papeis efetivos, `path`, `updatedAt`, `requiredCliSet` e `source: "file" | "default"`) e um array `warnings` no topo para reprovado opcional e MCP ausente — nenhum dos dois bloqueia. `failed` so contem reprovado obrigatorio, decidido pelo Required_CLI_Set da Project_Config vigente.
 
-O runtime minimo e Node.js `22.13.0`, no qual `node:sqlite` esta disponivel sem a flag experimental de CLI, alem de SQLite FTS5. Falha em `runtime.node-sqlite-fts5` e bloqueante porque memoria, historico, recipes e routing dependem dessa capacidade.
+O runtime minimo e Node.js `22.13.0`, no qual `node:sqlite` esta disponivel sem a flag experimental de CLI, alem de SQLite FTS5. Falha em `runtime.node-sqlite-fts5` e bloqueante em **qualquer** configuracao de projeto porque memoria, historico, recipes e routing dependem dessa capacidade.
+
+### 0.5 - Resolucao da Project_Config
+
+Leia `references/project-config.md` por completo antes desta etapa. Decida pelo bloco `projectConfig` do preflight:
+
+- `source: "file"` -> a configuracao existe e e valida; carregue-a e **nao repita as perguntas**.
+- `source: "default"` com arquivo ausente -> apresente as quatro perguntas de `AskUserQuestion` (`backendExecutor`, `frontendExecutor`, `frontendReviewer`, `backendReviewer`) antes de oferecer qualquer instalacao, com a descricao de papel e a CLI exigida por opcao de `references/project-config.md`; grave com `scripts/project-config.mjs write` (papel sem resposta entra em `--default-applied` e recebe o default) e rode o preflight de novo para obter o Required_CLI_Set efetivo.
+- `checks.config.project-config.ok: false` -> o arquivo existe e e invalido; pare com o erro do parser e a remediacao de corrigir ou remover `.orchestrator/project-config.md`, sem sobrescreve-lo.
+
+Registre em `report/workflow-log.md` a configuracao efetiva, a origem e os papeis com `default-aplicado`.
+
+### 0.6 - Instalacao assistida
+
+Com a Project_Config resolvida, monte a lista de dependencias ausentes (CBM_MCP, Context7_MCP, cada CLI do Required_CLI_Set reprovada e o plugin do Claude Code que conecta essa CLI — `openai-codex` para `codex`, `cc-antigravity-plugin` para `agy` — quando reprovado) usando `scripts/lib/dependency-plan.mjs`. CLI e plugin sao reprovacoes independentes: uma nao implica a outra, e o plano so oferece o que de fato falta. Siga o protocolo do Dependency_Installer em `references/project-config.md`: uma pergunta `AskUserQuestion` por dependencia, execucao somente apos `instalar`, registro limitado a `name`/`decision`/`command`/`exitCode`/`durationMs` (nunca stdout bruto ou credencial), e a oferta de trocar o papel afetado para `claude-code` quando o usuario recusa uma CLI obrigatoria. Ao final, rode o preflight uma vez mais, mesmo que nenhuma instalacao tenha ocorrido.
+
+Leia tambem `references/mcp-context.md` para o protocolo do Codebase Memory MCP e do Context7 MCP usados nas fases seguintes.
 
 Se a execucao foi iniciada com `--agy-model <modelo>`, valide a allowlist e preserve a escolha como override do usuario. Caso contrario, calcule primeiro o piso heuristico abaixo e passe o contexto ao router adaptativo. O router nunca reduz esse piso e volta para a heuristica quando nao houver amostra comparavel:
 
@@ -98,10 +118,18 @@ Se `.claude/settings.json` existir com JSON invalido, nao sobrescreva. Falhe com
 
 ## Stack de agentes
 
+A stack **nao e uma constante do skill**: ela e derivada da Project_Config (`.orchestrator/project-config.md`, resolvida na Fase 0.5) por `scripts/lib/project-config.mjs`. Os quatro papeis — `backendExecutor`, `frontendExecutor`, `backendReviewer`, `frontendReviewer` — decidem o Executor de cada categoria de task; cada papel vale `codex`, `agy` ou `claude-code`. Nao hardcode "back-end vai para Codex" ou "front-end vai para AGY": consulte o Executor que a task carrega (`executor`/`executorSource: project-config`, gravados em `plan/tasks-classification.md`/`plan/waves.md` pelo roteamento derivado).
+
+Com os defaults (`backendExecutor: codex`, `frontendExecutor: agy`, `backendReviewer: codex`, `frontendReviewer: agy`), o comportamento e o historico:
+
 - back-end, banco, testes, handoff e ajuste -> `codex:codex-rescue` com `--effort medium`
 - front-end, incluindo setup Vite/React, rotas, servicos API, tipos TypeScript, componentes e UX -> AGY com `--model <agyModel>` escolhido por override do usuario ou heuristica
 - review back-end pos-implementacao -> `codex:codex-rescue` com `--effort high`
 - review front-end pos-implementacao -> AGY com `--model gemini-3.1-pro-high`
+
+**Regra central do Executor `claude-code`.** Quando o Executor derivado de uma task e `claude-code`, delegue a implementacao a um subagente do proprio Claude Code pela ferramenta `Agent` — nunca edite codigo produtivo diretamente no contexto do Orquestrador principal. Registre a task no `state.json` com o mesmo formato uniforme usado para `codex`/`agy`: `executor`, identificador da sessao do subagente, `attempt` e estado canonico. Quando o Executor de review (`backendReviewer`/`frontendReviewer`) e `claude-code`, o review roda em modo **somente leitura** — sem editar codigo produtivo — e o resultado vai para `review/review-final.md` (back-end) ou `review/review-frontend.md` (front-end), exatamente como o fallback interno por falta de quota. Tasks com Executor `codex` ou `claude-code` nunca registram `agyModel`, `agyModelSource`, `agyParallel` ou `agySubagentModel`; o validador de roteamento reprova o bloco se esses campos aparecerem. Quando os quatro papeis sao `claude-code`, o workflow inteiro roda sem invocar `codex:codex-rescue` nem os subagentes do `cc-antigravity-plugin`, e nenhuma CLI externa e exigida no preflight.
+
+Ver `references/project-config.md` para as quatro perguntas, os defaults e o roteamento derivado por categoria completo, e `references/agent-stack.md` para o detalhamento por Executor.
 
 ## Politica de sandbox Codex
 
@@ -321,6 +349,8 @@ Em stacks C# + TypeScript, destaque explicitamente:
 
 - `references/workflow.md`
 - `references/agent-stack.md`
+- `references/project-config.md`
+- `references/mcp-context.md`
 - `references/subagent-prompts.md`
 - `references/contracts.md`
 - `references/parallelization.md`
@@ -344,6 +374,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - `assets/executor-control-config.schema.json`
 - `assets/telemetry-event.schema.json`
 - `assets/learned-recipe.schema.json`
+- `scripts/project-config.mjs`
 - `scripts/orchestrator-knowledge.mjs`
 - `scripts/orchestration-lifecycle.mjs`
 - `scripts/orchestration-worktree.mjs`

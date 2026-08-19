@@ -15,6 +15,7 @@ import test from "node:test";
 
 import {
   OrchestrationStateError,
+  applyProjectConfigToRun,
   auditRunCompletion,
   findRunDirectory,
   heartbeatTask,
@@ -31,6 +32,7 @@ import {
   updateTaskStatus,
   verifyRun,
 } from "../skills/orchestrator-multi-agent-development/scripts/lib/orchestration-state.mjs";
+import { writeProjectConfig } from "../skills/orchestrator-multi-agent-development/scripts/lib/project-config.mjs";
 
 const temporaryRoots = [];
 
@@ -658,4 +660,138 @@ test("resume follows the explicit phase sequence after browser E2E", () => {
   });
   const resumed = resumeRunAtDirectory(artifactDir, { projectRoot: root });
   assert.equal(resumed.report.resumeFromPhase, 10);
+});
+
+/* -------------------------------------------------------------------------- */
+/* Snapshot e drift da Project_Config na Run (task 9.6)                        */
+/* -------------------------------------------------------------------------- */
+
+test("initRun grava um snapshot da Project_Config vigente, igual ao arquivo", () => {
+  const { root, artifactDir } = fixture();
+  writeProjectConfig(root, {
+    backendExecutor: "codex",
+    frontendExecutor: "claude-code",
+    backendReviewer: "agy",
+    frontendReviewer: "claude-code",
+  });
+
+  const init = initRun({ projectRoot: root, artifactDir, slug: "demo-run", runId: "run-snapshot" });
+
+  assert.equal(init.state.projectConfig.source, "file");
+  assert.equal(init.state.projectConfig.roles.backendExecutor, "codex");
+  assert.equal(init.state.projectConfig.roles.frontendExecutor, "claude-code");
+  assert.equal(init.state.projectConfig.roles.backendReviewer, "agy");
+  assert.equal(init.state.projectConfig.roles.frontendReviewer, "claude-code");
+  assert.equal(typeof init.state.projectConfig.updatedAt, "string");
+
+  // O snapshot sobrevive a uma releitura da Run a partir do disco.
+  const reloaded = loadRun(artifactDir).state;
+  assert.deepEqual(reloaded.projectConfig, init.state.projectConfig);
+});
+
+test("resume reporta drift exatamente nos papeis que mudaram entre o snapshot e o arquivo atual", () => {
+  const { root, artifactDir } = fixture();
+  writeProjectConfig(root, {
+    backendExecutor: "codex",
+    frontendExecutor: "agy",
+    backendReviewer: "codex",
+    frontendReviewer: "agy",
+  });
+  initRun({ projectRoot: root, artifactDir, slug: "demo-run", runId: "run-drift" });
+
+  // Regrava o arquivo com dois papeis diferentes do snapshot.
+  writeProjectConfig(root, {
+    backendExecutor: "claude-code",
+    frontendExecutor: "agy",
+    backendReviewer: "claude-code",
+    frontendReviewer: "agy",
+  });
+
+  const resumed = resumeRunAtDirectory(artifactDir, { projectRoot: root });
+  assert.equal(resumed.projectConfigDrift.changed, true);
+  assert.equal(resumed.projectConfigDrift.source, "file");
+  assert.deepEqual(
+    resumed.projectConfigDrift.differences.map((entry) => entry.role).sort(),
+    ["backendExecutor", "backendReviewer"],
+  );
+  for (const entry of resumed.projectConfigDrift.differences) {
+    assert.equal(entry.to, "claude-code");
+  }
+});
+
+test("adotar a configuracao atual preserva o executor de uma task ja despachada e reatribui so as pendentes", () => {
+  const { root, artifactDir } = fixture();
+  writeProjectConfig(root, {
+    backendExecutor: "codex",
+    frontendExecutor: "agy",
+    backendReviewer: "codex",
+    frontendReviewer: "agy",
+  });
+  initRun({ projectRoot: root, artifactDir, slug: "demo-run", runId: "run-apply-scope" });
+
+  // BE-01 ja foi despachado com um Executor proprio, distinto do que a nova
+  // configuracao derivaria; FE-01 continua PENDING/attempt 0.
+  updateTaskStatus(artifactDir, "BE-01", "RUNNING", {
+    projectRoot: root,
+    executor: "codex",
+    executorSource: "manual-dispatch",
+    sessionId: "be-01-session",
+  });
+
+  writeProjectConfig(root, {
+    backendExecutor: "claude-code",
+    frontendExecutor: "claude-code",
+    backendReviewer: "codex",
+    frontendReviewer: "agy",
+  });
+
+  const applied = applyProjectConfigToRun(artifactDir, { projectRoot: root, scope: "pending" });
+
+  // Task despachada preserva o Executor do dispatch e entra em skippedTaskIds.
+  assert.equal(applied.state.tasks["BE-01"].executor, "codex");
+  assert.equal(applied.state.tasks["BE-01"].executorSource, "manual-dispatch");
+  assert.ok(applied.skippedTaskIds.includes("BE-01"));
+  assert.ok(!applied.appliedTaskIds.includes("BE-01"));
+
+  // Task ainda pendente adota a nova configuracao.
+  assert.equal(applied.state.tasks["FE-01"].executor, "claude-code");
+  assert.equal(applied.state.tasks["FE-01"].executorSource, "project-config");
+  assert.ok(applied.appliedTaskIds.includes("FE-01"));
+
+  // O evento registrado nomeia o motivo da mudanca (Req 10.4), e o snapshot da
+  // Run passa a refletir a configuracao adotada.
+  assert.equal(applied.event.type, "PROJECT_CONFIG_UPDATED");
+  assert.ok(String(applied.reason ?? "").trim() !== "");
+  assert.equal(applied.state.projectConfig.roles.frontendExecutor, "claude-code");
+});
+
+test("uma Run legada sem snapshot de Project_Config continua legivel, com drift changed: false e source legacy", () => {
+  const { root, artifactDir } = fixture();
+  initRun({ projectRoot: root, artifactDir, slug: "demo-run", runId: "run-legacy" });
+
+  // Simula uma Run gravada antes desta feature: nem o snapshot (state.json) nem
+  // o evento RUN_INITIALIZED durável (events.jsonl) carregam `projectConfig`,
+  // como um write-ahead log legado teria. Editar so o state.json nao bastaria:
+  // `repairSnapshot`/`verifyReplay` reconstroem o estado a partir do payload do
+  // evento, entao os dois precisam concordar.
+  const statePath = join(artifactDir, "state.json");
+  const eventsPath = join(artifactDir, "events.jsonl");
+
+  const legacyState = JSON.parse(readFileSync(statePath, "utf8"));
+  delete legacyState.projectConfig;
+  writeFileSync(statePath, JSON.stringify(legacyState, null, 2), "utf8");
+
+  const eventLines = readFileSync(eventsPath, "utf8").trim().split(/\r?\n/).map((line) => JSON.parse(line));
+  assert.equal(eventLines[0].type, "RUN_INITIALIZED");
+  delete eventLines[0].payload.state.projectConfig;
+  writeFileSync(eventsPath, `${eventLines.map((event) => JSON.stringify(event)).join("\n")}\n`, "utf8");
+
+  const reloaded = loadRun(artifactDir, { repairSnapshot: true, verifyReplay: true }).state;
+  assert.equal(reloaded.projectConfig, undefined);
+
+  const resumed = resumeRunAtDirectory(artifactDir, { projectRoot: root });
+  assert.equal(resumed.projectConfigDrift.changed, false);
+  assert.equal(resumed.projectConfigDrift.source, "legacy");
+  assert.deepEqual(resumed.projectConfigDrift.differences, []);
+  assert.equal(resumed.projectConfigDrift.snapshotUpdatedAt, null);
 });

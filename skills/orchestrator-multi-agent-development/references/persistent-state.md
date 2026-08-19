@@ -123,6 +123,48 @@ Toda task classificada precisa declarar:
 
 O estado também preserva `attemptHistory`, `sessionId`/`conversationId`, commits, evidências, lease e workspace. Recuperação de `STALLED`/`UNKNOWN` para uma sessão ainda viva mantém a tentativa; retry confirmado abre uma tentativa nova.
 
+## Snapshot da Project_Config e drift
+
+`state.json` grava, na inicialização, um snapshot da Project_Config vigente:
+
+```json
+"projectConfig": {
+  "schemaVersion": 1,
+  "source": "file",
+  "updatedAt": "2026-02-14T18:07:02Z",
+  "roles": {
+    "backendExecutor": "codex",
+    "frontendExecutor": "agy",
+    "backendReviewer": "codex",
+    "frontendReviewer": "agy"
+  }
+}
+```
+
+Toda task despachada carrega `executor` e `executorSource` derivados desse snapshot no momento do dispatch — não do arquivo de configuração corrente. Isso é o que garante a regra 10.5: uma task já despachada continua reconciliada e projetada na telemetria com o Executor que de fato a executou, mesmo que a Project_Config mude depois.
+
+`resume` compara o snapshot gravado com `.orchestrator/project-config.md` atual e devolve `projectConfigDrift`:
+
+```json
+"projectConfigDrift": {
+  "changed": true,
+  "differences": [{ "role": "frontendExecutor", "from": "agy", "to": "claude-code" }],
+  "snapshotUpdatedAt": "2026-02-14T18:07:02Z",
+  "fileUpdatedAt": "2026-03-01T09:00:00Z"
+}
+```
+
+Run sem snapshot (criada antes desta versão) devolve `changed: false` e `source: "legacy"` — continua legível sem migração. Quando `changed: true`, apresente a diferença ao usuário e peça por `AskUserQuestion` a decisão entre manter o snapshot da Run e adotar a configuração atual, **antes** de despachar mais tasks.
+
+Se o usuário adotar a configuração atual, aplique com escopo `pending` — reatribui `executor`/`executorSource` **somente** em tasks ainda `PENDING` com `attempt: 0`; toda task já despachada (`skippedTaskIds`) preserva o Executor do dispatch:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" project-config-apply \
+  --dir .orchestration/<slug> --scope pending [--reason "<motivo>"]
+```
+
+A operação atualiza o snapshot e emite o evento `PROJECT_CONFIG_UPDATED` com `differences`, `appliedTaskIds`, `skippedTaskIds` e o motivo da mudança.
+
 ## Completion gates
 
 Os gates persistidos são:
@@ -176,6 +218,8 @@ Ordem obrigatória:
 6. recuperar worktrees e leases;
 7. reconstruir `currentWave` e `resumeFromPhase` pela sequência explícita `1..9, 9.5, 10..12`;
 8. continuar somente após uma decisão comprovada.
+
+`resume` também calcula `projectConfigDrift` (ver "Snapshot da Project_Config e drift" acima); se `changed: true`, apresente a diferença e decida com o usuário antes de despachar mais tasks.
 
 O adapter desconhecido retorna `UNKNOWN`. `executorStatus=DONE` sem corroboração local retorna `UNKNOWN/COLLECT_LOCAL_EVIDENCE`.
 

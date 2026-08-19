@@ -22,9 +22,21 @@ Codex e Antigravity/AGY entram como subagentes especializados:
 | Review back-end pós-implementação | Codex (`codex:codex-rescue`) | Revisa **apenas o back-end** com `--effort high` ou cai para review interno read-only do orquestrador quando faltar quota. |
 | Review front-end pós-implementação | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--model gemini-3.1-pro-high`) | Revisa **apenas o front-end** em modo read-only ou cai para review interno do orquestrador quando o AGY estiver indisponível. |
 
+### Stack de agentes configurável
+
+A tabela acima descreve a stack **padrão**. Qual agente de fato implementa/revisa cada papel é uma escolha por projeto, persistida em `.orchestrator/project-config.md` e resolvida na primeira run (ou a qualquer momento via `/orchestrator project-config`):
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/project-config.mjs" show --root "."
+```
+
+Quatro papéis — `backendExecutor`, `frontendExecutor`, `backendReviewer`, `frontendReviewer` — aceitam `codex`, `agy` ou `claude-code`. Definir um papel como `claude-code` roteia esse papel para um subagente do próprio Claude Code (pela ferramenta `Agent`), com review rodando somente leitura, gravado em `review/review-final.md`/`review/review-frontend.md`. **Com os quatro papéis em `claude-code`, o workflow inteiro roda sem Codex nem AGY instalados** — nenhuma CLI externa é exigida pelo preflight nesse caso. O preflight só exige a CLI/plugin de `codex`/`agy` quando algum papel de fato usa esse executor.
+
+O preflight também detecta dois MCPs opcionais — o Codebase Memory MCP (`codebase-memory-mcp`, consultas ao grafo de código para análise de arquitetura/impacto) e o Context7 (documentação atualizada de bibliotecas nos prompts dos subagentes). A ausência de qualquer um vira item em `warnings`, nunca bloqueio; ver `skills/orchestrator-multi-agent-development/references/mcp-context.md`.
+
 ### Workflow completo
 
-- **Fase 0 - Preflight:** valida dependências, Node.js 22.13+, `node:sqlite`/FTS5, Codex, AGY, permissão `Bash(node:*)` e auto-remediação permitida.
+- **Fase 0 - Preflight, configuração do projeto e instalação assistida:** valida dependências, Node.js 22.13+, `node:sqlite`/FTS5, permissão `Bash(node:*)`, resolve a Project_Config (papéis acima), detecta os dois MCPs opcionais e oferece instalar qualquer dependência ausente que os papéis resolvidos realmente exigem.
 - **Fase 1 - Memória + especificação:** audita `.orchestrator/project-memory.md`, projeta o histórico FTS5 e lê o PRD/spec como fonte da verdade; somente fatos comprovados complementam o contexto.
 - **Fase 2 - Classificação das tasks:** gera categoria, dependências, complexidade, contrato, `expectedFiles`/`validationPlan`, `allowedPaths`, agente e features de routing.
 - **Fase 3 - Ondas, routing e isolamento:** aplica pisos heurísticos, consulta evidência histórica quando suficiente, valida roteamento e separa worktrees isoladas de tasks serializadas por overlap.
@@ -62,7 +74,11 @@ Os artefatos de coordenação e relatórios finais ficam em `.orchestration/<nom
 
 ## Dependências oficiais
 
-O runtime mínimo é **Node.js 22.13.0**, no qual `node:sqlite` está disponível sem a flag experimental de CLI, além de SQLite FTS5. O preflight bloqueia a execução quando essa capacidade não existe, porque `knowledge.db`, `history.db`, Recipes e routing adaptativo dependem dela.
+O runtime mínimo é **Node.js 22.13.0**, no qual `node:sqlite` está disponível sem a flag experimental de CLI, além de SQLite FTS5. O preflight bloqueia a execução quando essa capacidade não existe, **independente da configuração de stack**, porque `knowledge.db`, `history.db`, Recipes e routing adaptativo dependem dela.
+
+As dependências de Codex e Antigravity/AGY abaixo só são exigidas quando o papel correspondente da Project_Config (`backendExecutor`, `frontendExecutor`, `backendReviewer`, `frontendReviewer`) está de fato configurado como `codex`/`agy` — ver "Stack de agentes configurável" acima. Um projeto com todos os papéis em `claude-code` não precisa de nenhuma das duas.
+
+`/orchestrator project-config` já oferece instalar tanto a CLI quanto o plugin do Claude Code abaixo pelo Dependency_Installer assistido — uma confirmação por dependência, sem passo manual. CLI e plugin são verificados (e instalados) de forma independente: ter um não implica ter o outro. Os passos manuais abaixo continuam válidos para quem preferir instalar à mão.
 
 Este plugin depende do Codex plugin oficial para Claude Code: https://github.com/openai/codex-plugin-cc.
 

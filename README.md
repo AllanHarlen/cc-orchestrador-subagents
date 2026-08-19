@@ -22,9 +22,21 @@ Codex and Antigravity/AGY enter as specialized sub-agents:
 | Back-end post-implementation review | Codex (`codex:codex-rescue`) | Reviews **back-end only** with `--effort high` or falls back to orchestrator's internal read-only review when quota is exhausted. |
 | Front-end post-implementation review | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--model gemini-3.1-pro-high`) | Reviews **front-end only** read-only or falls back to orchestrator's internal review when AGY is unavailable. |
 
+### Configurable Agent Stack
+
+The table above describes the **default** stack. Which agent actually implements/reviews each role is a per-project choice, persisted in `.orchestrator/project-config.md` and resolved on first run (or any time via `/orchestrator project-config`):
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/project-config.mjs" show --root "."
+```
+
+Four roles — `backendExecutor`, `frontendExecutor`, `backendReviewer`, `frontendReviewer` — each accept `codex`, `agy`, or `claude-code`. Setting a role to `claude-code` routes that role to a Claude Code sub-agent (via the `Agent` tool) instead of an external CLI, with review running read-only into `review/review-final.md`/`review/review-frontend.md`. **Setting all four roles to `claude-code` runs the entire workflow without Codex or AGY installed** — no external CLI is required by preflight in that case. Preflight only requires the `codex`/`agy` CLI and plugin when at least one role is configured to use it.
+
+Preflight also detects two optional MCP servers — the Codebase Memory MCP (`codebase-memory-mcp`, code graph queries used for architecture/impact analysis) and Context7 (up-to-date library docs in sub-agent prompts). Either one missing is a `warnings` entry, never a blocker; see `skills/orchestrator-multi-agent-development/references/mcp-context.md`.
+
 ### Complete Workflow
 
-- **Phase 0 - Preflight:** validates dependencies, Node.js 22.13+, `node:sqlite`/FTS5, Codex, AGY, `Bash(node:*)`, and allowed auto-remediation.
+- **Phase 0 - Preflight, project configuration and assisted install:** validates dependencies, Node.js 22.13+, `node:sqlite`/FTS5, `Bash(node:*)`, resolves the Project_Config (roles above), detects the two optional MCPs, and offers to install any missing dependency actually required by the resolved roles.
 - **Phase 1 - Memory + specification:** audits `.orchestrator/project-memory.md`, projects FTS5 history, and reads the PRD/spec as the source of truth; only proven facts supplement context.
 - **Phase 2 - Task classification:** records category, dependencies, complexity, contracts, `expectedFiles`/`validationPlan`, `allowedPaths`, executor, and routing features.
 - **Phase 3 - Waves, routing, and isolation:** applies heuristic floors, consults comparable history when sufficient, validates routing, and separates isolated worktrees from scope-overlap serialization.
@@ -62,7 +74,11 @@ Coordination artifacts and final reports live under `.orchestration/<name>/`.
 
 ## Official Dependencies
 
-The minimum runtime is **Node.js 22.13.0**, where `node:sqlite` is available without the experimental CLI flag, plus SQLite FTS5. Preflight blocks execution without this capability because `knowledge.db`, `history.db`, Recipes, and adaptive routing depend on it.
+The minimum runtime is **Node.js 22.13.0**, where `node:sqlite` is available without the experimental CLI flag, plus SQLite FTS5. Preflight blocks execution without this capability **regardless of agent stack configuration**, because `knowledge.db`, `history.db`, Recipes, and adaptive routing depend on it.
+
+The Codex and Antigravity/AGY dependencies below are only required when the corresponding Project_Config role (`backendExecutor`, `frontendExecutor`, `backendReviewer`, `frontendReviewer`) is actually set to `codex`/`agy` — see "Configurable Agent Stack" above. A project with every role set to `claude-code` needs neither.
+
+`/orchestrator project-config` offers to install both the CLI **and** the Claude Code plugin below through the assisted Dependency_Installer — one confirmation per dependency, no manual step required. The CLI and its plugin are checked (and installed) independently: having one does not imply the other is present. The manual steps below remain valid if you prefer to install by hand.
 
 This plugin depends on the official Codex plugin for Claude Code: https://github.com/openai/codex-plugin-cc.
 

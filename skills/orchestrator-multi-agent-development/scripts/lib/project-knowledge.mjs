@@ -126,7 +126,34 @@ const KNOWLEDGE_MIGRATIONS = [
   },
 ];
 
-const SOURCE_TYPES = new Set(["FILE", "CONTRACT", "TEST", "RUN_EVENT", "USER"]);
+export const SOURCE_TYPES = Object.freeze([
+  "FILE",
+  "CONTRACT",
+  "TEST",
+  "RUN_EVENT",
+  "USER",
+  "GRAPH",
+]);
+
+/**
+ * Evidence kinds that stand on their own as proof of a fact. `GRAPH` (Codebase Memory MCP)
+ * is corroborative only: it never validates a fact by itself.
+ */
+export const CORROBORATING_SOURCE_TYPES = Object.freeze(["FILE", "CONTRACT", "TEST", "RUN_EVENT"]);
+
+/** Evidence kinds that the audit can rehydrate from disk or from the durable event log. */
+export const REHYDRATABLE_SOURCE_TYPES = Object.freeze(["FILE", "CONTRACT", "RUN_EVENT"]);
+
+/** Fields required in the payload of a `GRAPH` evidence; also the basis of its stable hash. */
+export const GRAPH_EVIDENCE_FIELDS = Object.freeze([
+  "projectId",
+  "tool",
+  "queriedAt",
+  "resultDigest",
+]);
+
+const SOURCE_TYPE_SET = new Set(SOURCE_TYPES);
+const CORROBORATING_SOURCE_TYPE_SET = new Set(CORROBORATING_SOURCE_TYPES);
 const PASS_VALUES = new Set(["PASS", "PASSED", "SUCCESS", "OK", "TRUE"]);
 
 export class ProjectKnowledgeError extends Error {
@@ -174,13 +201,73 @@ function insideProject(projectRoot, path) {
 
 function normalizeSourceType(value) {
   const normalized = String(value ?? "").trim().toUpperCase();
-  if (!SOURCE_TYPES.has(normalized)) {
+  if (!SOURCE_TYPE_SET.has(normalized)) {
     throw new ProjectKnowledgeError(
       "INVALID_EVIDENCE_SOURCE",
-      `Evidence source must be one of ${[...SOURCE_TYPES].join(", ")}`,
+      `Evidence source must be one of ${SOURCE_TYPES.join(", ")}`,
     );
   }
   return normalized;
+}
+
+function graphText(value) {
+  if (value == null) return "";
+  return typeof value === "string" ? value.trim() : String(value).trim();
+}
+
+/**
+ * A `GRAPH` sourceRef is `graph:<projectId>:<tool>`. The tool name never contains a colon,
+ * so the last segment is the tool and everything between the prefix and it is the projectId.
+ */
+function parseGraphSourceRef(sourceRef) {
+  const match = /^graph:(.+):([^:]+)$/.exec(sourceRef);
+  if (!match) return null;
+  const projectId = match[1].trim();
+  const tool = match[2].trim();
+  if (!projectId || !tool) return null;
+  return { projectId, tool };
+}
+
+function normalizeGraphEvidence(sourceRef, payload) {
+  const parsedRef = parseGraphSourceRef(sourceRef);
+  const source = payload && typeof payload === "object" ? payload : {};
+  const fields = {
+    projectId: graphText(source.projectId) || (parsedRef?.projectId ?? ""),
+    tool: graphText(source.tool) || (parsedRef?.tool ?? ""),
+    queriedAt: graphText(source.queriedAt),
+    resultDigest: graphText(source.resultDigest),
+  };
+  const missing = GRAPH_EVIDENCE_FIELDS.filter((field) => !fields[field]);
+  if (missing.length > 0) {
+    throw new ProjectKnowledgeError(
+      "GRAPH_EVIDENCE_PAYLOAD_INVALID",
+      `Graph evidence requires ${GRAPH_EVIDENCE_FIELDS.join(", ")}; missing: ${missing.join(", ")}`,
+      { sourceRef, missing },
+    );
+  }
+  if (!Number.isFinite(Date.parse(fields.queriedAt))) {
+    throw new ProjectKnowledgeError(
+      "GRAPH_EVIDENCE_PAYLOAD_INVALID",
+      `Graph evidence queriedAt must be a parseable timestamp, received ${fields.queriedAt}`,
+      { sourceRef, field: "queriedAt", received: fields.queriedAt },
+    );
+  }
+  const expectedRef = `graph:${fields.projectId}:${fields.tool}`;
+  if (sourceRef !== expectedRef) {
+    throw new ProjectKnowledgeError(
+      "GRAPH_EVIDENCE_SOURCE_REF_INVALID",
+      `Graph evidence sourceRef must be graph:<projectId>:<tool>; expected ${expectedRef}, received ${sourceRef}`,
+      { expected: expectedRef, received: sourceRef },
+    );
+  }
+  const stablePayload = Object.fromEntries(
+    GRAPH_EVIDENCE_FIELDS.map((field) => [field, fields[field]]),
+  );
+  return {
+    sourceRef: expectedRef,
+    stablePayload,
+    payload: { ...source, ...stablePayload },
+  };
 }
 
 function normalizeDisplayValue(value) {
@@ -230,7 +317,7 @@ function validateEvidence(projectRoot, input) {
     );
   }
   const observedAt = input.observedAt ?? new Date().toISOString();
-  const payload = input.evidence && typeof input.evidence === "object"
+  let payload = input.evidence && typeof input.evidence === "object"
     ? input.evidence
     : { value: input.evidence ?? null };
   let sourceHash = null;
@@ -266,6 +353,13 @@ function validateEvidence(projectRoot, input) {
     }
     normalizedRef = `event:${event.runId}:${event.eventId}`;
     sourceHash = sha256(stableJson(event));
+  } else if (kind === "GRAPH") {
+    // The code graph has no artifact to rehydrate, so the identity of the observation is the
+    // stable payload itself: indexed project, tool, query timestamp and digest of the result.
+    const graph = normalizeGraphEvidence(sourceRef, payload);
+    normalizedRef = graph.sourceRef;
+    payload = graph.payload;
+    sourceHash = sha256(stableJson(graph.stablePayload));
   } else {
     sourceHash = sha256(stableJson({ kind, sourceRef, payload }));
   }
@@ -299,6 +393,60 @@ function factRowWithEvidence(db, factId) {
   return fact;
 }
 
+/**
+ * A fact carries its primary evidence plus any corroborating evidence declared in the same
+ * call (`corroboration` accepts one entry or a list). Every entry is validated by the rules of
+ * its own kind; duplicates collapse by evidence id.
+ */
+function validateFactEvidence(projectRoot, input) {
+  const extra = input.corroboration ?? input.corroborations ?? [];
+  const additional = (Array.isArray(extra) ? extra : [extra]).filter((entry) => entry != null);
+  const inputs = [
+    input,
+    ...additional.map((entry) => ({
+      runId: input.runId ?? null,
+      observedAt: input.observedAt,
+      ...entry,
+    })),
+  ];
+  const byId = new Map();
+  for (const entry of inputs) {
+    const validated = validateEvidence(projectRoot, entry);
+    if (!byId.has(validated.id)) byId.set(validated.id, validated);
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Requirement 8.11: graph output is corroborative evidence. A fact whose only evidence is
+ * `GRAPH` is rejected; the graph is accepted when it arrives with `FILE`, `CONTRACT`, a passing
+ * `TEST` or a `RUN_EVENT` — either in the same call or already attached to the same fact.
+ */
+function assertGraphCorroboration(db, { evidenceList, fingerprint, section, factKey }) {
+  const graph = evidenceList.filter((entry) => entry.kind === "GRAPH");
+  if (graph.length === 0) return;
+  if (evidenceList.some((entry) => CORROBORATING_SOURCE_TYPE_SET.has(entry.kind))) return;
+  const placeholders = CORROBORATING_SOURCE_TYPES.map(() => "?").join(", ");
+  const existing = plainRow(db.prepare(`
+    SELECT e.id FROM facts f
+    JOIN fact_evidence fe ON fe.fact_id = f.id
+    JOIN evidence e ON e.id = fe.evidence_id
+    WHERE f.fingerprint = ? AND f.status = 'VALIDATED' AND e.kind IN (${placeholders})
+    LIMIT 1
+  `).get(fingerprint, ...CORROBORATING_SOURCE_TYPES));
+  if (existing) return;
+  throw new ProjectKnowledgeError(
+    "GRAPH_EVIDENCE_REQUIRES_CORROBORATION",
+    `Graph evidence cannot validate a fact alone; add ${CORROBORATING_SOURCE_TYPES.join(", ")} evidence for ${section}/${factKey}`,
+    {
+      section,
+      key: factKey,
+      graphSourceRefs: graph.map((entry) => entry.sourceRef),
+      accepted: [...CORROBORATING_SOURCE_TYPES],
+    },
+  );
+}
+
 export function addValidatedFact(projectRoot, input) {
   const section = String(input.section ?? "").trim();
   const factKey = String(input.key ?? "").trim();
@@ -312,7 +460,7 @@ export function addValidatedFact(projectRoot, input) {
   if (!displayValue) {
     throw new ProjectKnowledgeError("FACT_VALUE_REQUIRED", "A fact requires a value");
   }
-  const evidence = validateEvidence(resolve(projectRoot), input);
+  const evidenceList = validateFactEvidence(resolve(projectRoot), input);
   const valueJson = stableJson(input.value);
   const fingerprint = sha256(`${section.toLowerCase()}\0${factKey.toLowerCase()}\0${valueJson}`);
   const factId = input.id ?? `fact-${fingerprint.slice(0, 24)}`;
@@ -320,29 +468,40 @@ export function addValidatedFact(projectRoot, input) {
   const { db } = openKnowledgeStore(projectRoot);
   try {
     return withTransaction(db, () => {
-      db.prepare(`
-        INSERT INTO evidence(id, kind, source_ref, source_hash, status, payload_json, observed_at, run_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          status=excluded.status,
-          payload_json=excluded.payload_json,
-          observed_at=excluded.observed_at,
-          run_id=COALESCE(excluded.run_id, evidence.run_id)
-      `).run(
-        evidence.id,
-        evidence.kind,
-        evidence.sourceRef,
-        evidence.sourceHash,
-        evidence.status,
-        stableJson(evidence.payload),
-        evidence.observedAt,
-        evidence.runId,
-      );
+      assertGraphCorroboration(db, {
+        evidenceList,
+        fingerprint,
+        section,
+        factKey,
+      });
+
+      for (const entry of evidenceList) {
+        db.prepare(`
+          INSERT INTO evidence(id, kind, source_ref, source_hash, status, payload_json, observed_at, run_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            status=excluded.status,
+            payload_json=excluded.payload_json,
+            observed_at=excluded.observed_at,
+            run_id=COALESCE(excluded.run_id, evidence.run_id)
+        `).run(
+          entry.id,
+          entry.kind,
+          entry.sourceRef,
+          entry.sourceHash,
+          entry.status,
+          stableJson(entry.payload),
+          entry.observedAt,
+          entry.runId,
+        );
+      }
 
       const duplicate = plainRow(db.prepare("SELECT id FROM facts WHERE fingerprint = ?").get(fingerprint));
       if (duplicate) {
-        db.prepare("INSERT OR IGNORE INTO fact_evidence(fact_id, evidence_id) VALUES (?, ?)")
-          .run(duplicate.id, evidence.id);
+        for (const entry of evidenceList) {
+          db.prepare("INSERT OR IGNORE INTO fact_evidence(fact_id, evidence_id) VALUES (?, ?)")
+            .run(duplicate.id, entry.id);
+        }
         db.prepare("UPDATE facts SET updated_at = ? WHERE id = ?").run(now, duplicate.id);
         return { created: false, conflict: false, fact: factRowWithEvidence(db, duplicate.id) };
       }
@@ -356,15 +515,19 @@ export function addValidatedFact(projectRoot, input) {
           AND f.status = 'VALIDATED'
         ORDER BY f.updated_at DESC
       `).all(section, factKey));
-      const sameSource = active.find((row) =>
-        row.evidence_kind === evidence.kind && row.evidence_source_ref === evidence.sourceRef,
-      );
-      if (sameSource) {
+      const superseded = new Map();
+      for (const row of active) {
+        const match = evidenceList.find((entry) =>
+          row.evidence_kind === entry.kind && row.evidence_source_ref === entry.sourceRef,
+        );
+        if (match && !superseded.has(row.id)) superseded.set(row.id, match);
+      }
+      for (const [supersededId, match] of superseded) {
         db.prepare(`
           UPDATE facts SET status='REVOKED', revoked_at=?, revocation_reason=?, updated_at=? WHERE id=?
-        `).run(now, `Superseded by a newer validated observation from ${evidence.kind}:${evidence.sourceRef}`, now, sameSource.id);
+        `).run(now, `Superseded by a newer validated observation from ${match.kind}:${match.sourceRef}`, now, supersededId);
       }
-      const conflict = active.length > 0 && !sameSource;
+      const conflict = active.length > 0 && superseded.size === 0;
       const status = conflict ? "CONFLICT" : "VALIDATED";
       db.prepare(`
         INSERT INTO facts(
@@ -384,8 +547,10 @@ export function addValidatedFact(projectRoot, input) {
         now,
         now,
       );
-      db.prepare("INSERT INTO fact_evidence(fact_id, evidence_id) VALUES (?, ?)")
-        .run(factId, evidence.id);
+      for (const entry of evidenceList) {
+        db.prepare("INSERT OR IGNORE INTO fact_evidence(fact_id, evidence_id) VALUES (?, ?)")
+          .run(factId, entry.id);
+      }
       return {
         created: true,
         conflict,
@@ -455,13 +620,16 @@ export function auditKnowledgeSources(projectRoot, options = {}) {
   const { db } = openKnowledgeStore(root);
   try {
     const now = options.now ?? new Date().toISOString();
+    // Only rehydratable kinds are audited. `GRAPH` has no artifact to re-read, so it is never
+    // revalidated here; what keeps a graph fact auditable is its mandatory corroboration.
+    const placeholders = REHYDRATABLE_SOURCE_TYPES.map(() => "?").join(", ");
     const rows = plainRows(db.prepare(`
       SELECT DISTINCT f.id, e.kind, e.source_ref, e.source_hash
       FROM facts f
       JOIN fact_evidence fe ON fe.fact_id=f.id
       JOIN evidence e ON e.id=fe.evidence_id
-      WHERE f.status='VALIDATED' AND e.kind IN ('FILE', 'CONTRACT', 'RUN_EVENT')
-    `).all());
+      WHERE f.status='VALIDATED' AND e.kind IN (${placeholders})
+    `).all(...REHYDRATABLE_SOURCE_TYPES));
     const stale = [];
     withTransaction(db, () => {
       for (const row of rows) {

@@ -1,0 +1,17 @@
+{
+  "name": "cc-orchestrador-subagents",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Infraestrutura de testes do plugin cc-orchestrador-subagents. Sem dependencia de runtime: o codigo de producao usa apenas builtins do Node.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0"
+  }
+}

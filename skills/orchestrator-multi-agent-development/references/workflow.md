@@ -133,6 +133,7 @@ Para cada task extraida do PRD/spec, registre em `.orchestration/<nome>/plan/tas
 - complexidade;
 - `contractRequired: yes|no`;
 - `assignedAgent`;
+- `executor` e `executorSource: project-config` — o Executor derivado da categoria pela Project_Config vigente (`codex`, `agy` ou `claude-code`), ver abaixo;
 - `routingReason`;
 - `expectedFiles` e/ou `validationPlan` (ao menos um e obrigatorio para reconciliacao);
 - `allowedPaths` para validar escopo e decidir isolamento;
@@ -141,17 +142,19 @@ Para cada task extraida do PRD/spec, registre em `.orchestration/<nome>/plan/tas
 
 ### Regra de roteamento por categoria
 
-A categoria da task e a fonte da verdade para escolher agente. Nao reclassifique pelo tipo de atividade interna. Setup de projeto front-end, rotas, servicos API em TypeScript, componentes, paginas, hooks, estado e UX continuam sendo `FRONTEND_ONLY` e vao para Antigravity/AGY.
+O Executor de cada task vem da categoria combinada com a Project_Config (`references/project-config.md`), nao de "parece infra" ou preferencia do orquestrador. Registre `executor` e `executorSource: project-config` por task em `plan/tasks-classification.md` e `plan/waves.md`; `validate-routing.mjs` reprova task cujo `executor` divirja do derivado para a categoria ou esteja fora de `codex`/`agy`/`claude-code`. Setup de projeto front-end, rotas, servicos API em TypeScript, componentes, paginas, hooks, estado e UX continuam sendo `FRONTEND_ONLY` e recebem o `frontendExecutor` configurado.
 
-| Categoria | `assignedAgent` | Execucao |
+| Categoria | Papel da Project_Config | Execucao sob os defaults (`codex`/`agy`) |
 |---|---|---|
-| `BACKEND_ONLY` | `codex:codex-rescue` | `--effort medium` |
-| `DATABASE_ONLY` | `codex:codex-rescue` | `--effort medium` |
-| `REVIEW_ONLY` | `codex:codex-rescue` | `--effort high` |
-| `FRONTEND_ONLY` | `cc-antigravity-plugin:antigravity-coder` | AGY com `--model <agyModel>` |
-| `FULLSTACK` | `codex:codex-rescue` + `cc-antigravity-plugin:antigravity-coder` | Codex para back-end; AGY com `--model <agyModel>` para front-end |
+| `BACKEND_ONLY` | `backendExecutor` | `codex:codex-rescue` com `--effort medium` |
+| `DATABASE_ONLY` | `backendExecutor` | `codex:codex-rescue` com `--effort medium` |
+| `REVIEW_ONLY` | `backendReviewer` | `codex:codex-rescue` com `--effort high` |
+| `FRONTEND_ONLY` | `frontendExecutor` | AGY (`cc-antigravity-plugin:antigravity-coder`) com `--model <agyModel>` |
+| `FULLSTACK` | `backendExecutor` + `frontendExecutor` | Codex para back-end; AGY com `--model <agyModel>` para front-end |
 
-Se `FRONTEND_ONLY` aparecer com Codex como agente primario, corrija antes de montar waves. Codex so pode assumir front-end depois de `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, falha operacional de AGY ou decisao explicita do usuario, e isso deve ficar registrado em `run/monitoring.md`, `report/workflow-log.md` e `report/subagents-context.md`.
+Quando o papel resolvido e `claude-code`, o `executor` da task e `claude-code`: delegue pela ferramenta `Agent` a um subagente do proprio Claude Code (implementacao) ou rode a task em modo read-only gravando em `review/review-final.md`/`review/review-frontend.md` (review). Uma task com `executor: claude-code` nunca registra `agyModel`, `agyModelSource`, `agyParallel` nem `agySubagentModel` — o validador reprova o bloco se algum desses campos aparecer. Artefato legado sem o campo `executor` continua validado pela heuristica antiga de mencao de agente (`assignedAgent`).
+
+Se `FRONTEND_ONLY` aparecer com Codex como Executor fora do fallback abaixo, corrija antes de montar waves. Codex so pode assumir front-end depois de `QUOTA_EXAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`, falha operacional de AGY ou decisao explicita do usuario, e isso deve ficar registrado em `run/monitoring.md`, `report/workflow-log.md` e `report/subagents-context.md`.
 
 **`antigravity-agent` e somente leitura.** Se `FRONTEND_ONLY` (ou a fatia front-end de `FULLSTACK`) aparecer com `assignedAgent: cc-antigravity-plugin:antigravity-agent`, isso e um erro de roteamento — corrija para `cc-antigravity-plugin:antigravity-coder` antes de montar waves. `antigravity-agent` so e valido como `assignedAgent` nas tasks de review (Fase 9), nunca em tasks que criam/editam arquivos.
 

@@ -5,25 +5,41 @@
  * Usage:
  *   node "${CLAUDE_SKILL_DIR}/scripts/validate-routing.mjs" .orchestration/<name>
  *   node scripts/validate-routing.mjs .orchestration/<name>
+ *   node scripts/validate-routing.mjs .orchestration/<name> --root .
+ *   node scripts/validate-routing.mjs .orchestration/<name> --project-config .orchestrator/project-config.md
+ *
+ * O roteamento esperado nao e mais constante: ele e derivado da Project_Config
+ * (`.orchestrator/project-config.md`) pela mesma funcao que o Orquestrador usa
+ * para classificar a task (`resolveExecutorForCategory`). Quando o arquivo nao
+ * existe, vale a configuracao padrao (`codex`/`agy`/`codex`/`agy`), que reproduz
+ * exatamente o comportamento historico deste validador.
+ *
+ * Bloco de task que declara `executor` e validado contra a derivacao. Bloco sem
+ * `executor` (artefato legado) continua sendo validado pela heuristica de
+ * mencao de agente.
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 
 import {
   ARTIFACT_LAYOUT_VERSION,
   artifactRelativePath,
   resolveArtifact,
 } from "./lib/artifact-layout.mjs";
+import {
+  CATEGORY_ROLE,
+  EXECUTORS,
+  EXECUTOR_SOURCE_PROJECT_CONFIG,
+  ProjectConfigError,
+  TASK_CATEGORIES,
+  defaultProjectConfig,
+  parseProjectConfig,
+  readProjectConfig,
+  resolveExecutorForCategory,
+} from "./lib/project-config.mjs";
 
-const CATEGORIES = [
-  "BACKEND_ONLY",
-  "FRONTEND_ONLY",
-  "FULLSTACK",
-  "DATABASE_ONLY",
-  "REVIEW_ONLY",
-  "DOCS_ONLY",
-];
+const CATEGORIES = [...TASK_CATEGORIES];
 
 // Mesma gramatica de ID do State Engine (scripts/lib/orchestration-state.mjs, TASK_ID_SOURCE).
 // Aceita T1, T12-A, BE-01, FE-001-B. Os dois parsers precisam concordar sobre o que e uma
@@ -45,6 +61,19 @@ const AGY_MODEL_SOURCE_RE = /agyModelSource\s*[:=]?\s*`?(user|heuristic|adaptive
 const AGY_ADAPTIVE_SOURCE_RE = /agyModelSource\s*[:=]?\s*`?adaptive`?/i;
 const AGY_ADAPTIVE_EVIDENCE_RE = /agyModelEvidence\s*[:=]?\s*`?[^`\n]+`?/i;
 const AGY_SUBAGENT_MODEL_RE = /agySubagentModel\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
+const AGY_PARALLEL_RE = /\bagyParallel\b/i;
+// Identificadores de subagente externo. Task com executor `claude-code` nao pode
+// invocar `codex:codex-rescue` nem subagente do `cc-antigravity-plugin` (Req 7.11).
+const CODEX_SUBAGENT_RE = /\bcodex:codex-rescue\b/i;
+const AGY_PLUGIN_SUBAGENT_RE = /\bcc-antigravity-plugin:[a-z-]+/i;
+// `executor` declarado no bloco. O lookahead descarta `executorSource`, que e o
+// campo de origem da decisao e nunca carrega o nome do executor.
+// O separador e capturado: sem `:` ou `=`, um valor fora do conjunto permitido e
+// tratado como prosa ("executor derivado da configuracao"), nao como declaracao.
+const EXECUTOR_DECLARATION_RE = /(?:^|[\s|,(])(?:executor(?!source)|--executor)\b[\t ]*(:|=)?[\t ]*`?([A-Za-z0-9._-]+)`?/gi;
+const EXECUTOR_SOURCE_RE = /\bexecutorSource\b[\t ]*[:=]?[\t ]*`?([A-Za-z0-9._-]+)`?/i;
+// Registro do review read-only feito pelo Claude Code (Req 7.10).
+const READ_ONLY_REVIEW_RECORD_RE = /review\/(?:review-final|review-frontend)\.md/i;
 const ALLOWED_AGY_MODELS = new Set([
   "gemini-3.5-flash-low",
   "gemini-3.5-flash-medium",
@@ -65,7 +94,88 @@ const ALLOWED_AGY_MODELS = new Set([
 const LOW_TIER_AGY_MODELS = new Set(["gemini-3.5-flash-low", "gemini-3.5-flash-medium"]);
 const DESIGN_SYSTEM_SIGNAL_RE = /\b(tokens\.css|components\.html|design-systems?\/|DESIGN\.md|design[- ]system)\b/i;
 
-const targetDir = resolve(process.argv[2] ?? process.cwd());
+const USAGE = [
+  "Usage: node validate-routing.mjs <.orchestration/<name>> [--root <dir>] [--project-config <path>]",
+  "",
+  "  --root <dir>             raiz do projeto de onde a Project_Config e resolvida",
+  "                           (default: raiz inferida do diretorio da run)",
+  "  --project-config <path>  caminho explicito do Project_Config_File",
+].join("\n");
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
+
+function parseArgs(argv) {
+  const positionals = [];
+  let projectConfigArg = null;
+  let rootArg = null;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--help" || arg === "-h") {
+      console.log(USAGE);
+      process.exit(0);
+    }
+    if (arg === "--project-config" || arg === "--root") {
+      const value = argv[index + 1];
+      if (value === undefined || value.startsWith("--")) fail(`Flag ${arg} exige um valor.\n\n${USAGE}`);
+      if (arg === "--root") rootArg = value;
+      else projectConfigArg = value;
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--project-config=")) {
+      projectConfigArg = arg.slice("--project-config=".length);
+      if (projectConfigArg === "") fail(`Flag --project-config exige um valor.\n\n${USAGE}`);
+      continue;
+    }
+    if (arg.startsWith("--root=")) {
+      rootArg = arg.slice("--root=".length);
+      if (rootArg === "") fail(`Flag --root exige um valor.\n\n${USAGE}`);
+      continue;
+    }
+    if (arg.startsWith("--")) fail(`Flag desconhecida: ${arg}\n\n${USAGE}`);
+    positionals.push(arg);
+  }
+
+  return { positionals, projectConfigArg, rootArg };
+}
+
+/**
+ * Infere a raiz do projeto a partir do diretorio da run.
+ *
+ * `<root>/.orchestration/<slug>` e o layout canonico, entao o pai do segmento
+ * `.orchestration` e a raiz. Fora desse layout, cai no diretorio corrente.
+ */
+function inferProjectRoot(runDir) {
+  const parts = runDir.split(sep);
+  const index = parts.lastIndexOf(".orchestration");
+  if (index > 0) return parts.slice(0, index).join(sep) || sep;
+  return process.cwd();
+}
+
+/**
+ * Resolve a Project_Config usada como fonte da derivacao de executor.
+ *
+ * `--project-config` tem precedencia sobre `--root`. Arquivo ausente cai na
+ * configuracao padrao (`source: "default"`); arquivo presente e invalido vira
+ * `ProjectConfigError`, que o chamador transforma em falha de validacao.
+ */
+function loadProjectConfig({ projectConfigArg, rootArg, runDir }) {
+  if (projectConfigArg !== null) {
+    const path = resolve(projectConfigArg);
+    if (!existsSync(path)) return { config: defaultProjectConfig(), source: "default", path };
+    return { config: parseProjectConfig(readFileSync(path, "utf8"), { path }), source: "file", path };
+  }
+  const root = rootArg !== null ? resolve(rootArg) : inferProjectRoot(runDir);
+  const result = readProjectConfig(root);
+  return { config: result.config, source: result.source, path: result.path };
+}
+
+const { positionals, projectConfigArg, rootArg } = parseArgs(process.argv.slice(2));
+const targetDir = resolve(positionals[0] ?? process.cwd());
 // Aceita layout 1 (artefatos na raiz da run) e layout 2 (`plan/`). Quando o
 // arquivo nao existe em nenhum dos dois, o erro aponta o caminho do layout atual.
 const requiredFiles = ["tasks-classification.md", "waves.md"].map(
@@ -73,6 +183,26 @@ const requiredFiles = ["tasks-classification.md", "waves.md"].map(
     resolveArtifact(targetDir, name)?.path ??
     join(targetDir, ...artifactRelativePath(name, ARTIFACT_LAYOUT_VERSION).split("/")),
 );
+
+let projectConfig;
+let projectConfigSource;
+let projectConfigFile;
+try {
+  const resolved = loadProjectConfig({ projectConfigArg, rootArg, runDir: targetDir });
+  projectConfig = resolved.config;
+  projectConfigSource = resolved.source;
+  projectConfigFile = resolved.path;
+} catch (error) {
+  if (error instanceof ProjectConfigError) {
+    fail(
+      `Routing validation failed:\n- Project_Config invalida (${error.code}): ${error.message}\n`
+        + "  Corrija ou remova o arquivo antes de validar o roteamento.",
+    );
+  }
+  throw error;
+}
+
+const projectConfigLabel = projectConfigSource === "file" ? projectConfigFile : "configuracao padrao";
 
 const errors = [];
 const warnings = [];
@@ -116,6 +246,68 @@ function hasAgyModelSource(text) {
 function extractAgySubagentModel(text) {
   const match = text.match(AGY_SUBAGENT_MODEL_RE);
   return match?.[1] ?? null;
+}
+
+/**
+ * Executores declarados no bloco, na ordem de aparicao e sem repeticao.
+ *
+ * Um bloco `FULLSTACK` pode declarar dois (uma fatia por executor), por isso a
+ * extracao devolve lista em vez de valor unico.
+ */
+function extractExecutorDeclarations(text) {
+  const declarations = [];
+  for (const match of text.matchAll(EXECUTOR_DECLARATION_RE)) {
+    const separator = match[1] ?? null;
+    const raw = String(match[2] ?? "").trim();
+    if (raw === "") continue;
+    const value = raw.toLowerCase();
+    // Sem `:` ou `=`, so aceita token que seja de fato um executor: evita ler
+    // prosa ("executor derivado da Project_Config") como declaracao invalida.
+    if (separator === null && !EXECUTORS.includes(value)) continue;
+    if (declarations.some((item) => item.value === value)) continue;
+    declarations.push({ value, raw });
+  }
+  return declarations;
+}
+
+function extractExecutorSource(text) {
+  const match = text.match(EXECUTOR_SOURCE_RE);
+  return match?.[1]?.trim().toLowerCase() ?? null;
+}
+
+const expectationCache = new Map();
+
+/**
+ * Executores esperados para a categoria, derivados da Project_Config vigente.
+ *
+ * `FULLSTACK` devolve os dois papeis (`backendExecutor` na fatia back-end e
+ * `frontendExecutor` na fatia front-end); as outras categorias devolvem um.
+ */
+function expectationFor(category) {
+  if (expectationCache.has(category)) return expectationCache.get(category);
+  const resolved = resolveExecutorForCategory(category, projectConfig);
+  const expectation = category === "FULLSTACK"
+    ? {
+      category,
+      fullstack: true,
+      backend: resolved.backend,
+      frontend: resolved.frontend,
+      values: [...new Set([resolved.backend, resolved.frontend])],
+      roleLabel: "backendExecutor + frontendExecutor",
+    }
+    : {
+      category,
+      fullstack: false,
+      executor: resolved.executor,
+      values: [resolved.executor],
+      roleLabel: CATEGORY_ROLE[category],
+    };
+  expectationCache.set(category, expectation);
+  return expectation;
+}
+
+function formatExecutorList(values) {
+  return values.map((value) => `\`${value}\``).join(" ou ");
 }
 
 function extractBlocks(content) {
@@ -177,14 +369,83 @@ function validateBlock(source, block, categoryByTask) {
       continue;
     }
 
-    const frontend = hasFrontendAgent(block.text);
-    const codex = hasCodexAgent(block.text);
+    const expectation = expectationFor(taskCategory);
+    const declarations = extractExecutorDeclarations(block.text);
+    const declaresExecutor = declarations.length > 0;
+
+    for (const declaration of declarations) {
+      if (!EXECUTORS.includes(declaration.value)) {
+        errors.push(`${source}: ${id} declara executor invalido (${declaration.raw}). Executores aceitos: ${EXECUTORS.join(", ")}.`);
+      }
+    }
+
+    const declared = declarations
+      .filter((declaration) => EXECUTORS.includes(declaration.value))
+      .map((declaration) => declaration.value);
+
+    for (const value of declared) {
+      if (!expectation.values.includes(value)) {
+        errors.push(`${source}: ${id} e ${taskCategory} e declara executor \`${value}\`, mas a Project_Config (${projectConfigLabel}) deriva ${formatExecutorList(expectation.values)} para essa categoria (${expectation.roleLabel}).`);
+      }
+    }
+
+    if (expectation.fullstack && declared.length > 0 && expectation.values.length > 1) {
+      const missing = expectation.values.filter((value) => !declared.includes(value));
+      if (missing.length > 0) {
+        warnings.push(`${source}: ${id} e FULLSTACK, mas o bloco so declara ${formatExecutorList(declared)}. Confirme que a fatia com ${formatExecutorList(missing)} esta registrada em outro bloco.`);
+      }
+    }
+
+    if (declaresExecutor) {
+      const executorSource = extractExecutorSource(block.text);
+      if (executorSource === null) {
+        errors.push(`${source}: ${id} declara executor, mas nao registra executorSource: ${EXECUTOR_SOURCE_PROJECT_CONFIG}.`);
+      } else if (executorSource !== EXECUTOR_SOURCE_PROJECT_CONFIG) {
+        errors.push(`${source}: ${id} registra executorSource invalido (${executorSource}). Valor aceito: ${EXECUTOR_SOURCE_PROJECT_CONFIG}.`);
+      }
+    }
+
+    // Executores efetivos do bloco: o declarado quando existe, a derivacao da
+    // Project_Config quando o bloco e legado.
+    const effective = declared.length > 0 ? [...new Set(declared)] : expectation.values;
+    const frontendMention = hasFrontendAgent(block.text);
+    const codexMention = hasCodexAgent(block.text);
+    // Regras de AGY valem integralmente quando o executor esperado e `agy`; no
+    // bloco legado, a heuristica por mencao de agente e preservada.
+    const frontend = declaresExecutor ? effective.includes("agy") : frontendMention;
+    const codex = declaresExecutor ? effective.includes("codex") : codexMention;
+    const claudeCode = effective.includes("claude-code");
 
     if (["FRONTEND_ONLY", "FULLSTACK"].includes(taskCategory) && READ_ONLY_AGY_AGENT_RE.test(block.text)) {
       errors.push(`${source}: ${id} e ${taskCategory}, mas delega implementacao a cc-antigravity-plugin:antigravity-agent, que e somente leitura. Use cc-antigravity-plugin:antigravity-coder; antigravity-agent so e valido no review de front-end da Fase 9.`);
     }
 
     const agyModel = extractAgyModel(block.text);
+
+    // Executor `claude-code` nao carrega parametro de AGY: o Orquestrador omite
+    // agyModel, agyParallel e agySubagentModel nessas tasks (Req 7.8).
+    if (claudeCode && !frontend) {
+      if (agyModel) {
+        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas registra agyModel (${agyModel}). Omita agyModel, agyParallel e agySubagentModel em task delegada ao Claude Code.`);
+      }
+      if (AGY_PARALLEL_RE.test(block.text)) {
+        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas registra agyParallel. Omita agyModel, agyParallel e agySubagentModel em task delegada ao Claude Code.`);
+      }
+      const claudeCodeSubagentModel = extractAgySubagentModel(block.text);
+      if (claudeCodeSubagentModel) {
+        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas registra agySubagentModel (${claudeCodeSubagentModel}). Omita agyModel, agyParallel e agySubagentModel em task delegada ao Claude Code.`);
+      }
+    }
+
+    // Stack toda `claude-code` nao invoca subagente externo (Req 7.11).
+    if (effective.length > 0 && effective.every((value) => value === "claude-code")) {
+      if (CODEX_SUBAGENT_RE.test(block.text)) {
+        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas invoca \`codex:codex-rescue\`. Com a Project_Config (${projectConfigLabel}) essa task e implementada por subagente do Claude Code.`);
+      }
+      if (AGY_PLUGIN_SUBAGENT_RE.test(block.text)) {
+        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas invoca subagente do \`cc-antigravity-plugin\`. Com a Project_Config (${projectConfigLabel}) essa task e implementada por subagente do Claude Code.`);
+      }
+    }
 
     if (frontend && !agyModel) {
       errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModel/--agy-model/--model.`);
@@ -211,36 +472,47 @@ function validateBlock(source, block, categoryByTask) {
       errors.push(`${source}: ${id} usa routing adaptativo, mas nao registra agyModelEvidence auditavel.`);
     }
 
-    if (taskCategory === "FRONTEND_ONLY") {
-      if (!frontend) {
-        errors.push(`${source}: ${id} e FRONTEND_ONLY, mas nao aponta para Antigravity/AGY.`);
+    // Heuristica legada por mencao de agente: vale para bloco que nao declara
+    // `executor`, e so exige a mencao que a Project_Config de fato espera.
+    if (!declaresExecutor) {
+      if (taskCategory === "FRONTEND_ONLY" && expectation.executor === "agy") {
+        if (!frontendMention) {
+          errors.push(`${source}: ${id} e FRONTEND_ONLY, mas nao aponta para Antigravity/AGY.`);
+        }
+        if (codexMention) {
+          errors.push(`${source}: ${id} e FRONTEND_ONLY, mas aponta para Codex como agente primario.`);
+        }
       }
-      if (codex) {
-        errors.push(`${source}: ${id} e FRONTEND_ONLY, mas aponta para Codex como agente primario.`);
-      }
-    }
 
-    if (taskCategory === "FULLSTACK") {
-      if (!frontend || !codex) {
-        errors.push(`${source}: ${id} e FULLSTACK, mas nao declara Codex + Antigravity/AGY.`);
+      if (taskCategory === "FULLSTACK") {
+        const missingMentions = [];
+        if (expectation.backend === "codex" && !codexMention) missingMentions.push("Codex");
+        if (expectation.frontend === "agy" && !frontendMention) missingMentions.push("Antigravity/AGY");
+        if (missingMentions.length > 0) {
+          errors.push(`${source}: ${id} e FULLSTACK, mas nao declara ${missingMentions.join(" + ")}.`);
+        }
       }
-      if (frontend && !agyModel) {
-        errors.push(`${source}: ${id} e FULLSTACK, mas a fatia front-end nao registra agyModel.`);
-      }
-    }
 
-    if (["BACKEND_ONLY", "DATABASE_ONLY"].includes(taskCategory)) {
-      if (!codex) {
+      if (["BACKEND_ONLY", "DATABASE_ONLY"].includes(taskCategory) && expectation.executor === "codex" && !codexMention) {
         errors.push(`${source}: ${id} e ${taskCategory}, mas nao aponta para Codex.`);
       }
-      if (frontend) {
-        warnings.push(`${source}: ${id} e ${taskCategory}, mas tambem menciona AGY. Confirme se nao houve mistura de escopo.`);
-      }
+    }
+
+    if (taskCategory === "FULLSTACK" && frontend && !agyModel) {
+      errors.push(`${source}: ${id} e FULLSTACK, mas a fatia front-end nao registra agyModel.`);
+    }
+
+    if (["BACKEND_ONLY", "DATABASE_ONLY"].includes(taskCategory) && frontendMention && !effective.includes("agy")) {
+      warnings.push(`${source}: ${id} e ${taskCategory}, mas tambem menciona AGY. Confirme se nao houve mistura de escopo.`);
     }
 
     if (taskCategory === "REVIEW_ONLY") {
-      if (!codex || !CODEX_HIGH_RE.test(block.text)) {
+      const reviewer = expectation.executor;
+      if (reviewer === "codex" && (!codex || !CODEX_HIGH_RE.test(block.text))) {
         errors.push(`${source}: ${id} e REVIEW_ONLY, mas nao aponta para Codex com --effort high.`);
+      }
+      if (reviewer === "claude-code" && !READ_ONLY_REVIEW_RECORD_RE.test(block.text)) {
+        errors.push(`${source}: ${id} e REVIEW_ONLY com revisor \`claude-code\`, mas nao registra o review read-only em review/review-final.md (back-end) ou review/review-frontend.md (front-end).`);
       }
     }
   }
@@ -291,3 +563,8 @@ if (warnings.length > 0) {
 }
 
 console.log(`Routing validation passed for ${categoryByTask.size} task(s) in ${targetDir}.`);
+console.log(
+  `Project_Config (${projectConfigSource === "file" ? projectConfigFile : "default"}): `
+    + `backendExecutor=${projectConfig.backendExecutor}, frontendExecutor=${projectConfig.frontendExecutor}, `
+    + `backendReviewer=${projectConfig.backendReviewer}, frontendReviewer=${projectConfig.frontendReviewer}.`,
+);

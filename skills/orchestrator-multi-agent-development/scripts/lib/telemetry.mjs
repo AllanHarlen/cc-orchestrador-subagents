@@ -59,6 +59,7 @@ const ALLOWED_METADATA_FIELDS = new Set([
   "heuristicBaseline",
   "fidelityFloor",
   "historicalSamples",
+  "executorSource",
 ]);
 const ALLOWED_VALIDATION_FIELDS = new Set(["total", "passed", "failed", "skipped", "status"]);
 const OPTIONAL_STRING_FIELDS = new Set([
@@ -81,6 +82,7 @@ const STRING_METADATA_FIELDS = new Set([
   "reason",
   "heuristicBaseline",
   "fidelityFloor",
+  "executorSource",
 ]);
 
 export class TelemetryError extends Error {
@@ -348,7 +350,10 @@ export function projectRunTelemetry(projectRoot, artifactDir) {
         workspaceId: task.workspace?.id ?? task.workspace?.workspaceId ?? null,
         apiCalls: Number(task.apiCalls ?? 0),
         toolCalls: Number(task.toolCalls ?? 0),
-        metadata: { finalAttempt: Number(attempt.attempt) === Number(task.attempt) },
+        metadata: {
+          finalAttempt: Number(attempt.attempt) === Number(task.attempt),
+          executorSource: attempt.executorSource ?? task.executorSource ?? null,
+        },
       }));
     }
     const result = task.status;
@@ -383,6 +388,7 @@ export function projectRunTelemetry(projectRoot, artifactDir) {
       metadata: {
         firstPass: Number(task.attempt ?? 0) === 1,
         sourcePresent: task.sourcePresent !== false,
+        executorSource: task.executorSource ?? null,
       },
     }));
   }

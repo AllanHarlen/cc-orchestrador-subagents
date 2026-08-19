@@ -23,6 +23,17 @@ import {
   ensureArtifactLayout,
   resolveArtifact,
 } from "./artifact-layout.mjs";
+import {
+  EXECUTORS,
+  EXECUTOR_SOURCE_PROJECT_CONFIG,
+  PROJECT_CONFIG_SCHEMA_VERSION,
+  ProjectConfigError,
+  ROLES,
+  diffProjectConfig,
+  projectConfigPath,
+  readProjectConfig,
+  resolveExecutorForCategory,
+} from "./project-config.mjs";
 
 export const STATE_SCHEMA_VERSION = 1;
 export const EVENT_SCHEMA_VERSION = 1;
@@ -426,6 +437,15 @@ function validateTask(taskId, task) {
       );
     }
   }
+  if (
+    task.executorSource != null &&
+    (typeof task.executorSource !== "string" || task.executorSource.trim() === "")
+  ) {
+    throw new OrchestrationStateError(
+      "INVALID_EXECUTOR_SOURCE",
+      `Task ${taskId} has invalid executorSource ${JSON.stringify(task.executorSource)}`,
+    );
+  }
 }
 
 function validateCompletionGates(gates) {
@@ -477,6 +497,40 @@ function validateCompletionGates(gates) {
   }
 }
 
+// Snapshot da Project_Config e opcional: Run criada antes da stack configuravel
+// nao tem o campo e continua valida (nenhuma migracao de Run existente).
+function validateProjectConfigSnapshot(snapshot) {
+  if (snapshot == null) return;
+  if (typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    throw new OrchestrationStateError(
+      "INVALID_PROJECT_CONFIG_SNAPSHOT",
+      "state.projectConfig must be an object when present",
+    );
+  }
+  if (typeof snapshot.source !== "string" || snapshot.source === "") {
+    throw new OrchestrationStateError(
+      "INVALID_PROJECT_CONFIG_SNAPSHOT",
+      "state.projectConfig.source must be a non-empty string",
+    );
+  }
+  const roles = snapshot.roles;
+  if (roles == null || typeof roles !== "object" || Array.isArray(roles)) {
+    throw new OrchestrationStateError(
+      "INVALID_PROJECT_CONFIG_SNAPSHOT",
+      "state.projectConfig.roles must be an object with the four configured roles",
+    );
+  }
+  for (const role of ROLES) {
+    if (!EXECUTOR_SET.has(roles[role])) {
+      throw new OrchestrationStateError(
+        "INVALID_PROJECT_CONFIG_SNAPSHOT",
+        `state.projectConfig.roles.${role} must be one of ${EXECUTORS.join(", ")}`,
+        { role, received: roles[role] ?? null, accepted: [...EXECUTORS] },
+      );
+    }
+  }
+}
+
 function assertRunMutable(state, operation = "mutate") {
   if (TERMINAL_RUN_STATUSES.has(state.status)) {
     throw new OrchestrationStateError(
@@ -523,6 +577,7 @@ export function validateState(state) {
     validateTask(taskId, task);
   }
   validateCompletionGates(state.completionGates);
+  validateProjectConfigSnapshot(state.projectConfig);
   return state;
 }
 
@@ -600,6 +655,12 @@ function reduceEvent(previousState, event) {
       state.currentWave = payload.currentWave;
       state.cancellation = clone(payload.cancellation);
       state.resume = clone(payload.resume);
+      break;
+    case "PROJECT_CONFIG_UPDATED":
+      state.tasks = clone(payload.tasks);
+      state.projectConfig = clone(payload.projectConfig);
+      state.status = payload.runStatus;
+      state.currentWave = payload.currentWave;
       break;
     default:
       throw new OrchestrationStateError(
@@ -936,6 +997,8 @@ function extractTaskBlocks(content) {
   return blocks;
 }
 
+const EXECUTOR_SET = new Set(EXECUTORS);
+
 function detectExecutor(text) {
   const codex = /\b(?:codex:codex-rescue|codex)\b/i.test(text);
   const agy = /\b(?:cc-antigravity-plugin:antigravity-coder|antigravity|agy)\b/i.test(text);
@@ -943,6 +1006,197 @@ function detectExecutor(text) {
   if (codex) return "codex";
   if (agy) return "agy";
   return null;
+}
+
+// `claude-code` nao aparece na heuristica por mencao de agente (`detectExecutor`),
+// entao um artefato de plano que declara o Executor explicitamente
+// (`- executor: `claude-code``) precisa ser lido pelo campo, nao pelo texto.
+// A heuristica continua valendo para artefato legado que so menciona o agente.
+function parseDeclaredExecutor(text) {
+  const raw = parseScalarField(text, ["executor"]);
+  if (!raw) return null;
+  const normalized = raw.trim().toLowerCase();
+  return EXECUTOR_SET.has(normalized) ? normalized : null;
+}
+
+function parseDeclaredExecutorSource(text) {
+  const raw = parseScalarField(text, ["executorSource", "executor source", "origem do executor"]);
+  if (!raw) return null;
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "" ? null : normalized;
+}
+
+/**
+ * Snapshot da Project_Config gravado no `state.json` (Req 10.1).
+ *
+ * Guarda apenas o que decide roteamento e revalidacao de ambiente: versao do
+ * schema, origem da configuracao, o `updatedAt` do arquivo e os quatro papeis.
+ * `defaultsApplied` fica fora de proposito: ele documenta a coleta, nao o
+ * roteamento.
+ */
+function projectConfigSnapshot(config, source) {
+  const roles = {};
+  for (const role of ROLES) roles[role] = config[role];
+  return {
+    schemaVersion: Number(config.schemaVersion ?? PROJECT_CONFIG_SCHEMA_VERSION),
+    source: source ?? "default",
+    updatedAt: config.updatedAt ?? null,
+    roles,
+  };
+}
+
+function invalidProjectConfig(role, received) {
+  return new OrchestrationStateError(
+    "INVALID_PROJECT_CONFIG",
+    `Project config role ${role} must be one of ${EXECUTORS.join(", ")}, received ${JSON.stringify(String(received ?? ""))}`,
+    { role, received: received ?? null, accepted: [...EXECUTORS] },
+  );
+}
+
+/** Normaliza uma Project_Config recebida por opcao (sem tocar o filesystem). */
+function normalizeProvidedProjectConfig(input) {
+  const roleValues = input.roles ?? input;
+  const config = {
+    schemaVersion: Number(input.schemaVersion ?? PROJECT_CONFIG_SCHEMA_VERSION),
+    updatedAt: input.updatedAt ?? null,
+  };
+  for (const role of ROLES) {
+    const value = String(roleValues?.[role] ?? "").trim().toLowerCase();
+    if (!EXECUTOR_SET.has(value)) throw invalidProjectConfig(role, roleValues?.[role]);
+    config[role] = value;
+  }
+  return { exists: true, source: input.source ?? "provided", path: input.path ?? null, config };
+}
+
+/**
+ * Resolve a Project_Config de uma Run: `options.projectConfig` tem precedencia
+ * sobre o Project_Config_File do projeto.
+ *
+ * Arquivo existente e invalido bloqueia a operacao com
+ * `PROJECT_CONFIG_INVALID`: gravar snapshot a partir de arquivo defeituoso
+ * congelaria uma configuracao que o usuario nunca escolheu.
+ */
+function loadProjectConfigForRun(projectRoot, options = {}) {
+  if (options.projectConfig != null && typeof options.projectConfig === "object") {
+    return normalizeProvidedProjectConfig(options.projectConfig);
+  }
+  try {
+    return readProjectConfig(projectRoot);
+  } catch (error) {
+    if (error instanceof ProjectConfigError) {
+      throw new OrchestrationStateError(
+        "PROJECT_CONFIG_INVALID",
+        `Project config file could not be used: ${error.message}`,
+        { parserCode: error.code, ...(error.details ?? {}) },
+      );
+    }
+    throw error;
+  }
+}
+
+/** Leitura tolerante: usada na retomada, onde arquivo invalido nao pode impedir o resume. */
+function readProjectConfigForDrift(projectRoot) {
+  try {
+    const read = readProjectConfig(projectRoot);
+    return { ...read, error: null };
+  } catch (error) {
+    if (error instanceof ProjectConfigError) {
+      return {
+        exists: true,
+        source: "invalid",
+        path: error.details?.path ?? projectConfigPath(projectRoot),
+        config: null,
+        error: { code: error.code, message: error.message },
+      };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Compara o snapshot da Run com o Project_Config_File atual (Req 10.2).
+ *
+ * Run sem snapshot (criada antes da stack configuravel) devolve
+ * `changed: false` e `source: "legacy"`: nao ha configuracao congelada para
+ * divergir, e a Run continua legivel. Arquivo atual ilegivel tambem devolve
+ * `changed: false`, com `error` preenchido, porque o resume nao pode depender
+ * de um arquivo que o usuario ainda vai corrigir.
+ */
+function computeProjectConfigDrift(state, projectRoot) {
+  const snapshot = state.projectConfig ?? null;
+  const file = readProjectConfigForDrift(projectRoot);
+  const base = {
+    path: file.path,
+    fileSource: file.source,
+    error: file.error,
+  };
+
+  if (snapshot == null) {
+    return {
+      ...base,
+      changed: false,
+      source: "legacy",
+      differences: [],
+      snapshotUpdatedAt: null,
+      fileUpdatedAt: file.config?.updatedAt ?? null,
+      reason: "This run has no project configuration snapshot and is treated as a legacy run",
+    };
+  }
+
+  if (file.config == null) {
+    return {
+      ...base,
+      changed: false,
+      source: snapshot.source ?? "file",
+      differences: [],
+      snapshotUpdatedAt: snapshot.updatedAt ?? null,
+      fileUpdatedAt: null,
+      reason: "The current project config file is invalid; the run keeps its snapshot",
+    };
+  }
+
+  const differences = diffProjectConfig(snapshot.roles ?? null, file.config).map((entry) => ({
+    ...entry,
+  }));
+  return {
+    ...base,
+    changed: differences.length > 0,
+    source: file.source,
+    differences,
+    snapshotUpdatedAt: snapshot.updatedAt ?? null,
+    fileUpdatedAt: file.config.updatedAt ?? null,
+    snapshotRoles: clone(snapshot.roles ?? null),
+    fileRoles: Object.fromEntries(ROLES.map((role) => [role, file.config[role]])),
+    reason: differences.length > 0
+      ? "The project config file diverges from the snapshot recorded for this run"
+      : "The project config file matches the snapshot recorded for this run",
+  };
+}
+
+/**
+ * Executor derivado da categoria da task mais os papeis da Project_Config
+ * (Req 7.1 a 7.4).
+ *
+ * `FULLSTACK` tem duas fatias e por isso pode render dois executores; o registro
+ * na Run usa a mesma convencao que a heuristica legada (`codex+agy`) quando as
+ * fatias caem em agentes diferentes. Task sem categoria reconhecida devolve
+ * `null`: derivar executor a partir de categoria desconhecida seria inventar
+ * roteamento.
+ */
+function deriveTaskExecutor(task, roles) {
+  if (!task?.category) return null;
+  let resolved;
+  try {
+    resolved = resolveExecutorForCategory(task.category, roles);
+  } catch (error) {
+    if (error instanceof ProjectConfigError) return null;
+    throw error;
+  }
+  const executor = resolved.executor
+    ?? (resolved.backend === resolved.frontend
+      ? resolved.backend
+      : `${resolved.backend}+${resolved.frontend}`);
+  return { executor, executorSource: EXECUTOR_SOURCE_PROJECT_CONFIG };
 }
 
 function blockTitle(block) {
@@ -1026,11 +1280,15 @@ export function parseTaskArtifacts(artifactDir) {
     const category = CATEGORY_VALUES.find((value) =>
       new RegExp(`\\b${value}\\b`, "i").test(block.text),
     ) ?? null;
+    const declaredExecutor = parseDeclaredExecutor(block.text);
     tasks[block.id] = {
       id: block.id,
       title: blockTitle(block),
       category,
-      executor: detectExecutor(block.text),
+      executor: declaredExecutor ?? detectExecutor(block.text),
+      executorSource: declaredExecutor
+        ? parseDeclaredExecutorSource(block.text) ?? EXECUTOR_SOURCE_PROJECT_CONFIG
+        : null,
       expectedFiles: parseExpectedFiles(block.text),
       classificationPresent: true,
       ...parseTaskPlanningMetadata(block.text),
@@ -1054,11 +1312,15 @@ export function parseTaskArtifacts(artifactDir) {
     for (const taskId of ids) {
       if (!current.tasks.includes(taskId)) current.tasks.push(taskId);
       if (!tasks[taskId]) {
+        const declaredInWave = parseDeclaredExecutor(line);
         tasks[taskId] = {
           id: taskId,
           title: taskId,
           category: null,
-          executor: detectExecutor(line),
+          executor: declaredInWave ?? detectExecutor(line),
+          executorSource: declaredInWave
+            ? parseDeclaredExecutorSource(line) ?? EXECUTOR_SOURCE_PROJECT_CONFIG
+            : null,
           expectedFiles: [],
           classificationPresent: false,
           complexity: null,
@@ -1096,6 +1358,7 @@ export function parseTaskArtifacts(artifactDir) {
 
 function initialTask(metadata, now) {
   return {
+    executorSource: null,
     ...clone(metadata),
     status: "PENDING",
     attempt: 0,
@@ -1273,11 +1536,17 @@ export function initRun(options) {
     );
     const runId = options.runId ?? nextRunId(projectRoot, slug, asDate(options.now));
     const currentWave = parsed.waves[0]?.id ?? null;
+    // Req 10.1: a Run congela a Project_Config vigente. `source` distingue
+    // configuracao lida do arquivo da configuracao padrao aplicada por ausencia
+    // de arquivo, o que e o que o drift do resume precisa para explicar a
+    // diferenca ao usuario.
+    const resolvedConfig = loadProjectConfigForRun(projectRoot, options);
     const initial = {
       schemaVersion: STATE_SCHEMA_VERSION,
       layoutVersion,
       runId,
       slug,
+      projectConfig: projectConfigSnapshot(resolvedConfig.config, resolvedConfig.source),
       artifactRoot: toPosix(relative(projectRoot, artifactDir) || "."),
       status: "RUNNING",
       statusReason: null,
@@ -1365,10 +1634,20 @@ export function syncRunFromArtifacts(artifactDir, options = {}) {
       const previous = state.tasks[taskId];
       const sourcePresent = metadata.classificationPresent !== false;
       if (!sourcePresent) missingFromSource.push(taskId);
+      // Task ja despachada mantem o Executor do dispatch (Req 10.5): reconciliacao
+      // e telemetria consultam o agente que de fato recebeu a task, e nao o que o
+      // artefato de plano passou a declarar depois.
+      const dispatched = previous != null && Number(previous.attempt ?? 0) > 0;
       nextTasks[taskId] = previous
         ? {
             ...previous,
             ...clone(metadata),
+            executor: dispatched
+              ? previous.executor ?? null
+              : metadata.executor ?? previous.executor ?? null,
+            executorSource: dispatched
+              ? previous.executorSource ?? null
+              : metadata.executorSource ?? previous.executorSource ?? null,
             expectedFiles: metadata.expectedFiles.length > 0
               ? metadata.expectedFiles
               : previous.expectedFiles ?? [],
@@ -1676,6 +1955,10 @@ function mergeTaskFields(previous, status, options, now, git) {
   task.status = status;
   task.updatedAt = now;
   if (options.executor !== undefined) task.executor = options.executor;
+  // Registro de dispatch uniforme (Req 7.7): `claude-code` grava executor,
+  // origem da decisao de roteamento, sessao do subagente, tentativa e estado
+  // canonico exatamente como `codex` e `agy`.
+  if (options.executorSource !== undefined) task.executorSource = options.executorSource || null;
   if (options.model !== undefined) task.model = options.model || null;
   if (options.complexity !== undefined) task.complexity = options.complexity || null;
   if (options.sessionId !== undefined) task.sessionId = options.sessionId || null;
@@ -1715,6 +1998,7 @@ function mergeTaskFields(previous, status, options, now, git) {
       ...(attemptIndex >= 0 ? task.attemptHistory[attemptIndex] : {}),
       attempt: Number(task.attempt),
       executor: task.executor ?? null,
+      executorSource: task.executorSource ?? null,
       model: task.model ?? null,
       status: "RUNNING",
       startedAt: attemptIndex >= 0
@@ -1762,6 +2046,7 @@ function mergeTaskFields(previous, status, options, now, git) {
     const record = {
       ...previousAttempt,
       executor: task.executor ?? previousAttempt.executor ?? null,
+      executorSource: task.executorSource ?? previousAttempt.executorSource ?? null,
       model: task.model ?? previousAttempt.model ?? null,
       status,
       completedAt,
@@ -2237,6 +2522,7 @@ function reconcileTask(task, probe, projectRoot, git, now) {
     const record = {
       ...previousAttempt,
       executor: next.executor ?? previousAttempt.executor ?? null,
+      executorSource: next.executorSource ?? previousAttempt.executorSource ?? null,
       model: next.model ?? previousAttempt.model ?? null,
       status: next.status,
       completedAt,
@@ -2282,7 +2568,10 @@ function reconcileLocked(artifactDir, state, options = {}) {
     if (tasks[taskId].status === "UNKNOWN") {
       pendingExternalProbes.push({
         taskId,
+        // Req 10.5: a consulta de status usa o Executor registrado no dispatch,
+        // nunca o Executor que a configuracao atual derivaria agora.
         executor: tasks[taskId].executor,
+        executorSource: tasks[taskId].executorSource ?? null,
         sessionId: tasks[taskId].sessionId,
         conversationId: tasks[taskId].conversationId,
         required: true,
@@ -2411,14 +2700,169 @@ export function resumeRunAtDirectory(artifactDir, options = {}) {
       },
       options,
     );
+    // Req 10.2: a retomada compara o snapshot da Run com o Project_Config_File
+    // atual. A decisao entre manter o snapshot e adotar a configuracao atual e do
+    // usuario (Req 10.3), entao aqui so reportamos a diferenca.
+    const projectConfigDrift = computeProjectConfigDrift(
+      committed.state,
+      resolveProjectRoot(artifactDir, options),
+    );
     return {
       state: committed.state,
       events: [resumed.event, committed.event],
       unknownTasks,
-      report: reconciled.report,
+      projectConfigDrift,
+      report: { ...reconciled.report, projectConfigDrift },
       summary: runSummary(committed.state),
     };
   }, options);
+}
+
+/**
+ * Adota a Project_Config atual em uma Run em andamento (Req 10.4).
+ *
+ * Escopo unico suportado: `pending`. Somente task com `status: PENDING` e
+ * `attempt: 0` — ou seja, task ainda nao despachada — tem `executor` e
+ * `executorSource` reatribuidos a partir da configuracao atual. Task ja
+ * despachada entra em `skippedTaskIds` e mantem o Executor do dispatch, que e o
+ * Executor que a reconciliacao e a telemetria usam (Req 10.5).
+ *
+ * A operacao atualiza o snapshot da Run e emite `PROJECT_CONFIG_UPDATED` com
+ * `differences`, `appliedTaskIds`, `skippedTaskIds` e o motivo da mudanca.
+ *
+ * @param {string} artifactDir Diretorio da Run.
+ * @param {object} [options] `scope` (`pending`), `projectConfig` (opcional, no
+ *   lugar do arquivo), `reason`, `projectRoot`, `now`, `actor`.
+ */
+export function applyProjectConfigToRun(artifactDir, options = {}) {
+  const scope = String(options.scope ?? "pending").toLowerCase();
+  if (scope !== "pending") {
+    throw new OrchestrationStateError(
+      "INVALID_CONFIG_SCOPE",
+      `Project config scope must be "pending", received ${options.scope}`,
+      { received: options.scope ?? null, accepted: ["pending"] },
+    );
+  }
+
+  return withLock(artifactDir, () => {
+    const state = loadRun(artifactDir, { repairSnapshot: true }).state;
+    assertRunMutable(state, "apply a project configuration");
+    const projectRoot = resolveProjectRoot(artifactDir, options);
+    const resolvedConfig = loadProjectConfigForRun(projectRoot, options);
+    const snapshot = projectConfigSnapshot(resolvedConfig.config, resolvedConfig.source);
+    const differences = diffProjectConfig(
+      state.projectConfig?.roles ?? null,
+      snapshot.roles,
+    ).map((entry) => ({ ...entry }));
+    const now = iso(options.now);
+    const reason = options.reason
+      ?? "User adopted the current project configuration for tasks that were not dispatched yet";
+
+    const tasks = {};
+    const appliedTaskIds = [];
+    const skippedTaskIds = [];
+    const skipped = [];
+    const changes = [];
+
+    for (const [taskId, task] of Object.entries(state.tasks)) {
+      const eligible = task.status === "PENDING" && Number(task.attempt ?? 0) === 0;
+      if (!eligible) {
+        tasks[taskId] = clone(task);
+        skippedTaskIds.push(taskId);
+        skipped.push({
+          taskId,
+          reason: "ALREADY_DISPATCHED",
+          status: task.status,
+          attempt: Number(task.attempt ?? 0),
+          executor: task.executor ?? null,
+        });
+        continue;
+      }
+
+      const derived = deriveTaskExecutor(task, snapshot.roles);
+      if (derived == null) {
+        tasks[taskId] = clone(task);
+        skippedTaskIds.push(taskId);
+        skipped.push({
+          taskId,
+          reason: "CATEGORY_NOT_CLASSIFIED",
+          status: task.status,
+          attempt: Number(task.attempt ?? 0),
+          executor: task.executor ?? null,
+        });
+        continue;
+      }
+
+      const next = clone(task);
+      if (next.executor !== derived.executor || next.executorSource !== derived.executorSource) {
+        changes.push({
+          taskId,
+          from: next.executor ?? null,
+          to: derived.executor,
+          category: next.category ?? null,
+        });
+      }
+      next.executor = derived.executor;
+      next.executorSource = derived.executorSource;
+      next.updatedAt = now;
+      tasks[taskId] = next;
+      appliedTaskIds.push(taskId);
+    }
+
+    const draft = { ...state, tasks };
+    const currentWave = computeCurrentWave(draft);
+    const runStatus = deriveRunStatus(tasks, state.status);
+    const committed = commitEvent(
+      artifactDir,
+      state,
+      "PROJECT_CONFIG_UPDATED",
+      {
+        tasks,
+        projectConfig: snapshot,
+        runStatus,
+        currentWave,
+        scope,
+        reason,
+        differences,
+        appliedTaskIds,
+        skippedTaskIds,
+      },
+      options,
+    );
+
+    return {
+      state: committed.state,
+      event: committed.event,
+      projectConfig: snapshot,
+      previousProjectConfig: clone(state.projectConfig ?? null),
+      scope,
+      reason,
+      differences,
+      appliedTaskIds,
+      skippedTaskIds,
+      skipped,
+      changes,
+      summary: runSummary(committed.state),
+    };
+  }, options);
+}
+
+/**
+ * Compara o snapshot da Run com o Project_Config_File atual sem mutar a Run.
+ *
+ * Insumo do ramo de decisao do `resume` (Req 10.2, 10.3) e do relatorio de
+ * status. Run sem snapshot devolve `changed: false` e `source: "legacy"`.
+ */
+export function inspectProjectConfigDrift(artifactDir, options = {}) {
+  const loaded = loadRun(artifactDir);
+  return {
+    artifactDir: resolve(artifactDir),
+    projectConfig: clone(loaded.state.projectConfig ?? null),
+    projectConfigDrift: computeProjectConfigDrift(
+      loaded.state,
+      resolveProjectRoot(artifactDir, options),
+    ),
+  };
 }
 
 export function resolveTaskScope(artifactDir, taskId, decision, options = {}) {
@@ -2976,6 +3420,9 @@ export function statusRun(artifactDir) {
   return {
     artifactDir: resolve(artifactDir),
     summary: runSummary(loaded.state),
+    // Run legada nao tem snapshot; `null` e a resposta honesta, e o comando de
+    // status segue funcionando sem ele.
+    projectConfig: loaded.state.projectConfig ?? null,
     tasks: loaded.state.tasks,
     completionGates: loaded.state.completionGates,
     resume: loaded.state.resume,

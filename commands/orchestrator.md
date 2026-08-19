@@ -1,6 +1,6 @@
 ---
 description: Conduzir, retomar e manter um workflow multiagentico persistente que acumula conhecimento comprovado, com state machine, lifecycle, worktrees, validacao deterministica, telemetria e learning
-argument-hint: "resume [runId] | preflight | knowledge <status|search|pin|archive|rollback> | telemetry <report|compact> | [flags] <PRD/especificacao>"
+argument-hint: "resume [runId] | preflight | project-config | knowledge <status|search|pin|archive|rollback> | telemetry <report|compact> | [flags] <PRD/especificacao>"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
 
@@ -8,7 +8,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Age
 
 Inicia o **Orquestrador Multiagentico de Desenvolvimento** a partir de um PRD ou especificacao ja pronta fornecida pelo usuario. O orquestrador **nao faz discovery nem planejamento**: ele ingere a especificacao como fonte da verdade e orquestra os subagentes. O workflow cobre:
 
-0. Preflight
+0. Preflight, resolucao da configuracao de stack do projeto e instalacao assistida das dependencias ausentes
 1. Project Memory comprovada + historico FTS5 + ingestao do PRD/especificacao
 2. Classificacao das tasks com contrato, evidence plan, scope, complexidade e features
 3. Ondas, routing adaptativo conservador e plano de worktrees
@@ -92,6 +92,7 @@ Politica de sandbox Codex:
 Subcomandos reservados:
 
 - `preflight` — valida apenas as dependencias;
+- `project-config` — mostra e altera a stack de agentes do projeto (`.orchestrator/project-config.md`) e revalida o ambiente, sem iniciar run;
 - `resume` — retoma o run ativo mais recentemente atualizado;
 - `resume <runId>` — retoma o run exato sem assumir o resultado de tasks interrompidas;
 - `knowledge status` — resume memoria, historico, recipes e Curator;
@@ -194,9 +195,55 @@ Se `$ARGUMENTS` for exatamente `preflight`, rode apenas:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
 ```
 
-Mostre o resumo do JSON ao usuario e encerre.
+Mostre o resumo do JSON ao usuario e encerre. O relatorio ja traz o bloco `projectConfig` com os quatro papeis efetivos e o `requiredCliSet` derivado; neste modo nao colete configuracao nem ofereca instalacao.
 
-### Passo 1 - Preflight
+### Modo project-config
+
+Se o primeiro argumento for `project-config`, este ramo substitui a execucao de PRD. Nao inicialize run, nao crie `.orchestration/<slug>/`, nao ingira PRD nem especificacao e nao delegue agentes. Leia `references/project-config.md` por completo ao entrar neste modo.
+
+Etapa 1 - mostre a configuracao vigente e a origem (`file` = `.orchestrator/project-config.md`; `default` = padrao `codex`/`agy`/`codex`/`agy`):
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/project-config.mjs" show --root "."
+```
+
+`show` devolve `{ config, source, path, exists, requiredCliSet }`. `validate` e `required-clis` existem para checagem isolada e nunca gravam.
+
+Etapa 2 - se `show` retornar `ok: false` com erro do parser (`PROJECT_CONFIG_FIELD_MISSING`, `PROJECT_CONFIG_INVALID_VALUE`, `PROJECT_CONFIG_SCHEMA_UNSUPPORTED`, `PROJECT_CONFIG_UNPARSEABLE`), apresente o erro nomeando campo, valor recebido, conjunto aceito e caminho, e ofereca por `AskUserQuestion` a regravacao do arquivo a partir de novas respostas. Nao sobrescreva o arquivo sem confirmacao explicita.
+
+Etapa 3 - apresente as quatro perguntas de `AskUserQuestion` (`backendExecutor`, `frontendExecutor`, `frontendReviewer`, `backendReviewer`) com o texto, as descricoes de papel e a CLI exigida por opcao de `references/project-config.md`, marcando o **valor vigente** de cada papel como opcao default.
+
+Etapa 4 - grave as respostas. Papel sem resposta entra em `--default-applied` e recebe o default da referencia; omita a flag quando todos os quatro papeis foram respondidos:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/project-config.mjs" write --root "." \
+  --backend-executor "<codex|agy|claude-code>" \
+  --frontend-executor "<codex|agy|claude-code>" \
+  --backend-reviewer "<codex|agy|claude-code>" \
+  --frontend-reviewer "<codex|agy|claude-code>" \
+  --default-applied "<papel,papel>"
+```
+
+`write` grava `updatedAt` novo e devolve `changed` (papeis alterados) e `previous`. Nunca edite `.orchestrator/project-config.md` a mao: o renderer e a unica rota de gravacao.
+
+Etapa 5 - rode o preflight uma vez, sempre, inclusive quando `changed` vier vazio:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
+```
+
+- `changed` vazio -> informe que nenhum papel mudou e apresente o resultado da revalidacao.
+- `changed` com papeis -> apresente o novo `status`, o `projectConfig.requiredCliSet` e os itens de `failed` e `warnings`.
+
+Etapa 6 - se o preflight reprovar uma CLI do Required_CLI_Set ou o plugin do Claude Code que a conecta (`openai-codex`/`cc-antigravity-plugin`), acione o Dependency_Installer para o item reprovado, com o mesmo protocolo do Passo 1.3: uma pergunta por dependencia, execucao somente apos `instalar`, tratamento de exit code diferente de zero e novo preflight ao final. Depois disso encerre o comando; nenhuma run e iniciada.
+
+### Passo 1 - Preflight, configuracao do projeto e instalacao assistida
+
+A Fase 0 tem quatro etapas, nesta ordem: preflight, resolucao da Project_Config, instalacao assistida e novo preflight. A ordem e obrigatoria — a coleta da configuracao vem antes de qualquer oferta de instalacao, porque o conjunto de CLIs obrigatorias depende dos papeis escolhidos. Numa run nova sem arquivo de configuracao isso produz ate tres preflights.
+
+Leia `references/project-config.md` (perguntas, defaults, roteamento derivado, protocolo do Dependency_Installer) e `references/mcp-context.md` (protocolo do CBM_MCP e do Context7_MCP) antes de conduzir estas etapas.
+
+#### Passo 1.1 - Preflight
 
 Execute:
 
@@ -209,11 +256,46 @@ Parse o JSON retornado:
 - `status: "ok"` -> siga.
 - `status: "failed"` -> cancele imediatamente e use `remediation`.
 
+O relatorio traz:
+
+- `projectConfig` — os quatro papeis efetivos, `path`, `updatedAt`, `requiredCliSet` e `source: "file" | "default"`;
+- `warnings` no topo — reprovado opcional e MCP ausente, com `reason` `NOT_DETECTED`, `TIMEOUT` ou `NOT_REQUIRED_BY_PROJECT_CONFIG`;
+- `checks.optional.mcp.codebase-memory` e `checks.optional.mcp.context7` — evidencias e comandos de instalacao dos dois MCPs;
+- `failed` — apenas reprovado obrigatorio. MCP ausente e CLI nao exigida pela configuracao ficam em `warnings` e nao bloqueiam.
+
 O JSON inclui `autoRemediation`. Se a permissao `Bash(node:*)` foi criada ou ajustada em `.claude/settings.json`, reporte isso ao usuario junto com o status final e diga se a correcao foi revalidada.
 
-O preflight tambem valida `cc-antigravity-plugin >= 3.6.0` (requerido para `--parallel`/`--subagent-model`), a presenca de `agents/antigravity-coder.md` (implementacao), `agents/antigravity-agent.md` (review read-only), `commands/antigravity.md` e `scripts/antigravity-bridge.js`, alem da versao detectada de `agy`.
+O preflight valida `cc-antigravity-plugin >= 3.6.0` (requerido para `--parallel`/`--subagent-model`), a presenca de `agents/antigravity-coder.md` (implementacao), `agents/antigravity-agent.md` (review read-only), `commands/antigravity.md` e `scripts/antigravity-bridge.js`, alem da versao detectada de `agy` — todos obrigatorios somente quando algum papel da Project_Config e `agy`. O mesmo vale para `cli.codex` e `plugins.openai-codex`, obrigatorios somente quando algum papel e `codex`.
 
-Tambem exige Node.js `>=22.13.0`, `node:sqlite` sem flag experimental e SQLite FTS5. Essa checagem e bloqueante para Project Memory, history, recipes e adaptive routing.
+Tambem exige Node.js `>=22.13.0`, `node:sqlite` sem flag experimental e SQLite FTS5. Essa checagem e bloqueante em qualquer configuracao de projeto, porque Project Memory, history, recipes e adaptive routing dependem dela.
+
+#### Passo 1.2 - Resolucao da Project_Config
+
+Decida pelo bloco `projectConfig` e pelo check `checks.config.project-config`:
+
+- `source: "file"` -> a configuracao existe e e valida. Carregue-a e **nao repita as quatro perguntas**; va direto para o Passo 1.3.
+- `source: "default"` com arquivo ausente -> apresente as quatro perguntas de `AskUserQuestion` (`backendExecutor`, `frontendExecutor`, `frontendReviewer`, `backendReviewer`) **antes de oferecer qualquer instalacao**, com as descricoes e a CLI exigida por opcao de `references/project-config.md`. Grave com `project-config write` (papel sem resposta vai em `--default-applied` e recebe o default) e rode o preflight novamente para obter o Required_CLI_Set efetivo.
+- `checks.config.project-config.ok: false` -> o arquivo existe e e invalido. Pare com o erro do parser e a remediacao de corrigir ou remover `.orchestrator/project-config.md`, preservando o conteudo atual. Nao sobrescreva o arquivo dentro de uma run.
+
+Registre em `report/workflow-log.md` a configuracao efetiva, a origem e os papeis com `default-aplicado`. `frontendReviewer: codex` sobrepoe a politica padrao de review front-end pelo AGY: registre a sobreposicao e avise o usuario uma unica vez por run.
+
+#### Passo 1.3 - Instalacao assistida
+
+Com a Project_Config resolvida, monte a lista de dependencias ausentes: CBM_MCP ausente, Context7_MCP ausente e, para cada CLI do Required_CLI_Set, a propria CLI (quando `checks.cli.*` reprova) e o plugin do Claude Code que a conecta (quando `checks.plugins.*` reprova) — `openai-codex` para `codex`, `cc-antigravity-plugin` para `agy` (MCPs primeiro, depois CLI+plugin por CLI). CLI e plugin sao reprovacoes independentes: CLI instalada nao implica plugin instalado, e vice-versa. Use `scripts/lib/dependency-plan.mjs` (`buildMissingDependencies(report, { platform })`) como catalogo de comandos por SO em vez de reescrever comandos no prompt.
+
+- Uma pergunta `AskUserQuestion` **por dependencia**, com as opcoes `instalar` e `seguir sem instalar`, informando nome, beneficio, impacto de seguir sem ela e o comando que sera executado.
+- Execute comando de instalacao somente depois de o usuario responder `instalar` para aquela dependencia. Nunca agrupe dependencias numa pergunta so.
+- Passos interativos ficam com o usuario: `codex login` depois da CLI `codex`, primeira execucao de `agy` para autenticar o AGY, e reinicio do agente de codigo para carregar um MCP recem-instalado.
+- Exit code diferente de zero -> registre o codigo de saida e a ultima linha de erro, apresente a remediacao manual e peca decisao ao usuario antes de prosseguir. Sem loop de retry.
+- `seguir sem instalar` em dependencia opcional (MCP) -> registre a limitacao em `report/workflow-log.md` e siga pelo caminho deterministico de `references/mcp-context.md`.
+- `seguir sem instalar` em CLI do Required_CLI_Set -> ofereca por `AskUserQuestion` trocar o papel afetado para `claude-code` (regravando a configuracao e rodando o preflight de novo) ou encerrar o workflow. Nunca troque o papel por conta propria.
+- Registre por dependencia apenas `name`, `decision`, `command`, `exitCode` e `durationMs` (`summarizeInstallOutcome`). Nada de stdout bruto, conteudo de arquivo de configuracao, chave de API ou cabecalho de autenticacao.
+
+#### Passo 1.4 - Novo preflight
+
+Concluidos todos os comandos confirmados, rode o preflight uma vez e apresente ao usuario o novo `status`, o Required_CLI_Set efetivo, os itens reprovados e os avisos. Esse preflight e obrigatorio mesmo que toda instalacao tenha retornado zero — e ele que confirma que a dependencia ficou visivel para o ambiente.
+
+Com `checks.optional.mcp.codebase-memory.ok: true`, o protocolo de grafo de `references/mcp-context.md` passa a valer (gate de `index_status` antes de usar qualquer resultado como evidencia). Com `checks.optional.mcp.context7.ok: true`, avise o usuario que documentacao atual sera exigida nos prompts dos subagentes.
 
 ### Passo 2 - Carregar a skill
 
@@ -296,7 +378,10 @@ Mantenha o usuario informado com mensagens curtas:
 
 - `preflight OK`
 - se houve auto-correcao: `preflight auto-remediou Bash(node:*) em .claude/settings.json e revalidou`
+- `stack do projeto: back-end <executor>, front-end <executor>, review back-end <revisor>, review front-end <revisor> (origem: file|default)`
+- se houve instalacao: `instalei <N> dependencias confirmadas e rodei o preflight de novo: status <ok|failed>`
 - `Context7 MCP detectado; vou exigir docs atuais nos prompts dos subagentes`
+- `Codebase Memory MCP detectado; vou consultar index_status antes de usar o grafo como evidencia`
 - `Project Memory auditada; carreguei apenas fatos validados e projetei o historico pesquisavel`
 - `especificacao ingerida; classificando tasks em .orchestration/<nome>`
 - `wave <N>: <X> tasks isoladas em worktrees e <Y> serializadas por overlap/escopo`

@@ -4,10 +4,12 @@ import { readFileSync } from "node:fs";
 
 import {
   OrchestrationStateError,
+  applyProjectConfigToRun,
   auditRunCompletion,
   findRunDirectory,
   heartbeatTask,
   initRun,
+  inspectProjectConfigDrift,
   reconcileRunAtDirectory,
   requestRunCancellation,
   resolveTaskScope,
@@ -93,6 +95,7 @@ function taskOptions(args) {
   return {
     ...commonOptions(args),
     executor: args.executor,
+    executorSource: args["executor-source"],
     model: args.model,
     complexity: args.complexity,
     sessionId: args["session-id"],
@@ -132,11 +135,13 @@ function help() {
       sync: "sync --dir .orchestration/<slug>",
       phase: "phase --dir <dir> --phase <n> --status RUNNING|DONE|FAILED|BLOCKED|CANCELLED|UNKNOWN",
       gate: "gate --dir <dir> --gate <id> --status PENDING|RUNNING|DONE|FAILED|BLOCKED|N/A [--evidence <id>] [--required true|false for browserE2E]",
-      task: "task --dir <dir> --task <id> --status <canonical-status> [executor/session/evidence fields]",
+      task: "task --dir <dir> --task <id> --status <canonical-status> [--executor codex|agy|claude-code] [--executor-source project-config] [session/evidence fields]",
       heartbeat: "heartbeat --dir <dir> --task <id> [--api-calls N] [--tool-calls N] [--current-tool name] [--progress-token value]",
       sweep: "sweep --dir <dir> [--stale-idle-seconds 450] [--stale-in-tool-seconds 1200]",
       reconcile: "reconcile --dir <dir> [--probe-file <json>]",
       resume: "resume [runId] [--root <project>] [--probe-file <json>]",
+      "project-config-apply": "project-config-apply --dir <dir> --scope pending [--reason <text>] [--root <project>]",
+      "project-config-drift": "project-config-drift --dir <dir> [--root <project>]",
       scope: "scope --dir <dir> --task <id> --decision REMOVE|REINSTATE --reason <text>",
       cancel: "cancel --dir <dir> --reason <text> [--finalize]",
       lease: "lease --dir <dir> --task <id> --action ACQUIRE|RENEW|RELEASE --owner-id <id> [--ttl-seconds 900]",
@@ -220,6 +225,19 @@ function execute(argv) {
       const directory = artifactDir(args, { positionalRunId: args._[0] });
       return { artifactDir: directory, ...resumeRunAtDirectory(directory, common) };
     }
+    case "project-config-apply": {
+      const directory = artifactDir(args);
+      return {
+        artifactDir: directory,
+        ...applyProjectConfigToRun(directory, {
+          ...common,
+          scope: args.scope ?? "pending",
+          reason: args.reason,
+        }),
+      };
+    }
+    case "project-config-drift":
+      return inspectProjectConfigDrift(artifactDir(args), common);
     case "scope":
       return resolveTaskScope(
         artifactDir(args),

@@ -1,5 +1,7 @@
 # Stack de agentes
 
+> **A stack e configuravel, nao fixa.** As tabelas abaixo descrevem o comportamento sob os defaults da Project_Config (`backendExecutor: codex`, `frontendExecutor: agy`, `backendReviewer: codex`, `frontendReviewer: agy`). Qual agente de fato implementa/revisa cada categoria vem de `.orchestrator/project-config.md`, resolvido na Fase 0.5 e derivado por `scripts/lib/project-config.mjs` — ver `references/project-config.md`. Quando um papel e `claude-code`, o Executor e um subagente do proprio Claude Code delegado pela ferramenta `Agent` (implementacao) ou em modo read-only gravando em `review/review-final.md`/`review/review-frontend.md` (review); nesse papel nenhuma CLI externa e exigida no preflight. `codex`/`agy` continuam a rota quando configurados, exatamente como descrito abaixo.
+
 ## Visao geral
 
 | Papel | Modelo | Subagent type | Effort | Observacoes |

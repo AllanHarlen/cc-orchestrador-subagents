@@ -51,6 +51,9 @@
       "type": "string",
       "minLength": 1
     },
+    "projectConfig": {
+      "$ref": "#/$defs/projectConfigSnapshot"
+    },
     "status": {
       "$ref": "#/$defs/runStatus"
     },
@@ -208,6 +211,67 @@
     }
   },
   "$defs": {
+    "executor": {
+      "enum": [
+        "codex",
+        "agy",
+        "claude-code"
+      ]
+    },
+    "projectConfigSnapshot": {
+      "type": "object",
+      "description": "Snapshot of the Project_Config in force when the run was initialized. Optional: runs created before the configurable agent stack have no snapshot and are treated as legacy (no drift).",
+      "required": [
+        "schemaVersion",
+        "source",
+        "roles"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "enum": [
+            "file",
+            "default",
+            "provided"
+          ]
+        },
+        "updatedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "roles": {
+          "type": "object",
+          "required": [
+            "backendExecutor",
+            "frontendExecutor",
+            "backendReviewer",
+            "frontendReviewer"
+          ],
+          "properties": {
+            "backendExecutor": {
+              "$ref": "#/$defs/executor"
+            },
+            "frontendExecutor": {
+              "$ref": "#/$defs/executor"
+            },
+            "backendReviewer": {
+              "$ref": "#/$defs/executor"
+            },
+            "frontendReviewer": {
+              "$ref": "#/$defs/executor"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "runStatus": {
       "enum": [
         "RUNNING",
@@ -264,6 +328,12 @@
           "minimum": 1
         },
         "executor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executorSource": {
           "type": [
             "string",
             "null"
@@ -445,7 +515,15 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "Executor recorded at dispatch: codex, agy, claude-code, or a FULLSTACK pair such as codex+agy. Reconciliation and telemetry read this field, never a value re-derived from the current configuration."
+        },
+        "executorSource": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Origin of the routing decision. project-config when derived from the Project_Config; null for legacy artifacts routed by agent mention."
         },
         "attempt": {
           "type": "integer",

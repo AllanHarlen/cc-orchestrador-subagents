@@ -207,6 +207,83 @@ test("history projection is idempotent and FTS5 retrieves failures", () => {
   assert.equal(status.counts.failures, 1);
 });
 
+test("malformed GRAPH evidence is rejected before corroboration is even considered", () => {
+  const root = temporaryProject();
+
+  assert.throws(
+    () => addValidatedFact(root, {
+      section: "Architecture",
+      key: "Graph missing fields",
+      value: "demo",
+      sourceType: "GRAPH",
+      sourceRef: "graph:acme-web:search_graph",
+      evidence: { projectId: "acme-web", tool: "search_graph" },
+    }),
+    (error) => error instanceof ProjectKnowledgeError &&
+      error.code === "GRAPH_EVIDENCE_PAYLOAD_INVALID" &&
+      error.details.missing.includes("queriedAt") &&
+      error.details.missing.includes("resultDigest"),
+  );
+
+  assert.throws(
+    () => addValidatedFact(root, {
+      section: "Architecture",
+      key: "Graph bad ref",
+      value: "demo",
+      sourceType: "GRAPH",
+      sourceRef: "graph:acme-web:search_graph",
+      evidence: {
+        projectId: "other-project",
+        tool: "search_graph",
+        queriedAt: "2026-02-14T18:07:02Z",
+        resultDigest: "abc123",
+      },
+    }),
+    (error) => error instanceof ProjectKnowledgeError &&
+      error.code === "GRAPH_EVIDENCE_SOURCE_REF_INVALID" &&
+      error.details.expected === "graph:other-project:search_graph",
+  );
+
+  assert.deepEqual(listFacts(root), []);
+});
+
+test("a graph-sourced fact alone is rejected, and is accepted once corroborated", () => {
+  const root = temporaryProject();
+  writeFileSync(join(root, "package.json"), '{"name":"demo","type":"module"}\n', "utf8");
+
+  const graphOnly = {
+    section: "Architecture",
+    key: "Graph fact",
+    value: "demo service depends on postgres",
+    sourceType: "GRAPH",
+    sourceRef: "graph:acme-web:search_graph",
+    evidence: {
+      projectId: "acme-web",
+      tool: "search_graph",
+      queriedAt: "2026-02-14T18:07:02Z",
+      resultDigest: "abc123",
+    },
+  };
+  assert.throws(
+    () => addValidatedFact(root, graphOnly),
+    (error) => error instanceof ProjectKnowledgeError &&
+      error.code === "GRAPH_EVIDENCE_REQUIRES_CORROBORATION" &&
+      error.details.graphSourceRefs.includes("graph:acme-web:search_graph"),
+  );
+  assert.deepEqual(listFacts(root), []);
+
+  const added = addValidatedFact(root, {
+    ...graphOnly,
+    corroboration: { sourceType: "FILE", sourceRef: "package.json" },
+  });
+  assert.equal(added.fact.status, "VALIDATED");
+  const kinds = added.fact.evidence.map((entry) => entry.kind);
+  assert.deepEqual(kinds.sort(), ["FILE", "GRAPH"]);
+  const graphEvidence = added.fact.evidence.find((entry) => entry.kind === "GRAPH");
+  assert.equal(graphEvidence.payload.projectId, "acme-web");
+  assert.equal(graphEvidence.payload.queriedAt, "2026-02-14T18:07:02Z");
+});
+
 test("history can be fully rebuilt from durable run events", () => {
   const root = temporaryProject();
   runFixture(root, { slug: "first", runId: "first-run" });
