@@ -52,7 +52,7 @@
 - Effort: Medium
 
 ### Front-end
-- Agente: AGY (`cc-antigravity-plugin:antigravity-coder`, com `--model <agyModel>`)
+- Agente: AGY (`cc-antigravity-plugin:antigravity-coder`, com `--mode accept-edits --format stream-json --model <agyModel>`)
 - Fan-out: `<agyParallel: yes|no>` — subagentes Gemini nativos: `<N | N/A>` | Conversation IDs: `<lista | N/A>`
 
 ### Review back-end pos-implementação
@@ -61,7 +61,7 @@
 - Escopo: somente back-end
 
 ### Review front-end pos-implementação
-- Agente: AGY (`cc-antigravity-plugin:antigravity-agent`, `--model gemini-3.1-pro-high`) ou fallback interno do orquestrador
+- Agente: AGY (`cc-antigravity-plugin:antigravity-agent`, `--read-only --format json --model pro-high --effort high [--timeout <agyTimeout>]`) ou fallback interno do orquestrador
 - Escopo: somente front-end
 
 ## 6. Tasks executadas
@@ -71,7 +71,7 @@ Para cada task:
 - categoria;
 - `contractRequired`;
 - `assignedAgent`;
-- execucao (`--effort` no Codex; AGY com `--model <agyModel>`);
+- execucao (`--effort` no Codex; AGY com modo/formato/modelo/effort/timeout efetivos);
 - model source/evidence (`user|heuristic|adaptive`, `agyModelEvidence`);
 - resultado de `validate-routing.mjs`;
 - evidence plan (`expectedFiles`, `validationPlan`) e `allowedPaths`;
@@ -117,7 +117,7 @@ Para cada contrato:
 
 | Task | Subagent type | Execucao | Fan-out | Status | Resumo | Riscos |
 |---|---|---|---|---|---|---|
-| `<T1>` | `codex:codex-rescue` | `<--effort medium/high \| AGY --model <agyModel> [--parallel]>` | `<N subagentes \| N/A>` | `<status>` | `<resumo>` | `<riscos>` |
+| `<T1>` | `codex:codex-rescue` | `<--effort medium/high \| AGY --mode accept-edits --format stream-json --model <agyModel> [--parallel] \| AGY review --read-only --format json --model pro-high --effort high>` | `<N subagentes \| N/A>` | `<status>` | `<resumo>` | `<riscos>` |
 
 ## 11a. Uso de tokens por agente
 
@@ -126,9 +126,9 @@ Para cada contrato:
 | Agente | Papel | input | output | cache_read | total |
 |---|---|---|---|---|---|
 | `codex:codex-rescue` | implementacao back-end (`--effort medium`) | `<N>` | `<N>` | `<N>` | `<N>` |
-| `cc-antigravity-plugin:antigravity-coder` | implementacao front-end (`--model <agyModel>`) | `<N>` | `<N>` | `<N>` | `<N>` |
+| `cc-antigravity-plugin:antigravity-coder` | implementacao front-end (`stream-json`, `<agyModel>/<resolvedModel>`) | `<N>` | `<N>` | `<N>` | `<N>` |
 | `codex:codex-rescue` | review back-end (`--effort high`) | `<N>` | `<N>` | `<N>` | `<N>` |
-| `cc-antigravity-plugin:antigravity-agent` | review front-end (`gemini-3.1-pro-high`) | `<N>` | `<N>` | `<N>` | `<N>` |
+| `cc-antigravity-plugin:antigravity-agent` | review front-end (`json`, `pro-high`, effort `high`) | `<N>` | `<N>` | `<N>` | `<N>` |
 | orquestrador | coordenacao, integracao e Fase 9.5 | `<N>` | `<N>` | `<N>` | `<N>` |
 | **Consolidado** | | `<N>` | `<N>` | `<N>` | `<N>` |
 
@@ -194,7 +194,7 @@ Regras:
 - houve `QUOTA_EXHAUSTED` no review Codex?: `<sim|nao>`
 
 ### Review front-end
-- origem: `<AGY gemini-3.1-pro-high | fallback interno do orquestrador | N/A (sem front-end)>`
+- origem: `<AGY pro-high | fallback interno do orquestrador | N/A (sem front-end)>`
 - arquivo: `review/review-frontend.md`
 - decisão: `<APROVADO | APROVADO_COM_RESSALVAS | REPROVADO | N/A>`
 - houve `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no review AGY?: `<sim|nao>`

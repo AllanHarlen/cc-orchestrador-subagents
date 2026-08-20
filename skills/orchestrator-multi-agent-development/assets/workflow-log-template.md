@@ -48,7 +48,7 @@
 | `6 Monitoramento` | `<status>` | `<ts>` | `<eventos principais>` | `<run/monitoring.md>` | `<SLOW_CHECKIN/cota/tools>` |
 | `7 Integracao` | `<status>` | `<ts>` | `<entregas consolidadas>` | `<report/subagents-context.md>` | `<divergencias/fallbacks>` |
 | `8 Review back-end (Codex)` | `<status | N/A>` | `<ts>` | `<decisao Codex>` | `<review/review-final.md>` | `<bloqueantes se houver>` |
-| `9 Review front-end (AGY pro-high)` | `<status | N/A>` | `<ts>` | `<decisao AGY>` | `<review/review-frontend.md>` | `<bloqueantes se houver>` |
+| `9 Review front-end (AGY read-only/json/pro-high/high)` | `<status | N/A>` | `<ts>` | `<decisao AGY>` | `<review/review-frontend.md>` | `<bloqueantes se houver>` |
 | `9.5 E2E navegador` | `<status | N/A>` | `<ts>` | `<fluxos/topologia/waiver>` | `<e2e report>` | `<bloqueantes se houver>` |
 | `10 Contexto e relatorios` | `<status>` | `<ts>` | `<entregaveis finais>` | `<workflow-log/subagents-context/implementation-report>` | `<pendencias>` |
 | `11 Entrega duravel` | `<status>` | `<ts>` | `<mensagem preparada, ainda nao publicada>` | `<report/implementation-report.md/report/handoff.json>` | `<observacao>` |
@@ -60,7 +60,7 @@
 
 | Onda | Task | Subagent type | Execucao | Status final | Link/contexto |
 |---|---|---|---|---|---|
-| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-coder (implementacao) | cc-antigravity-plugin:antigravity-agent (review)>` | `<--effort medium/high | AGY --model <agyModel>>` | `<status>` | `report/subagents-context.md#<secao>` |
+| `<wave>` | `<task>` | `<codex:codex-rescue | cc-antigravity-plugin:antigravity-coder (implementacao) | cc-antigravity-plugin:antigravity-agent (review)>` | `<--effort medium/high | AGY --mode accept-edits --format stream-json --model <agyModel> | AGY review --read-only --format json --model pro-high --effort high>` | `<status>` | `report/subagents-context.md#<secao>` |
 
 ## 5. Falhas Possíveis Monitoradas
 
@@ -109,7 +109,7 @@ Se nenhuma falha ocorreu, escreva: `Nenhuma falha operacional ocorreu durante es
 | Programmatic intelligence | `<PASSOU/FALHOU>` | `<evidence IDs>` |
 | Build/lint/typecheck | `<status>` | `<comandos e resultado>` |
 | Review back-end (Codex `--effort high`) | `<APROVADO/APROVADO_COM_RESSALVAS/REPROVADO/N/A>` | `review/review-final.md` |
-| Review front-end (AGY `gemini-3.1-pro-high`) | `<APROVADO/APROVADO_COM_RESSALVAS/REPROVADO/N/A>` | `review/review-frontend.md` |
+| Review front-end (AGY `--read-only --format json --model pro-high --effort high`) | `<APROVADO/APROVADO_COM_RESSALVAS/REPROVADO/N/A>` | `review/review-frontend.md` |
 | Telemetry metadata-only | `<PROJETADA/FALHOU>` | `<eventos/relatorio>` |
 | Phase 12 / completion audit / verify | `<DONE/FAILED>` | `<learning report/audit/verify>` |
 

@@ -121,7 +121,7 @@ Toda task classificada precisa declarar:
 - `allowedPaths` para escopo/worktree;
 - `contractRequired` e `contractIds` quando houver troca front-back.
 
-O estado também preserva `attemptHistory`, `sessionId`/`conversationId`, commits, evidências, lease e workspace. Recuperação de `STALLED`/`UNKNOWN` para uma sessão ainda viva mantém a tentativa; retry confirmado abre uma tentativa nova.
+O estado também preserva `attemptHistory`, `sessionId`/`conversationId`, `retryDirective`, modelo solicitado/resolvido, `usage`, `durationSeconds`, `numTurns`, commits, evidências, lease e workspace. Recuperação de `STALLED`/`UNKNOWN` para uma sessão ainda viva mantém a tentativa; retry confirmado abre uma tentativa nova e reutiliza exatamente `--conversation <id>` quando disponível, ou `--continue` sem ID. Runs antigas permanecem legíveis sem migração.
 
 ## Snapshot da Project_Config e drift
 

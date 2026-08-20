@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
@@ -75,6 +75,44 @@ function runPreflight(environment) {
   return { report, exitCode: result.status };
 }
 
+function installFakeAgy(environment, cliVersion, pluginVersion = "4.0.0") {
+  const executable = join(environment.emptyPath, process.platform === "win32" ? "agy.cmd" : "agy");
+  const content = process.platform === "win32"
+    ? `@echo off\r\necho agy ${cliVersion}\r\n`
+    : `#!/bin/sh\nprintf 'agy ${cliVersion}\\n'\n`;
+  writeFileSync(executable, content, "utf8");
+  if (process.platform !== "win32") chmodSync(executable, 0o755);
+
+  const pluginRoot = join(
+    environment.home,
+    ".claude",
+    "plugins",
+    "cache",
+    "cc-antigravity-plugin",
+    "cc-antigravity-plugin",
+    pluginVersion,
+  );
+  for (const file of [
+    "agents/antigravity-coder.md",
+    "agents/antigravity-agent.md",
+    "commands/antigravity.md",
+    "scripts/antigravity-bridge.js",
+  ]) {
+    const path = join(pluginRoot, file);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, "fixture\n", "utf8");
+  }
+}
+
+function configureAllAgy(projectRoot) {
+  writeProjectConfig(projectRoot, {
+    backendExecutor: "agy",
+    frontendExecutor: "agy",
+    backendReviewer: "agy",
+    frontendReviewer: "agy",
+  }, { now: "2026-02-14T18:05:31Z" });
+}
+
 test("stack toda claude-code, sem codex/agy no PATH, retorna status ok e nenhum cli.* em failed", () => {
   const environment = createIsolatedProject();
   writeProjectConfig(environment.projectRoot, {
@@ -135,4 +173,58 @@ test("Project_Config_File invalido reprova o check obrigatorio sem apagar o arqu
 
   // O arquivo invalido permanece exatamente como estava: preflight nunca escreve nele.
   assert.equal(readFileSync(configPath, "utf8"), invalidContent);
+});
+
+test("AGY below 1.1.8 blocks an AGY stack even with bridge plugin 4.0", () => {
+  const environment = createIsolatedProject();
+  configureAllAgy(environment.projectRoot);
+  installFakeAgy(environment, "1.1.7");
+
+  const { report, exitCode } = runPreflight(environment);
+  assert.equal(report.status, "failed");
+  assert.notEqual(exitCode, 0);
+  assert.equal(report.checks.cli.agy.ok, false);
+  assert.equal(report.checks.cli.agy.minVersion, "1.1.8");
+  assert.ok(report.failed.some((failure) => failure.category === "cli" && failure.name === "agy"));
+});
+
+test("AGY 1.1.8 prerelease remains below the stable compatibility floor", () => {
+  const environment = createIsolatedProject();
+  configureAllAgy(environment.projectRoot);
+  installFakeAgy(environment, "1.1.8-beta.1");
+
+  const { report, exitCode } = runPreflight(environment);
+  assert.equal(report.status, "failed");
+  assert.notEqual(exitCode, 0);
+  assert.equal(report.checks.cli.agy.ok, false);
+  assert.equal(report.checks.cli.agy.version, "1.1.8-beta.1");
+});
+
+test("AGY 1.1.15 is compatible and recommends the validated 1.1.16 release", () => {
+  const environment = createIsolatedProject();
+  configureAllAgy(environment.projectRoot);
+  installFakeAgy(environment, "1.1.15");
+
+  const { report, exitCode } = runPreflight(environment);
+  assert.equal(report.status, "ok", JSON.stringify(report.failed));
+  assert.equal(exitCode, 0);
+  assert.equal(report.checks.cli.agy.ok, true);
+  assert.equal(report.checks.plugins["cc-antigravity-plugin"].version, "4.0.0");
+  assert.ok(report.warnings.some((warning) =>
+    warning.name === "agy" && warning.reason === "BELOW_RECOMMENDED_VERSION" &&
+    warning.recommendedVersion === "1.1.16",
+  ));
+});
+
+test("cc-antigravity-plugin below 4.0.0 is rejected for an AGY stack", () => {
+  const environment = createIsolatedProject();
+  configureAllAgy(environment.projectRoot);
+  installFakeAgy(environment, "1.1.16", "3.9.9");
+
+  const { report, exitCode } = runPreflight(environment);
+  assert.equal(report.status, "failed");
+  assert.notEqual(exitCode, 0);
+  const plugin = report.checks.plugins["cc-antigravity-plugin"];
+  assert.equal(plugin.ok, false);
+  assert.equal(plugin.minVersion, "4.0.0");
 });

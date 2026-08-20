@@ -56,7 +56,7 @@ test("routing validation accepts the same task IDs the State Engine accepts", ()
       "## FE-01 - Vitrine",
       "- categoria: FRONTEND_ONLY",
       "- assignedAgent: `cc-antigravity-plugin:antigravity-coder`",
-      "- agyModel: `gemini-3.5-flash-high`",
+      "- agyModel: `flash-high`",
       "- agyModelSource: `heuristic`",
     ].join("\n"),
     "waves.md": [
@@ -64,7 +64,7 @@ test("routing validation accepts the same task IDs the State Engine accepts", ()
       "",
       "## Wave 1",
       "- BE-01 -> `codex:codex-rescue` --effort medium (BACKEND_ONLY)",
-      "- FE-01 -> `cc-antigravity-plugin:antigravity-coder` --model `gemini-3.5-flash-high` agyModelSource: `heuristic` (FRONTEND_ONLY)",
+      "- FE-01 -> `cc-antigravity-plugin:antigravity-coder` --model `flash-high` --mode accept-edits --format stream-json agyModelSource: `heuristic` (FRONTEND_ONLY)",
     ].join("\n"),
   });
 
@@ -80,13 +80,13 @@ test("an AGY model name in a routing table is not mistaken for a task", () => {
       "",
       "| Modelo | Task | Categoria | Agente |",
       "|---|---|---|---|",
-      "| agyModel: `gemini-3.5-flash-high` | FE-01 | FRONTEND_ONLY | `cc-antigravity-plugin:antigravity-coder` agyModelSource: `heuristic` |",
+      "| agyModel: `flash-high` | FE-01 | FRONTEND_ONLY | `cc-antigravity-plugin:antigravity-coder` agyModelSource: `heuristic` |",
     ].join("\n"),
     "waves.md": [
       "# Waves",
       "",
       "## Wave 1",
-      "- FE-01 -> `cc-antigravity-plugin:antigravity-coder` --model `gemini-3.5-flash-high` agyModelSource: `heuristic` (FRONTEND_ONLY)",
+      "- FE-01 -> `cc-antigravity-plugin:antigravity-coder` --model `flash-high` --format stream-json agyModelSource: `heuristic` (FRONTEND_ONLY)",
     ].join("\n"),
   });
   git(root, "init", "-b", "main");
@@ -111,14 +111,14 @@ test("routing validation refuses implementation delegated to the read-only AGY a
       "## FE-01 - Vitrine",
       "- categoria: FRONTEND_ONLY",
       "- assignedAgent: `cc-antigravity-plugin:antigravity-agent`",
-      "- agyModel: `gemini-3.5-flash-high`",
+      "- agyModel: `flash-high`",
       "- agyModelSource: `heuristic`",
     ].join("\n"),
     "waves.md": [
       "# Waves",
       "",
       "## Wave 1",
-      "- FE-01 -> `cc-antigravity-plugin:antigravity-coder` --model `gemini-3.5-flash-high` agyModelSource: `heuristic` (FRONTEND_ONLY)",
+      "- FE-01 -> `cc-antigravity-plugin:antigravity-coder` --model `flash-high` --format stream-json agyModelSource: `heuristic` (FRONTEND_ONLY)",
     ].join("\n"),
   });
 
@@ -151,4 +151,73 @@ test("a front-end run keeps browserE2E required until an explicit waiver is reco
   assert.equal(gate.required, true);
   assert.equal(gate.status, "PENDING");
   assert.equal(gate.reason, null);
+});
+
+test("routing accepts dynamic user slugs but keeps heuristic routing on capability aliases", () => {
+  const valid = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## FE-01 - Vitrine", "- categoria: FRONTEND_ONLY",
+      "- executor: agy", "- executorSource: project-config",
+      "- assignedAgent: `cc-antigravity-plugin:antigravity-coder`",
+      "- agyModel: `gemini-4.2-pro-ultra`", "- agyModelSource: `user`",
+      "- agyEffort: `medium`", "- agyTimeout: `5m`", "- agyFormat: `stream-json`",
+    ].join("\n"),
+    "waves.md": [
+      "# Waves", "", "## Wave 1",
+      "- FE-01 -> `cc-antigravity-plugin:antigravity-coder` --model `gemini-4.2-pro-ultra` --format stream-json agyModelSource: `user` (FRONTEND_ONLY)",
+    ].join("\n"),
+  });
+  assert.equal(runValidator(valid.artifactDir).status, 0);
+
+  const invalid = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## FE-02 - Vitrine", "- categoria: FRONTEND_ONLY",
+      "- assignedAgent: `cc-antigravity-plugin:antigravity-coder`",
+      "- agyModel: `gemini-4.2-pro-ultra`", "- agyModelSource: `heuristic`",
+    ].join("\n"),
+    "waves.md": [
+      "# Waves", "", "## Wave 1",
+      "- FE-02 -> `cc-antigravity-plugin:antigravity-coder` --model `gemini-4.2-pro-ultra` agyModelSource: `heuristic` (FRONTEND_ONLY)",
+    ].join("\n"),
+  });
+  const result = runValidator(invalid.artifactDir);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /Routing heuristic\/adaptive deve usar aliases/);
+});
+
+test("routing validates the public AGY effort, timeout and implementation format contract", () => {
+  const root = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## FE-03 - Vitrine", "- categoria: FRONTEND_ONLY",
+      "- assignedAgent: `cc-antigravity-plugin:antigravity-coder`",
+      "- agyModel: `flash-medium`", "- agyModelSource: `heuristic`",
+      "- agyEffort: `ultra`", "- agyTimeout: `forever`", "- agyFormat: `json`",
+    ].join("\n"),
+    "waves.md": [
+      "# Waves", "", "## Wave 1",
+      "- FE-03 -> `cc-antigravity-plugin:antigravity-coder` --model `flash-medium` agyModelSource: `heuristic` (FRONTEND_ONLY)",
+    ].join("\n"),
+  });
+  const result = runValidator(root.artifactDir);
+  assert.equal(result.status, 1);
+  assert.match(result.output, /agyEffort invalido/);
+  assert.match(result.output, /agyTimeout invalido/);
+  assert.match(result.output, /implementacao AGY 4\.0 usa stream-json/);
+});
+
+test("legacy runs with versioned AGY slugs remain resumable without migration", () => {
+  const root = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## FE-04 - Run antiga", "- categoria: FRONTEND_ONLY",
+      "- assignedAgent: `cc-antigravity-plugin:antigravity-coder`",
+      "- agyModel: `gemini-3.5-flash-high`", "- agyModelSource: `heuristic`",
+    ].join("\n"),
+    "waves.md": [
+      "# Waves", "", "## Wave 1",
+      "- FE-04 -> `cc-antigravity-plugin:antigravity-coder` --model `gemini-3.5-flash-high` agyModelSource: `heuristic` (FRONTEND_ONLY)",
+    ].join("\n"),
+  });
+  const result = runValidator(root.artifactDir);
+  assert.equal(result.status, 0);
+  assert.match(result.output, /preserva slug legado gemini-3\.5-flash-high/);
 });

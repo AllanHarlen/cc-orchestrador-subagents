@@ -27,10 +27,10 @@ Ao concluir, o orquestrador grava um `report/handoff.json` em `.orchestration/<s
 3. A especificacao fornecida pelo usuario (PRD/spec) e a fonte da verdade. O orquestrador a ingere e dela deriva diretamente a classificacao das tasks; nao cria artefatos de entendimento nem de planejamento.
 4. Implementacao, handoff e ajustes pontuais vao para subagentes. Nem o orquestrador nem os subagentes geram projeto/suite de testes automatizados como entregavel — a validacao de cada requisito (`RF`/`CA`) acontece no review de codigo (Fases 8/9), por inspecao direta.
 5. Codex usa o modelo padrao disponivel na conta; controle apenas `--effort medium` ou `--effort high`.
-6. AGY recebe `--model <agyModel>` no bridge do plugin; o bridge aplica isso via `~/.gemini/antigravity-cli/settings.json` sem repassar a flag para o binario `agy`.
+6. Implementacao AGY usa o bridge 4.x com `--mode accept-edits --format stream-json --model <agyModel>`; o bridge resolve aliases pelo catalogo runtime e encaminha flags nativas sem modificar configuracoes do usuario.
 7. Contrato e obrigatorio sempre que houver troca de dados front-back.
 8. Review back-end e feito pelo Codex (`--effort high`, read-only); sem quota cai para review interno read-only do orquestrador. Codex **nunca** revisa front-end.
-9. Review front-end e feito pelo AGY com `--model gemini-3.1-pro-high` (read-only). Se nao houver task front-end, a Fase 9 e ignorada.
+9. Review front-end e feito pelo AGY com `--read-only --format json --model pro-high --effort high`. Se nao houver task front-end, a Fase 9 e ignorada.
 10. O roteamento de implementacao e decidido pela **categoria da task**, nao pela aparencia do trabalho. Toda task `FRONTEND_ONLY` vai para Antigravity/AGY; Codex so assume front-end em fallback operacional registrado.
 11. Limites de sandbox Codex como rede externa bloqueada, pacote ausente do cache local ou escrita fora do working directory permitido sao bloqueios operacionais: registre evidencia e peca decisao do usuario.
 12. `--parallel` e `--subagent-model` sao **modificadores de execucao** da delegacao AGY, nao criterios de roteamento. A categoria da task continua decidindo o agente; o fan-out nativo Gemini e apenas uma otimizacao interna da sessao AGY.
@@ -83,25 +83,27 @@ Com a Project_Config resolvida, monte a lista de dependencias ausentes (CBM_MCP,
 
 Leia tambem `references/mcp-context.md` para o protocolo do Codebase Memory MCP e do Context7 MCP usados nas fases seguintes.
 
-Se a execucao foi iniciada com `--agy-model <modelo>`, valide a allowlist e preserve a escolha como override do usuario. Caso contrario, calcule primeiro o piso heuristico abaixo e passe o contexto ao router adaptativo. O router nunca reduz esse piso e volta para a heuristica quando nao houver amostra comparavel:
+Se a execucao foi iniciada com `--agy-model <modelo>`, aceite um alias estavel ou slug dinamico seguro e preserve a escolha como override do usuario; o bridge valida o catalogo disponivel. Caso contrario, calcule primeiro o piso heuristico abaixo e passe o contexto ao router adaptativo. O router nunca reduz esse piso e volta para a heuristica quando nao houver amostra comparavel:
 
-- `gemini-3.5-flash-medium` por padrao;
-- `gemini-3.5-flash-high` para tasks front-end que implementam design system (precisam de julgamento visual) mas nao sao criticas de marca;
-- `gemini-3.1-pro-low` para tasks front-end complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressao;
-- `gemini-3.1-pro-high` apenas em casos criticos.
+- `flash-medium` por padrao;
+- `flash-high` para tasks front-end que implementam design system (precisam de julgamento visual) mas nao sao criticas de marca;
+- `pro-low` para tasks front-end complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressao;
+- `pro-high` apenas em casos criticos.
 
-Escada de capacidade (allowlist `validate-routing.mjs`): `flash-low < flash-medium < flash-high < pro-low < pro-high`.
+Escada de capacidade do router: `flash-low < flash-medium < flash-high < pro-low < pro-high`. Overrides do usuario podem usar slugs dinamicos; heuristica e adaptacao usam apenas aliases estaveis.
 
 Para uma decisao adaptativa, registre `agyModelSource: adaptive` e `agyModelEvidence` (amostra, stratum, metricas e motivo). Sem decisao adaptativa valida, registre `agyModelSource: heuristic`. Leia `references/worktrees-routing.md`.
 
-> **Roteamento por fidelidade de design.** Toda task front-end que **implementa um design system** (consome `design-system.md`/`tokens.css`/`components.html` do Open Design) precisa de julgamento visual — **nunca** use `gemini-3.5-flash-medium` para ela. Minimo `gemini-3.5-flash-high` (um degrau acima do default); suba para `gemini-3.1-pro-high` quando a fidelidade visual for critica (landing, vitrine publica, hero, telas de marca). Scaffold puramente funcional (setup, rotas, tipos, servico API) pode seguir a heuristica padrao. Registre o motivo do upgrade em `agyModelSource: heuristic`.
+> **Roteamento por fidelidade de design.** Toda task front-end que **implementa um design system** (consome `design-system.md`/`tokens.css`/`components.html` do Open Design) precisa de julgamento visual — **nunca** use `flash-medium` para ela. Minimo `flash-high` (um degrau acima do default); suba para `pro-high` quando a fidelidade visual for critica (landing, vitrine publica, hero, telas de marca). Scaffold puramente funcional (setup, rotas, tipos, servico API) pode seguir a heuristica padrao. Registre o motivo do upgrade em `agyModelSource: heuristic`.
 
-> O review front-end da Fase 9 usa sempre `gemini-3.1-pro-high`, independentemente do `agyModel` escolhido para implementacao.
+> O review front-end da Fase 9 usa sempre `--read-only --format json --model pro-high --effort high`, independentemente do `agyModel` escolhido para implementacao.
+
+`--agy-effort <low|medium|high>` e override publico apenas de implementacao; o review continua em effort `high`. `--agy-timeout <duracao>` vale para todas as delegacoes AGY, inclusive review. Nao exponha diretamente `--mode`, `--format`, `--agent`, `--json-schema`, `--continue` ou `--conversation`: o orquestrador escolhe esses controles pelo papel e pelo estado persistido. `--agent` significa agente customizado do AGY, nao subagente Claude.
 
 **Heuristica de fan-out (agyParallel):**
 
 - Se a execucao foi iniciada com `--agy-parallel`, registre `agyParallel: yes` e `agyParallelSource: user` em todas as tasks AGY.
-- Se a execucao foi iniciada com `--agy-subagent-model <modelo>`, valide o modelo contra a allowlist, registre `agySubagentModel: <modelo>` e ligue `agyParallel: yes` automaticamente.
+- Se a execucao foi iniciada com `--agy-subagent-model <modelo>`, aceite alias ou slug dinamico seguro, registre `agySubagentModel: <modelo>` e ligue `agyParallel: yes` automaticamente.
 - Caso contrario, avalie por heuristica: se uma task `FRONTEND_ONLY` ou a fatia front-end de `FULLSTACK` lista **dois ou mais entregaveis independentes** nos criterios de aceite — e nenhum deles compartilha arquivo central, depende de contrato pendente ou schema em mudanca —, registre `agyParallel: yes` e `agyParallelSource: heuristic`.
 - `agySubagentModel` padrao: `inherit` (omite `--subagent-model`; subagentes usam o mesmo `agyModel` da sessao principal).
 
@@ -123,9 +125,9 @@ A stack **nao e uma constante do skill**: ela e derivada da Project_Config (`.or
 Com os defaults (`backendExecutor: codex`, `frontendExecutor: agy`, `backendReviewer: codex`, `frontendReviewer: agy`), o comportamento e o historico:
 
 - back-end, banco, testes, handoff e ajuste -> `codex:codex-rescue` com `--effort medium`
-- front-end, incluindo setup Vite/React, rotas, servicos API, tipos TypeScript, componentes e UX -> AGY com `--model <agyModel>` escolhido por override do usuario ou heuristica
+- front-end, incluindo setup Vite/React, rotas, servicos API, tipos TypeScript, componentes e UX -> AGY com `--mode accept-edits --format stream-json --model <agyModel>`
 - review back-end pos-implementacao -> `codex:codex-rescue` com `--effort high`
-- review front-end pos-implementacao -> AGY com `--model gemini-3.1-pro-high`
+- review front-end pos-implementacao -> AGY com `--read-only --format json --model pro-high --effort high`
 
 **Regra central do Executor `claude-code`.** Quando o Executor derivado de uma task e `claude-code`, delegue a implementacao a um subagente do proprio Claude Code pela ferramenta `Agent` — nunca edite codigo produtivo diretamente no contexto do Orquestrador principal. Registre a task no `state.json` com o mesmo formato uniforme usado para `codex`/`agy`: `executor`, identificador da sessao do subagente, `attempt` e estado canonico. Quando o Executor de review (`backendReviewer`/`frontendReviewer`) e `claude-code`, o review roda em modo **somente leitura** — sem editar codigo produtivo — e o resultado vai para `review/review-final.md` (back-end) ou `review/review-frontend.md` (front-end), exatamente como o fallback interno por falta de quota. Tasks com Executor `codex` ou `claude-code` nunca registram `agyModel`, `agyModelSource`, `agyParallel` ou `agySubagentModel`; o validador de roteamento reprova o bloco se esses campos aparecerem. Quando os quatro papeis sao `claude-code`, o workflow inteiro roda sem invocar `codex:codex-rescue` nem os subagentes do `cc-antigravity-plugin`, e nenhuma CLI externa e exigida no preflight.
 
@@ -284,7 +286,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 6. Monitorar via lifecycle adapters, heartbeat observavel, sweep/stall/grace e telemetria metadata-only
 7. Integrar worktrees, validar diff/escopo/contratos/testes com scripts deterministas e registrar outcomes
 8. Review back-end pos-implementacao (Codex `--effort high`; ignorar se nao houver back-end)
-9. Review front-end pos-implementacao (AGY `--model gemini-3.1-pro-high`; ignorar se nao houver front-end)
+9. Review front-end pos-implementacao (AGY `--read-only --format json --model pro-high --effort high`; ignorar se nao houver front-end)
 9.5. **Verificacao E2E no navegador real (Playwright MCP) dos fluxos criticos — OBRIGATORIA quando front e back sao deploys/origens separados; ver regra 17 e `references/workflow.md`**
 10. Gerar `report/workflow-log.md`, `report/subagents-context.md`, `report/implementation-report.md` na raiz de execucao (`.orchestration/<slug>/`); consolidar contagem de tokens por agente; gravar o `report/handoff.json` do estagio orchestrador (para o Executor) conforme `references/handoff-contract.md`
 11. Preparar e persistir a entrega/instrucoes de negocio, sem publicar sucesso antes dos gates finais
@@ -316,18 +318,18 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] `validate-routing.mjs` executado antes da delegacao
 - [ ] contratos criados para toda troca front-back
 - [ ] prompts Codex sem `--model`
-- [ ] prompts AGY com `--model <agyModel>` coerente com override ou heuristica
+- [ ] prompts AGY de implementacao com `--mode accept-edits --format stream-json --model <agyModel>` coerente com override ou heuristica
 - [ ] prompts AGY verificados contra o limite de 28.000 chars antes da delegacao; tasks que excedem foram divididas em subtasks por entregaveis
 - [ ] tasks AGY com dois ou mais entregaveis independentes registram `agyParallel` e `agyParallelSource`
-- [ ] `agySubagentModel` (quando diferente de `inherit`) esta na allowlist de modelos AGY
+- [ ] `agySubagentModel` (quando diferente de `inherit`) e alias ou slug dinamico seguro aceito pelo bridge
 - [ ] bloqueios de sandbox Codex tratados como `BLOCKED` com evidencia
 - [ ] validacao de wire format e serializacao registrada
 - [ ] politica de quota aplicada corretamente
 - [ ] `report/implementation-report.md` secao 13 (matriz RF/CA -> evidencia) preenchida para **todo** RF/CA do escopo, montada na Fase 7 (nao retroativamente); `// TODO`/placeholder/stub no caminho de um RF do escopo tratado como achado CRITICO nas Fases 8/9, nao como "lacuna conhecida" silenciosa
 - [ ] `review/review-final.md` criado (review back-end), inclusive em fallback interno; N/A se nao houver back-end
-- [ ] `review/review-frontend.md` criado (review front-end pelo AGY com gemini-3.1-pro-high), inclusive em fallback interno; N/A se nao houver front-end
+- [ ] `review/review-frontend.md` criado (review front-end pelo AGY com `--read-only --format json --model pro-high --effort high`), inclusive em fallback interno; N/A se nao houver front-end
 - [ ] quando houver design system: prompts front-end carregam os caminhos de `tokens.css`/`components.html`/`design-system.md` (ou `design.md` + `specs/ui-design-system/` no modo Spec) e o diretorio `preview/`
-- [ ] tasks que implementam design system nao usam `gemini-3.5-flash-medium`/`flash-low` (minimo `gemini-3.5-flash-high`; `gemini-3.1-pro-high` quando a fidelidade visual for critica) — **`validate-routing.mjs` reprova automaticamente** tier baixo em task que cita `tokens.css`/`components.html`/`DESIGN.md`/`design-system`
+- [ ] tasks que implementam design system nao usam `flash-medium`/`flash-low` (minimo `flash-high`; `pro-high` quando a fidelidade visual for critica) — **`validate-routing.mjs` reprova automaticamente** tier baixo em task que cita `tokens.css`/`components.html`/`DESIGN.md`/`design-system`
 - [ ] Fase 9 aplicou o gate de design (tokens via `var(--*)`, componentes batendo com estados de `components.html`, **elementos interativos com `:hover`/`:focus` reais via CSS — nunca so `style={{}}` inline**, accent ≤ 2x, diff vs diretorio `preview/`, anti-padroes secao 9); violacao de requisito explicito tratada como BLOQUEANTE
 - [ ] prompts de task front-end carregam `sectorContext` e instruem o `antigravity-coder` a devolver `IMAGE_SUGGESTIONS`; quando o bloco vier preenchido, as opcoes foram apresentadas ao usuario via `AskUserQuestion` (multiSelect) e apenas as aprovadas foram geradas (`--generate-image`) e fiadas nos componentes antes de fechar a task (ver `references/workflow.md` "Imagery/icones")
 - [ ] **Fase 9.5: quando front e back sao separados, os fluxos criticos foram exercitados num navegador real (Playwright MCP), sem erro de CORS, com a UI refletindo dados reais e o efeito final de cada acao confirmado; evidencia em `review/e2e-verification.md`. Sem essa verificacao, a entrega NAO pode ser marcada `DONE` — no maximo `PARTIAL` com o gap registrado** (N/A se nao houver front separado do back)

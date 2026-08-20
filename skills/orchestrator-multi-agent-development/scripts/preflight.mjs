@@ -49,7 +49,9 @@ const PROJECT_ROOT = process.cwd();
 const PLUGINS_CACHE = join(HOME, ".claude", "plugins", "cache");
 const PROJECT_CLAUDE_DIR = join(process.cwd(), ".claude");
 const PROJECT_SETTINGS_FILE = join(PROJECT_CLAUDE_DIR, "settings.json");
-const MIN_ANTIGRAVITY_PLUGIN_VERSION = "3.6.0";
+const MIN_ANTIGRAVITY_PLUGIN_VERSION = "4.0.0";
+const MIN_AGY_VERSION = "1.1.8";
+const RECOMMENDED_AGY_VERSION = "1.1.16";
 const MIN_SQLITE_NODE_VERSION = "22.13.0";
 
 function checkNodeSqlite() {
@@ -92,7 +94,7 @@ function checkNodeSqlite() {
   }
 }
 
-function checkCli(cli) {
+function checkCli(cli, options = {}) {
   try {
     const out = execSync(`${cli} --version`, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -100,16 +102,37 @@ function checkCli(cli) {
     })
       .toString()
       .trim();
-    return { ok: true, version: out.split(/\r?\n/)[0] };
+    const versionLine = out.split(/\r?\n/)[0];
+    const version = versionLine.match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/)?.[0] ?? null;
+    if (options.minVersion && (!version || compareSemver(version, options.minVersion) < 0)) {
+      return {
+        ok: false,
+        version: version ?? versionLine,
+        minVersion: options.minVersion,
+        error: `${cli} ${options.minVersion}+ is required (found ${version ?? versionLine})`,
+      };
+    }
+    return {
+      ok: true,
+      version: version ?? versionLine,
+      minVersion: options.minVersion ?? null,
+      recommendedVersion: options.recommendedVersion ?? null,
+      recommended: options.recommendedVersion && version
+        ? compareSemver(version, options.recommendedVersion) >= 0
+        : null,
+    };
   } catch (err) {
     return { ok: false, error: err.message?.split(/\r?\n/)[0] ?? "not found" };
   }
 }
 
 function parseSemver(version) {
-  const match = /^\d+\.\d+\.\d+$/.test(version) ? version : null;
+  const match = String(version ?? "").match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/);
   if (!match) return null;
-  return version.split(".").map((part) => Number(part));
+  return {
+    core: match.slice(1, 4).map((part) => Number(part)),
+    prerelease: match[4]?.split(".") ?? [],
+  };
 }
 
 function compareSemver(left, right) {
@@ -118,7 +141,21 @@ function compareSemver(left, right) {
   if (!a || !b) return null;
 
   for (let i = 0; i < 3; i += 1) {
-    if (a[i] !== b[i]) return a[i] - b[i];
+    if (a.core[i] !== b.core[i]) return a.core[i] - b.core[i];
+  }
+  if (a.prerelease.length === 0 || b.prerelease.length === 0) {
+    return a.prerelease.length === b.prerelease.length ? 0 : a.prerelease.length === 0 ? 1 : -1;
+  }
+  const length = Math.max(a.prerelease.length, b.prerelease.length);
+  for (let i = 0; i < length; i += 1) {
+    if (a.prerelease[i] == null) return -1;
+    if (b.prerelease[i] == null) return 1;
+    if (a.prerelease[i] === b.prerelease[i]) continue;
+    const aNumber = /^\d+$/.test(a.prerelease[i]);
+    const bNumber = /^\d+$/.test(b.prerelease[i]);
+    if (aNumber && bNumber) return Number(a.prerelease[i]) - Number(b.prerelease[i]);
+    if (aNumber !== bNumber) return aNumber ? -1 : 1;
+    return a.prerelease[i].localeCompare(b.prerelease[i]);
   }
   return 0;
 }
@@ -545,7 +582,10 @@ const checks = {
     "node-sqlite-fts5": checkNodeSqlite(),
   },
   cli: {
-    agy: checkCli("agy"),
+    agy: checkCli("agy", {
+      minVersion: MIN_AGY_VERSION,
+      recommendedVersion: RECOMMENDED_AGY_VERSION,
+    }),
     codex: checkCli("codex"),
   },
   plugins: {
@@ -636,6 +676,17 @@ for (const [group, results] of Object.entries(REQUIRED_BY_CHECK)) {
   }
 }
 
+if (checks.cli.agy.ok && checks.cli.agy.recommended === false) {
+  warnings.push({
+    category: "cli",
+    name: "agy",
+    required: requiredCliSet.agy,
+    reason: "BELOW_RECOMMENDED_VERSION",
+    version: checks.cli.agy.version,
+    recommendedVersion: RECOMMENDED_AGY_VERSION,
+  });
+}
+
 const status = failed.length === 0 ? "ok" : "failed";
 
 const report = {
@@ -692,6 +743,7 @@ function remediationFor(f) {
           "  macOS/Linux: curl -fsSL https://antigravity.google/cli/install.sh | bash",
           "Abrir `agy` uma vez para concluir a autenticacao interativa.",
           "Garantir que o binario 'agy' esta no PATH global.",
+          `Confirmar AGY >= ${MIN_AGY_VERSION}; a versao ${RECOMMENDED_AGY_VERSION} e recomendada e validada com o bridge 4.0.`,
         ],
         docs: "https://antigravity.google/cli",
       };
@@ -713,7 +765,7 @@ function remediationFor(f) {
         steps: [
           "Dentro do Claude Code:",
           "  claude plugin install AllanHarlen/cc-antigravity-plugin",
-          `Confirme que a versao instalada seja >= ${MIN_ANTIGRAVITY_PLUGIN_VERSION} (requerido para --parallel e --subagent-model).`,
+          `Confirme que a versao instalada seja >= ${MIN_ANTIGRAVITY_PLUGIN_VERSION} (requerida para modelos nativos, JSON/stream-json, read-only forte e retomada estruturada).`,
           "Valide que o plugin instalado contenha agents/antigravity-coder.md (implementacao), agents/antigravity-agent.md (review, somente leitura), commands/antigravity.md e scripts/antigravity-bridge.js.",
         ],
         docs: "https://github.com/AllanHarlen/cc-antigravity-plugin",

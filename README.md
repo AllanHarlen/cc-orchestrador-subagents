@@ -20,7 +20,7 @@ Codex and Antigravity/AGY enter as specialized sub-agents:
 | Back-end implementation, database, tests and adjustments | Codex (`codex:codex-rescue`) | Executes non-front-end tasks with `--effort medium`, without fixing `--model`. |
 | Front-end implementation and UX | Antigravity/AGY (`cc-antigravity-plugin:antigravity-coder`) | Executes `FRONTEND_ONLY` tasks and front-end slices of `FULLSTACK`, including Vite/React setup, routing, and UI implementation. |
 | Back-end post-implementation review | Codex (`codex:codex-rescue`) | Reviews **back-end only** with `--effort high` or falls back to orchestrator's internal read-only review when quota is exhausted. |
-| Front-end post-implementation review | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--model gemini-3.1-pro-high`) | Reviews **front-end only** read-only or falls back to orchestrator's internal review when AGY is unavailable. |
+| Front-end post-implementation review | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--read-only --format json --model pro-high --effort high`) | Reviews **front-end only** read-only or falls back to orchestrator's internal review when AGY is unavailable. |
 
 ### Configurable Agent Stack
 
@@ -45,7 +45,7 @@ Preflight also detects two optional MCP servers — the Codebase Memory MCP (`co
 - **Phase 6 - Lifecycle Manager:** polls adapters, persists results before consuming them, renews heartbeat/lease on observable activity, and handles stall/grace/interrupt/retry/cancel without assuming outcomes.
 - **Phase 7 - Integration:** serially integrates worktrees and uses deterministic scripts for diff, scope, API/UI, wire format, and validation results before category-specific corrections.
 - **Phase 8 - Back-end post-implementation review:** delegates final read-only review to Codex with `--effort high`, **back-end only**, and saves `review/review-final.md`. If Codex runs out of quota, the Orchestrator itself does internal review. Skipped when there is no back-end.
-- **Phase 9 - Front-end post-implementation review:** delegates final read-only review to AGY with `--model gemini-3.1-pro-high`, **front-end only**, and saves `review/review-frontend.md`. If AGY is unavailable, the Orchestrator does internal review. **Skipped when there is no front-end task.**
+- **Phase 9 - Front-end post-implementation review:** delegates final read-only review to AGY with `--read-only --format json --model pro-high --effort high`, **front-end only**, and saves `review/review-frontend.md`. If AGY is unavailable, the Orchestrator does internal review. **Skipped when there is no front-end task.**
 - **Phase 9.5 - Browser E2E:** required whenever the run has front-end. Drives critical flows in a real browser and verifies CORS, tenant/host resolution, response casing, UI state and the final user-visible effect. A same-origin topology waives the gate explicitly, with a recorded reason — never by silent derivation.
 - **Phase 10 - Final reports:** creates `report/workflow-log.md`, `report/subagents-context.md` and `report/implementation-report.md`, consolidating timeline, contracts, validations, sub-agents, AGY Conversation IDs and delivery status.
 - **Phase 11 - Durable delivery:** prepares and persists the summary/instructions without announcing success before final gates.
@@ -56,9 +56,9 @@ Coordination artifacts and final reports live under `.orchestration/<name>/`.
 ### Main Operational Rules
 
 - **Usage premise:** the orchestrator only works with a ready PRD/spec. It does not do discovery, planning, or reinterpret the demand.
-- **Codex reviews back-end only;** AGY (`gemini-3.1-pro-high`) reviews front-end only.
-- **AGY Fan-out:** `--agy-parallel` and `--agy-subagent-model` activate native Gemini sub-agents within the AGY task. Requires `cc-antigravity-plugin >= 3.6.0`.
-- **AGY Model:** the user override and heuristic floor are authoritative; comparable history may only escalate with a minimum sample and `agyModelEvidence`. Review always uses `gemini-3.1-pro-high`.
+- **Codex reviews back-end only;** AGY (`pro-high`) reviews front-end only.
+- **AGY Fan-out:** `--agy-parallel` and `--agy-subagent-model` activate native Gemini sub-agents within the AGY task. Requires `cc-antigravity-plugin >= 4.0.0`.
+- **AGY Model:** the user override and heuristic floor are authoritative; comparable history may only escalate with a minimum sample and `agyModelEvidence`. Review always uses `pro-high`.
 - **Verified memory:** only `FILE`, `CONTRACT`, passing `TEST`, durable `RUN_EVENT`, and explicit `USER` sources enter Project Memory; conflicts and stale facts are excluded.
 - **Code for mechanics:** three or more reads/greps, loops, and repeated comparisons use `scripts/intelligence`, producing bounded JSON and an evidence ID.
 - **Physical isolation:** non-overlapping scopes can use one worktree per task; overlap or unknown scope serializes the wave.
@@ -91,7 +91,7 @@ This plugin depends on the official Codex plugin for Claude Code: https://github
 
 The marketplace/dependency used in manifests is `openai-codex`, and the expected sub-agent is `codex:codex-rescue`.
 
-For front-end, the orchestrator expects `cc-antigravity-plugin >= 3.6.0` (mandatory for `--parallel`/`--subagent-model`), with these files present in the installed plugin:
+For front-end, the orchestrator requires `cc-antigravity-plugin >= 4.0.0` and AGY `>= 1.1.8` (`1.1.16` recommended), with these files present in the installed plugin:
 
 - `agents/antigravity-coder.md` (implementation)
 - `agents/antigravity-agent.md` (read-only review)
@@ -110,7 +110,7 @@ The orchestrator does not invent the demand. Provide the PRD/spec in one of thes
 /orchestrator "Implement the reservations flow per: <paste the complete specification here>"
 
 # With AGY model override
-/orchestrator --agy-model gemini-3.1-pro-low @docs/prd-reservations.md
+/orchestrator --agy-model pro-low @docs/prd-reservations.md
 ```
 
 If no PRD/spec is provided, the orchestrator asks for the specification before continuing.
@@ -218,18 +218,18 @@ Codex should only receive front-end as a registered operational fallback after `
 
 ## AGY: Front-end Delegation
 
-Front-end tasks are routed to Antigravity/AGY by category, passing `--model <agyModel>` to the plugin bridge.
+Front-end tasks are routed to Antigravity/AGY by category. Implementation uses `--mode accept-edits --format stream-json --model <agyModel>`; the bridge resolves aliases from the runtime model catalog and never edits user settings.
 
 Default policy (implementation):
 
-- `gemini-3.5-flash-medium` for most tasks;
-- `gemini-3.1-pro-low` for complex tasks, multi-route, multi-file, with delicate API/UI contract or high regression risk;
-- `gemini-3.1-pro-high` only in critical cases;
+- `flash-medium` for most tasks;
+- `pro-low` for complex tasks, multi-route, multi-file, with delicate API/UI contract or high regression risk;
+- `pro-high` only in critical cases;
 - manual override available via `/orchestrator --agy-model <model> <demand>`.
 
 Without an override, this policy defines the **floor**. The adaptive router may escalate only with enough comparable type/complexity samples, using first-pass success, review failures, regressions, duration, and a Wilson interval. It never downgrades the floor, never randomly explores critical tasks, and records the decision in `agyModelEvidence`.
 
-The **front-end review (Phase 9)** always uses `gemini-3.1-pro-high`, regardless of the implementation `agyModel`.
+The **front-end review (Phase 9)** always uses `--read-only --format json --model pro-high --effort high`, regardless of the implementation `agyModel`.
 
 ## AGY: Native Gemini Sub-agent Fan-out
 
@@ -243,6 +243,8 @@ The mechanism is purely intra-task: it remains 1 task = 1 AGY delegation; `run/m
 |---|---|
 | `--agy-parallel` | Forces fan-out on all AGY tasks in the execution. AGY decides the count. |
 | `--agy-subagent-model <model>` | Model of Gemini sub-agents. Implies `--agy-parallel`. Default: `inherit` (inherits `agyModel`). |
+| `--agy-effort <low|medium|high>` | Optional implementation effort override; review stays at `high`. |
+| `--agy-timeout <duration>` | Silent timeout for every AGY delegation, including review, such as `300s` or `5m`. |
 
 ### Examples
 
@@ -251,7 +253,7 @@ The mechanism is purely intra-task: it remains 1 task = 1 AGY delegation; `run/m
 /orchestrator --agy-parallel "Create three independent React components: Header, Sidebar and Footer"
 
 # Pro Planner coordinating Flash sub-agents
-/orchestrator --agy-model gemini-3.1-pro-low --agy-subagent-model gemini-3.5-flash-medium \
+/orchestrator --agy-model pro-low --agy-subagent-model flash-medium \
   "Generate two HTML reports: taxes on electric cars and combustion cars"
 
 # Automatic heuristic (orchestrator decides)
@@ -270,19 +272,18 @@ Dependent deliverables or those sharing state remain in the single AGY sub-agent
 - `agyParallelSource: user|heuristic`
 - `agySubagentModel: <model>|inherit`
 
-Models accepted in `--agy-model` and `--agy-subagent-model`:
+Stable aliases used by heuristics and adaptive routing:
 
 | Model | Tier |
 |---|---|
-| `gemini-3.5-flash-low` | Flash |
-| `gemini-3.5-flash-medium` | Flash |
-| `gemini-3.5-flash-high` | Flash |
-| `gemini-3.1-pro-low` | Pro |
-| `gemini-3.1-pro-high` | Pro |
-| `claude-4.6-sonnet-thinking` | Claude |
-| `claude-4.6-opus-thinking` | Claude |
-| `gpt-oss-120b-medium` | GPT |
+| `flash-low` | Flash |
+| `flash-medium` | Flash |
+| `flash-high` | Flash |
+| `pro-low` | Pro |
+| `pro-high` | Pro |
 | `auto` | — |
+
+User overrides may also pass a safe dynamic model slug. The bridge validates it against `agy models`; routing history remains grouped by the requested stable alias.
 
 ## Preflight and Auto-remediation
 
@@ -304,7 +305,7 @@ Preflight validates:
 
 - version of `agy` found in PATH;
 - Codex CLI in PATH;
-- `cc-antigravity-plugin >= 3.6.0` and the `openai-codex` plugin;
+- `cc-antigravity-plugin >= 4.0.0` and the `openai-codex` plugin;
 - presence of `agents/antigravity-coder.md`, `agents/antigravity-agent.md`, `commands/antigravity.md` and `scripts/antigravity-bridge.js` in the installed AGY plugin;
 - `Bash(node:*)` permission for the Codex companion.
 
@@ -414,7 +415,7 @@ The routing validator requires these fields on AGY tasks and fails if:
 - an AGY task does not register `agyModel`;
 - `agyModelSource` is missing;
 - `agyModelSource: adaptive` lacks auditable evidence;
-- the model is outside the allowlist;
+- a heuristic/adaptive decision uses a dynamic slug instead of a stable capability alias, or a user slug is syntactically unsafe;
 - a design-system task (`tokens.css`, `components.html`, `DESIGN.md`) uses a low-tier model;
 - `FRONTEND_ONLY` points to Codex as primary agent;
 - `FRONTEND_ONLY` or `FULLSTACK` delegates implementation to the read-only `antigravity-agent` instead of `antigravity-coder`.
@@ -482,5 +483,5 @@ node --test tests/*.test.mjs
 rg --line-number --fixed-strings -- 'QUOTA_EXAUSTED' README.md commands skills
 rg --line-number --fixed-strings -- 'agyModelSource' README.md commands skills
 rg --line-number --fixed-strings -- 'agyParallel' README.md commands skills
-rg --line-number --fixed-strings -- 'gemini-3.1-pro-high' README.md commands skills
+rg --line-number --fixed-strings -- 'pro-high' README.md commands skills
 ```

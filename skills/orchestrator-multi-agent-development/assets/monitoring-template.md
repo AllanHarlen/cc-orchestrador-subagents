@@ -37,7 +37,7 @@
 - **Categoria:** `<FULLSTACK | BACKEND_ONLY | FRONTEND_ONLY | ...>`
 - **contractRequired:** `<yes | no>`
 - **assignedAgent:** `<codex:codex-rescue | cc-antigravity-plugin:antigravity-coder | ambos>` (review usa `antigravity-agent`, somente leitura)
-- **Execucao:** `<Codex --effort medium/high | AGY --model <agyModel>>`
+- **Execucao:** `<Codex --effort medium/high | AGY --mode accept-edits --format stream-json --model <agyModel> [--effort <agyEffort>] [--timeout <agyTimeout>] | AGY review --read-only --format json --model pro-high --effort high [--timeout <agyTimeout>]>`
 - **Modelo / source / evidence:** `<modelo>` / `<user|heuristic|adaptive>` / `<agyModelEvidence|N/A>`
 - **Routing validado:** `<sim | nao | pendente>`
 - **Status:** `<PENDING>`
@@ -53,7 +53,7 @@
 - **Dependências:** `<nenhuma | lista>`
 - **Agentes:**
   - Back-end: `codex:codex-rescue` (Codex padrao da conta, `--effort medium`)
-  - Front-end: `cc-antigravity-plugin:antigravity-coder` (AGY com `--model <agyModel>`)
+  - Front-end: `cc-antigravity-plugin:antigravity-coder` (AGY com `--mode accept-edits --format stream-json --model <agyModel>`)
 - **Contrato:** `<contracts/T1.md | N/A>`
 - **Expected files / validation plan / allowed paths:** `<listas>`
 - **Evidence IDs / executor result:** `<lista>` / `<run/executor-results/...|N/A>`
@@ -83,7 +83,7 @@
 - `AUTH_REQUIRED`, `AGY_MISSING` e `TIMEOUT` no Antigravity/AGY: registrar evidência, marcar bloqueio operacional e definir a próxima ação.
 - `QUOTA_EXHAUSTED` no Codex em implementação ou ajuste: marcar `BLOCKED` e pedir decisão.
 - `QUOTA_EXHAUSTED` no Codex em review back-end: registrar fallback de review interno read-only do orquestrador em `review/review-final.md`.
-- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no AGY em review front-end (`gemini-3.1-pro-high`): registrar fallback de review interno read-only do orquestrador em `review/review-frontend.md`.
+- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` no AGY em review front-end (`pro-high`): registrar fallback de review interno read-only do orquestrador em `review/review-frontend.md`.
 
 ## Política de sandbox Codex
 
@@ -102,7 +102,7 @@
 | `<ts>` | `<T1>` | UNKNOWN - owner session interrompida; reconciliacao pendente |
 | `<ts>` | `<T1>` | RECONCILED - `<DONE | RUNNING | FAILED | BLOCKED | STALLED | CANCELLED | UNKNOWN>`; evidencia=`<resumo>` |
 | `<ts>` | `<T1>` | SLOW_CHECKIN |
-| `<ts>` | `<T1>` | QUOTA_EXAUSTED - agente: `<antigravity>`; model: `<agyModel>`; retry: `<--continue|n/a>`; fallback: `<acao>` |
+| `<ts>` | `<T1>` | QUOTA_EXAUSTED - agente: `<antigravity>`; requested/resolved model: `<agyModel>/<resolvedModel>`; conversation: `<id|n/a>`; usage: `<objeto|n/a>`; retry: `<--conversation id|--continue|n/a>`; fallback: `<acao>` |
 | `<ts>` | `<T1>` | QUOTA_EXHAUSTED - agente: `<codex>`; fallback: `<acao>` |
 | `<ts>` | `<T1>` | BLOCKED - sandbox Codex: `<rede externa | pacote ausente | escrita fora do working directory>` |
 | `<ts>` | `<T1>` | NEEDS_SYNC - contrato atualizado |

@@ -6,7 +6,7 @@ Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 
 - Para Codex, use o modelo padrao disponivel na conta e controle apenas `--effort medium` ou `--effort high`.
 - A categoria da task decide o agente. `FRONTEND_ONLY` sempre usa Antigravity/AGY como agente primario; Codex so pode receber front-end em fallback operacional registrado.
-- Codex revisa apenas back-end. O review de front-end e sempre do AGY com `--model gemini-3.1-pro-high`.
+- Codex revisa apenas back-end. O review de front-end e sempre do AGY com `--read-only --format json --model pro-high --effort high`.
 - Se aparecer cota, rate limit, billing, resource exhausted, model capacity ou daily limit no Codex, retorne `Status: QUOTA_EXHAUSTED`.
 - Se aparecer cota, rate limit, billing, resource exhausted, model capacity ou daily limit no AGY, preserve o status cru `Status: QUOTA_EXAUSTED`.
 - Nao tente contornar cota com retries longos ou mudanca arbitraria de modelo.
@@ -94,10 +94,10 @@ Retorno:
 **Parametros:**
 
 ```text
---model <AGY_MODEL> [--parallel] [--subagent-model <SUBAGENT_MODEL>] --dirs <DIRS>
+--mode accept-edits --format stream-json --model <AGY_MODEL> [--effort <AGY_EFFORT>] [--timeout <AGY_TIMEOUT>] [--parallel] [--subagent-model <SUBAGENT_MODEL>] --dirs <DIRS>
 ```
 
-Passe `--model <AGY_MODEL>` para o bridge do plugin. O bridge aplica o modelo via `~/.gemini/antigravity-cli/settings.json`, sem repassar a flag ao binario `agy`.
+O bridge resolve aliases com `agy models` e encaminha `--model` nativamente, sem modificar configuracoes do usuario. `stream-json` permite acompanhar `init`, `step_update` e `result`; progresso fica separado em `stderr` e apenas a resposta final segue em `stdout`.
 
 Passe `--parallel` quando `agyParallel: yes` para a task. Se `agySubagentModel` for diferente de `inherit`, inclua tambem `--subagent-model <SUBAGENT_MODEL>`.
 
@@ -287,10 +287,10 @@ Salve o resultado em `review/review-final.md`.
 **Parametros:**
 
 ```text
---model gemini-3.1-pro-high --dirs <DIRS_FRONT_END>
+--read-only --format json --model pro-high --effort high [--timeout <AGY_TIMEOUT>] --dirs <DIRS_FRONT_END>
 ```
 
-O review front-end usa sempre `gemini-3.1-pro-high`, independentemente do `agyModel` de implementacao.
+O review front-end usa sempre `pro-high` com effort `high`, independentemente do `agyModel` de implementacao. JSON e preferido aqui porque o review e curto e nao precisa de progresso NDJSON.
 
 **Corpo do prompt:**
 

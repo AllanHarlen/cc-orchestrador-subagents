@@ -149,8 +149,8 @@ O Executor de cada task vem da categoria combinada com a Project_Config (`refere
 | `BACKEND_ONLY` | `backendExecutor` | `codex:codex-rescue` com `--effort medium` |
 | `DATABASE_ONLY` | `backendExecutor` | `codex:codex-rescue` com `--effort medium` |
 | `REVIEW_ONLY` | `backendReviewer` | `codex:codex-rescue` com `--effort high` |
-| `FRONTEND_ONLY` | `frontendExecutor` | AGY (`cc-antigravity-plugin:antigravity-coder`) com `--model <agyModel>` |
-| `FULLSTACK` | `backendExecutor` + `frontendExecutor` | Codex para back-end; AGY com `--model <agyModel>` para front-end |
+| `FRONTEND_ONLY` | `frontendExecutor` | AGY (`cc-antigravity-plugin:antigravity-coder`) com `--mode accept-edits --format stream-json --model <agyModel>` |
+| `FULLSTACK` | `backendExecutor` + `frontendExecutor` | Codex para back-end; AGY com `--mode accept-edits --format stream-json --model <agyModel>` para front-end |
 
 Quando o papel resolvido e `claude-code`, o `executor` da task e `claude-code`: delegue pela ferramenta `Agent` a um subagente do proprio Claude Code (implementacao) ou rode a task em modo read-only gravando em `review/review-final.md`/`review/review-frontend.md` (review). Uma task com `executor: claude-code` nunca registra `agyModel`, `agyModelSource`, `agyParallel` nem `agySubagentModel` — o validador reprova o bloco se algum desses campos aparecer. Artefato legado sem o campo `executor` continua validado pela heuristica antiga de mencao de agente (`assignedAgent`).
 
@@ -318,12 +318,14 @@ Para Codex:
 Para Antigravity/AGY (implementacao):
 
 - delegue ao `cc-antigravity-plugin:antigravity-coder` (unico subagente AGY com permissao de escrita; `antigravity-agent` e somente leitura e nao deve receber tasks de implementacao);
-- passe `--model <agyModel>` para o bridge do plugin;
+- passe `--mode accept-edits --format stream-json --model <agyModel>` para o bridge do plugin;
+- inclua `--effort <agyEffort>` e `--timeout <agyTimeout>` somente quando os overrides publicos correspondentes existirem;
 - registre `agyModelSource: user|heuristic|adaptive`; a opcao `adaptive` exige `agyModelEvidence` completo;
 - quando `agyParallel: yes`, passe tambem `--parallel` ao bridge; quando `agySubagentModel` for diferente de `inherit`, passe `--subagent-model <agySubagentModel>` (implica `--parallel`);
 - por padrao (`agySubagentModel: inherit`), omita `--subagent-model`; os subagentes herdam o modelo da sessao AGY principal;
 - `--agy-subagent-model` informado pelo usuario liga `--parallel` automaticamente;
-- nao trate isso como flag nativa do `agy`, porque o bridge aplica o modelo via `settings.json`.
+- o bridge consulta `agy models`, resolve aliases e encaminha `--model` nativamente; nao leia nem altere `settings.json` do usuario;
+- eventos NDJSON `init`, `step_update` e `result` que chegarem ao adapter renovam heartbeat somente com atividade observavel; persista apenas contadores e metadados seguros.
 
 Cada prompt deve incluir:
 
@@ -389,12 +391,13 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-lifecycle.mjs" watch \
   --interval-seconds 30
 ```
 
-O adapter recebe apenas placeholders allowlisted e roda sem shell. Cada probe bruto redigido e limitado e salvo em `run/executor-results/` antes de atualizar task, heartbeat, lease, history e telemetry. `interrupt`, `retry` e `cancel` exigem adapter ou `--external-confirmed`; nunca simule sucesso da acao externa. Veja `lifecycle-telemetry.md` e `assets/executor-control-config.schema.json`.
+O adapter recebe apenas placeholders allowlisted e roda sem shell. Cada probe bruto redigido e limitado e salvo em `run/executor-results/` antes de atualizar task, heartbeat, lease, history e telemetry. Para AGY, preserve `conversationId`, modelo resolvido, `usage`, duracao, turnos e a diretiva de retry validada. `interrupt`, `retry` e `cancel` exigem adapter ou `--external-confirmed`; nunca simule sucesso da acao externa. Retry confirmado usa exatamente `--conversation <id>` quando houver ID e `--continue` apenas quando nao houver. Veja `lifecycle-telemetry.md` e `assets/executor-control-config.schema.json`.
 
 ### Politica de quota
 
 - `QUOTA_EXHAUSTED` no Antigravity/AGY:
-  - registre evidencia;
+  - registre evidencia, `conversationId`, modelo resolvido, uso e retry seguro;
+  - nao retente automaticamente enquanto a quota continuar indisponivel;
   - se o fallback for seguro, redelegue para Codex com `--effort medium`;
   - se mudar muito a natureza da entrega, peca confirmacao do usuario.
 
@@ -531,7 +534,7 @@ O prompt do review back-end deve pedir verificacao explicita de:
 
 > **Ignorar quando nao houver front-end:** Se nao houver nenhuma task `FRONTEND_ONLY` nem fatia front-end de `FULLSTACK`, pule a Fase 9 e registre `review/review-frontend.md` com a nota `"Sem front-end: review front-end nao aplicavel"`. Se nao existir `review/review-frontend.md`, basta registrar a ausencia em `report/workflow-log.md`.
 
-Objetivo da fase: validar a implementacao **front-end** final. O review e feito pelo **AGY** com `--model gemini-3.1-pro-high`, em modo read-only. Codex nunca participa desta fase.
+Objetivo da fase: validar a implementacao **front-end** final. O review e feito pelo **AGY** com `--read-only --format json --model pro-high --effort high`. Codex nunca participa desta fase.
 
 ### 9.1 Preparar pacote de review
 
@@ -545,7 +548,7 @@ Monte um pacote de contexto com:
 
 ### 9.2 Fluxo principal
 
-- delegue ao `cc-antigravity-plugin:antigravity-agent` com `--model gemini-3.1-pro-high`;
+- delegue ao `cc-antigravity-plugin:antigravity-agent` com `--read-only --format json --model pro-high --effort high` e inclua `--timeout <agyTimeout>` quando o usuario o definiu;
 - informe que o review e somente leitura — o AGY nao modifica arquivos;
 - exija achados com severidade, arquivo/trecho quando aplicavel, impacto e correcao esperada;
 - salve o resultado em `review/review-frontend.md`.

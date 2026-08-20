@@ -1,6 +1,16 @@
 # Changelog
 
-## [Unreleased]
+## [4.2.0] — 2026-08-20
+
+### Integração com cc-antigravity-plugin 4.0
+
+- O preflight agora exige `cc-antigravity-plugin >= 4.0.0` e AGY `>= 1.1.8`, recomendando a versão validada `1.1.16` sem bloquear versões compatíveis intermediárias.
+- Implementação front-end usa o contrato explícito `--mode accept-edits --format stream-json`; review front-end usa `--read-only --format json --model pro-high --effort high`.
+- O routing deixou de fixar slugs versionados. Heurística e aprendizado usam aliases estáveis (`flash-low`, `flash-medium`, `flash-high`, `pro-low`, `pro-high`), enquanto overrides do usuário aceitam slugs dinâmicos seguros validados pelo catálogo runtime do bridge.
+- Novos overrides públicos `/orchestrator --agy-effort <low|medium|high>` e `--agy-timeout <duração>`. Controles de baixo nível (`--mode`, `--format`, `--agent`, `--json-schema` e retomada) continuam sob responsabilidade do orquestrador.
+- O adapter AGY preserva metadados estruturados allowlisted: conversa, modelo resolvido, usage numérico, duração, turnos e diretiva segura de retry. Retomada prefere `--conversation <id>` e usa `--continue` somente sem ID.
+- `state.json` e `attemptHistory` preservam esses metadados sem migrar runs antigas; novas tentativas mantêm a conversa/retry e limpam métricas pertencentes à tentativa anterior.
+- Documentação, comandos, referências e templates foram sincronizados para não editar `settings.json` do usuário e para distinguir `--agent` customizado do AGY dos subagentes do Claude Code.
 
 ### Stack de agentes configurável (`project-config`)
 
