@@ -661,7 +661,7 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" verify \
   --dir ".orchestration/<slug>"
 ```
 
-`audit.complete` precisa ser `true`; falha de gate/integridade bloqueia a entrega. Nao corrija `revision`/`lastEventId` manualmente; reproduza o event log ou restaure um backup coerente. O `report/handoff.json` so pode usar `DONE` quando as tasks obrigatorias estiverem `DONE`, cada task tiver evidence plan e os gates aplicaveis tiverem passado com evidencia; `UNKNOWN`, `STALLED` ou `BLOCKED` pendente exige `PARTIAL`/`BLOCKED` com resumo explicito. Projete history/telemetry novamente depois do evento `RUN_STATUS_UPDATED(DONE)` para capturar o terminal e so entao publique a mensagem preparada na Fase 11.
+`audit.complete` precisa ser `true`; falha de gate/integridade bloqueia a entrega. Nao corrija `revision`/`lastEventId` manualmente; reproduza o event log ou restaure um backup coerente. O `report/handoff.json` so pode usar `DONE` quando as tasks obrigatorias estiverem `DONE`, cada task tiver evidence plan e os gates aplicaveis tiverem passado com evidencia; `UNKNOWN`, `STALLED` ou `BLOCKED` pendente exige `PARTIAL`/`BLOCKED` com resumo explicito. Um gate `waivable` (hoje so `browserE2E`) marcado `N/A` via `--required false` aparece em `audit.waivedGates` e por si so ja forca `audit.complete: false` — dispensar a verificacao com motivo documentado nao e o mesmo que ela ter passado; o handoff sai `PARTIAL`, nunca `DONE`, ate o usuario decidir disponibilizar a ferramenta, aceitar formalmente a limitacao (registrando isso fora do gate) ou reverter a dispensa. Projete history/telemetry novamente depois do evento `RUN_STATUS_UPDATED(DONE)` para capturar o terminal e so entao publique a mensagem preparada na Fase 11.
 
 ### Contagem de tokens
 

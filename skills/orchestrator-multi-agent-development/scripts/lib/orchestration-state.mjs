@@ -3251,6 +3251,14 @@ function completionAudit(artifactDir, state) {
   const gatesWithoutEvidence = Object.values(completionGates).filter(
     (gate) => gate.status === "DONE" && (gate.evidence ?? []).length === 0,
   );
+  // A waivable gate (e.g. browserE2E) explicitly marked N/A via `--required false`
+  // still means the corresponding verification never ran — it just did so with a
+  // documented reason instead of silently. `incompleteGates` alone can't see this,
+  // because a waived gate's status (N/A) already satisfies its own (now false)
+  // `required` flag. A run with any waived gate must never self-report `complete:
+  // true`: it needs to close as PARTIAL (WORKFLOW.md sec. 14, scenario E), with the
+  // waiver surfaced for a human to accept, reject, or unblock instead.
+  const waivedGates = Object.values(completionGates).filter((gate) => gate.requiredOverride === false);
   const requiredArtifacts = [
     "workflow-log.md",
     "subagents-context.md",
@@ -3272,6 +3280,7 @@ function completionAudit(artifactDir, state) {
     unresolvedScope: unresolvedScope.map((task) => task.id),
     incompleteGates: incompleteGates.map((gate) => ({ id: gate.id, status: gate.status })),
     gatesWithoutEvidence: gatesWithoutEvidence.map((gate) => gate.id),
+    waivedGates: waivedGates.map((gate) => ({ id: gate.id, reason: gate.reason })),
     missingArtifacts,
     complete:
       tasks.length > 0 &&
@@ -3281,6 +3290,7 @@ function completionAudit(artifactDir, state) {
       unresolvedScope.length === 0 &&
       incompleteGates.length === 0 &&
       gatesWithoutEvidence.length === 0 &&
+      waivedGates.length === 0 &&
       missingArtifacts.length === 0,
   };
 }
