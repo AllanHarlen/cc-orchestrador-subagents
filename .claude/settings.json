@@ -2,7 +2,11 @@
   "permissions": {
     "defaultMode": "auto",
     "allow": [
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(openspec list:*)",
+      "Bash(openspec show:*)",
+      "Bash(openspec status:*)",
+      "Bash(openspec validate:*)"
     ],
     "deny": [
       "Bash(rm -rf /)",
@@ -14,10 +18,9 @@
       "Bash(git push:*)",
       "Bash(git commit:*)",
       "Bash(kubectl apply:*)",
-      "Bash(openspec list:*)",
-      "Bash(openspec show:*)",
-      "Bash(openspec status:*)",
-      "Bash(openspec validate:*)"
+      "Bash(openspec archive:*)",
+      "Bash(openspec init:*)",
+      "Bash(openspec update:*)"
     ]
   }
 }

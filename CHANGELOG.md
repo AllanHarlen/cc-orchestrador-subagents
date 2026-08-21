@@ -17,8 +17,10 @@
 - `.claude/settings.json`: a entrada `Bash(openspec publish:*)` (comando inexistente) foi
   substituída por `Bash(openspec list:*)`, `show`, `status` e `validate` — as chamadas de CLI
   realmente usadas pela ingestão.
-- `.gitignore`: `.claude/` deixou de ser ignorado — a árvore `.claude/skills/openspec-*` e
-  `.claude/commands/opsx/*` (regenerada na 1.10.0) agora é versionada.
+- A árvore gerada `.claude/skills/openspec-*` + `.claude/commands/opsx/*` foi regenerada
+  localmente na 1.10.0 via `openspec update`, mas **permanece ignorada pelo git** (`.claude/` no
+  `.gitignore`): é artefato de ambiente, não conteúdo do plugin. `.claude/settings.json` continua
+  versionado, como antes.
 
 ## [4.2.0] — 2026-08-20
 
