@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.3.0] — 2026-08-21
+
+### Saneamento da ingestão OpenSpec (`openspec-change`) e correções de documentação
+
+- `references/workflow.md`: a ingestão do change set OpenSpec em modo conjunto agora confirma o
+  estado via `openspec status --change <nome> --json` antes de ler os arquivos, tolera `specs/`
+  ausente (mudanças com `skip_specs: true`) e caminhos aninhados
+  (`specs/<área>/<capability>/spec.md`), e conta subtarefas aninhadas ao derivar tasks.
+- `references/handoff-contract.md`: papel `openspec-change` atualizado para refletir o OpenSpec
+  1.9+ (specs opcionais/aninhadas, mudança gerida por `/opsx:propose` em vez do prefixo
+  `openspec-*` legado). Sincronizado byte-a-byte com a cópia canônica em `cc-pensador`.
+- `README.md`/`README.pt-BR.md`: removida a afirmação de que "o OpenSpec deixou de fazer parte do
+  fluxo" — o preflight de fato não exige o CLI OpenSpec, mas o orquestrador continua podendo
+  ingerir um handoff com artefato `openspec-change` do Pensador em modo conjunto.
+- `.claude/settings.json`: a entrada `Bash(openspec publish:*)` (comando inexistente) foi
+  substituída por `Bash(openspec list:*)`, `show`, `status` e `validate` — as chamadas de CLI
+  realmente usadas pela ingestão.
+- `.gitignore`: `.claude/` deixou de ser ignorado — a árvore `.claude/skills/openspec-*` e
+  `.claude/commands/opsx/*` (regenerada na 1.10.0) agora é versionada.
+
 ## [4.2.0] — 2026-08-20
 
 ### Integração com cc-antigravity-plugin 4.0

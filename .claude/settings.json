@@ -14,7 +14,10 @@
       "Bash(git push:*)",
       "Bash(git commit:*)",
       "Bash(kubectl apply:*)",
-      "Bash(openspec publish:*)"
+      "Bash(openspec list:*)",
+      "Bash(openspec show:*)",
+      "Bash(openspec status:*)",
+      "Bash(openspec validate:*)"
     ]
   }
 }

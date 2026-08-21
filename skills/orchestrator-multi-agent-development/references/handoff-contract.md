@@ -48,7 +48,7 @@ Regra de deteccao (consumidor): antes de tratar a demanda como independente, pro
 | Orchestrador | `.orchestration/<slug>/` | `slug` (sem versao) |
 | Executor | `.executor/<demanda_slug>/artefatos/` | `demanda_slug` da demanda de review |
 
-Regra absoluta: **nenhum artefato `.md`/`.json` de coordenacao na raiz do projeto**. Tudo vive sob a raiz oculta do estagio. Excecao unica: o change set do OpenSpec (`openspec/changes/<nome>/`), que e gerido pelos comandos `openspec-*` e vive na arvore padrao do OpenSpec — o `report/handoff.json` o referencia como caminho relativo ao projeto (ver secao 5).
+Regra absoluta: **nenhum artefato `.md`/`.json` de coordenacao na raiz do projeto**. Tudo vive sob a raiz oculta do estagio. Excecao unica: o change set do OpenSpec (`openspec/changes/<nome>/`), que e gerido por `/opsx:propose` e vive na arvore padrao do OpenSpec (specs podem estar aninhadas: `specs/<area>/<capability>/spec.md`) — o `report/handoff.json` o referencia como caminho relativo ao projeto (ver secao 5).
 
 ### Correlacao por `slug`
 
@@ -117,7 +117,7 @@ O consumidor nunca adivinha caminhos: descobre tudo via `report/handoff.json`. S
 | `communication-contract` | `communication.md` | quando `backendConfirmed` — **visao legivel derivada** do `api-contract` (`derivedFrom` aponta o arquivo fonte). Nao e a fonte da verdade. |
 | `design-system` | `design-system.md` | **somente no fallback** (front-end sem Open Design) — DESIGN.md inline das 9 secoes. Quando o Open Design e usado, o `DESIGN.md` verbatim (role `design-system-files`) substitui este doc. |
 | `design-system-files` | `design-systems/<id>/` | quando `hasFrontend` **e** um system foi selecionado — **uma entrada por `<id>` concreto** (de `state.designSystems`), relativa ao `artifactRoot` (`.pensador/<slug>-vN/`), com os arquivos verbatim (`tokens.css`, `DESIGN.md`, `components.html`, `preview/`, …). Cada entrada carrega `materializeInto` (o alvo em `state.uiPackageDir`, ex.: `packages/ui/design-systems/<id>/`) que o Orchestrador/Executor usa ao materializar os arquivos na arvore de codigo real (secao 6). |
-| `openspec-change` | `openspec/changes/<nome>/` | quando `artifactMode = spec` — change set OpenSpec (`proposal.md`, `design.md`, `tasks.md`, `specs/`). **Caminho relativo ao projeto**, nao ao `artifactRoot` (gerido pelos comandos `openspec-*`). Substitui `prd`/`userhistory`/`communication-contract` no modo Spec. |
+| `openspec-change` | `openspec/changes/<nome>/` | quando `artifactMode = spec` — change set OpenSpec (`proposal.md`, `design.md`, `tasks.md`, `specs/` — `specs/` omitido quando a mudanca declara `skip_specs: true`). **Caminho relativo ao projeto**, nao ao `artifactRoot` (gerido por `/opsx:propose`; consumidores confirmam o estado via `openspec status --change <nome> --json`, nao varredura de arquivos). Substitui `prd`/`userhistory`/`communication-contract` no modo Spec. |
 | `codebase-memory` | `codebase-memory.md` | opcional |
 | `shared-agents` | `shared-agents/` | opcional |
 
@@ -133,7 +133,7 @@ O consumidor nunca adivinha caminhos: descobre tudo via `report/handoff.json`. S
 | `monitoring` | `run/monitoring.md` | sim |
 | `workflow-log` | `report/workflow-log.md` | sim |
 | `subagents-context` | `report/subagents-context.md` | sim |
-| `openspec-change` | `openspec/changes/<nome>/` | quando OpenSpec for usado (relativo ao projeto) |
+| `openspec-change` | `openspec/changes/<nome>/` | quando OpenSpec for usado (relativo ao projeto; `specs/` opcional sob `skip_specs`) |
 
 ### Executor (`stage: executor`)
 | role | arquivo padrao | required |
@@ -180,7 +180,7 @@ grava VERBATIM em                     MATERIALIZA em (via materializeInto)
 2. Para o mesmo `slug` com varias versoes `-vN`, **use a maior versao** (mais recente). Confirme via `AskUserQuestion` se houver duvida.
 3. Sem `handoff.json`: leia `.pensador/<slug>-vN/.pensador-progress.json` (`checkpointVersion: 2`) e o array `artifacts`.
 4. **Modo PRD** — ingira na ordem: `prd` → `userhistory` → `architecture` → `api-contract` → `communication-contract` → `design-system`/`design-system-files`. Use o `api-contract` (maquina-legivel) como **fonte da verdade** dos contratos API/UI da Fase 4 — suba o mock a partir dele e valide contra ele no CI (campo `validation`); o `communication-contract` e apenas a visao legivel. Trate o PRD/spec como **fonte da verdade**: **nao** reabra discovery nem replaneje.
-5. **Modo Spec (OpenSpec)** — a `role` `openspec-change` aponta `openspec/changes/<nome>/`. Ingira `proposal.md`, `design.md`, `specs/` e `tasks.md`; derive a classificacao de tasks a partir de `tasks.md` preservando IDs/ordem. O contrato de API esta dobrado em `design.md` + `specs/` (nao ha `api-contract` standalone).
+5. **Modo Spec (OpenSpec)** — a `role` `openspec-change` aponta `openspec/changes/<nome>/`. Ingira `proposal.md`, `design.md`, `tasks.md` e `specs/` (quando presente — omitido sob `skip_specs`; pode estar aninhado em `specs/<area>/<capability>/spec.md`); confirme via `openspec status --change <nome> --json` antes de assumir completude. Derive a classificacao de tasks a partir de `tasks.md` preservando IDs/ordem (incluindo subtarefas aninhadas). O contrato de API esta dobrado em `design.md` + `specs/` (nao ha `api-contract` standalone).
 6. **Design (Open Design), quando houver front-end** — materialize os arquivos verbatim de `design-system-files` conforme secao 6 e trate-os como contrato visual do front-end. Se so houver o fallback `design-system.md` (sem Open Design), use-o como referencia inline.
 
 ### Executor ingere Orchestrador (modo conjunto)

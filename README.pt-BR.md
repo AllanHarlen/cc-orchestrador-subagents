@@ -309,7 +309,7 @@ O `preflight` valida:
 - presença de `agents/antigravity-coder.md`, `agents/antigravity-agent.md`, `commands/antigravity.md` e `scripts/antigravity-bridge.js` no plugin AGY instalado;
 - permissão `Bash(node:*)` para o companion do Codex.
 
-> A partir da versão 3.0.0, o preflight não exige mais OpenSpec CLI nem skills `openspec-*`, porque o OpenSpec deixou de fazer parte do fluxo.
+> A partir da versão 3.0.0, o preflight não exige mais OpenSpec CLI nem skills `openspec-*` — o orquestrador não aciona o OpenSpec por conta própria. Ele continua podendo ingerir, em modo conjunto, um handoff do Pensador com artefato de role `openspec-change` (ver `references/workflow.md` e `references/handoff-contract.md`); essa ingestão nunca depende do CLI do OpenSpec estar instalado.
 
 ### Escopo da auto-remediação
 
