@@ -34,6 +34,8 @@ Quatro papéis — `backendExecutor`, `frontendExecutor`, `backendReviewer`, `fr
 
 O preflight também detecta dois MCPs opcionais — o Codebase Memory MCP (`codebase-memory-mcp`, consultas ao grafo de código para análise de arquitetura/impacto) e o Context7 (documentação atualizada de bibliotecas nos prompts dos subagentes). A ausência de qualquer um vira item em `warnings`, nunca bloqueio; ver `skills/orchestrator-multi-agent-development/references/mcp-context.md`.
 
+Esse check agregado só prova que o servidor está registrado *em algum lugar* da máquina — não que o Codex ou o AGY especificamente o têm. Rode `node scripts/preflight.mjs --check-agent-mcp` para também consultar `codex mcp list --json`/`agy mcp list` ao vivo e obter `checks.optional.mcpPerAgent.<agent>.<servidor>`, com um campo `install` trazendo o comando exato de `mcp add` para registrar naquele agente. Nada instala sozinho: o orquestrador só roda isso depois que o usuário aprova via `AskUserQuestion`, o mesmo padrão do instalador do Open Design.
+
 ### Workflow completo
 
 - **Fase 0 - Preflight, configuração do projeto e instalação assistida:** valida dependências, Node.js 22.13+, `node:sqlite`/FTS5, permissão `Bash(node:*)`, resolve a Project_Config (papéis acima), detecta os dois MCPs opcionais e oferece instalar qualquer dependência ausente que os papéis resolvidos realmente exigem.
@@ -291,6 +293,7 @@ Rode:
 
 ```bash
 node scripts/preflight.mjs
+node scripts/preflight.mjs --check-agent-mcp   # tambem consulta codex/agy ao vivo para status por agente
 ```
 
 O JSON inclui:

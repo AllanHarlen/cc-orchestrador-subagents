@@ -1,5 +1,40 @@
 # Changelog
 
+## [4.4.0] — 2026-08-24
+
+### Detecção de MCP por agente (`--check-agent-mcp`) e oferta de instalação
+
+O check agregado `checks.optional.mcp.<servidor>.ok` prova apenas que o Codebase Memory MCP ou o
+Context7 estão registrados *em algum lugar* da máquina — não que o Codex ou o AGY especificamente
+os têm. Isso fazia o bloco de instrução do grafo/Context7 ir para o prompt de um subagente Codex/AGY
+mesmo quando aquela CLI específica não tinha a ferramenta.
+
+- `scripts/lib/mcp-agent-cli.mjs` (novo): introspecção real via `codex mcp list --json`/`agy mcp
+  list`, em vez de adivinhar por convenção de arquivo. Redação estrita — nunca extrai
+  `transport.http_headers`/`transport.env`/URL/comando (que podem carregar uma chave de API real),
+  só `name`/`enabled`/`type`. Corrige também um bug de plataforma: `execFileSync` sem shell falhava
+  silenciosamente contra o `codex.cmd`/`.ps1` do npm no Windows (`BINARY_MISSING` falso-positivo);
+  trocado por `execSync` com o mesmo padrão já usado por `checkCli()`.
+- `scripts/lib/mcp-agent-install.mjs` (novo): registra (`installAgentMcp`) e remove
+  (`removeAgentMcp`) um servidor no CLI do agente, via os comandos reais confirmados ao vivo (`codex
+  mcp add context7 --url ...`, `agy mcp add codebase-memory-mcp codebase-memory-mcp`, etc.). Nunca
+  roda sozinho — só depois de aprovação explícita via `AskUserQuestion`, mesmo padrão do instalador
+  do Open Design (`cc-pensador`). Nunca embute uma chave de API real no comando.
+- `scripts/lib/mcp-detect.mjs`: nova `detectMcpServersPerAgent()`, separada de `detectMcpServers()`
+  (que continua sendo o scan de arquivo, puro e rápido). Cada resultado carrega `install` — o
+  comando pronto para oferecer — só quando `checked: true, ok: false` (ausência confirmada, não
+  suposta).
+- `scripts/preflight.mjs`: nova flag opt-in `--check-agent-mcp` (custo real de subprocesso, por
+  isso fora do caminho padrão) publica `checks.optional.mcpPerAgent.<agent>.<servidor>`.
+- `references/mcp-context.md`, `references/subagent-prompts.md`, `references/preflight-check.md`:
+  documentam a ordem de preferência (`mcpPerAgent` por agente > `mcp` agregado como fallback quando
+  `checked: false`) e a seção "Oferta de instalação por agente". O bloco de instrução do grafo, que
+  a documentação já afirmava estar "no template de `subagent-prompts.md`" mas não estava, agora
+  está de fato lá (placeholders `Codebase Memory MCP:` ao lado de cada `Context7 MCP:`).
+- `tests/mcp-agent-cli.test.mjs`, `tests/mcp-agent-install.test.mjs`, `tests/mcp-prompt-wiring.test.mjs`
+  (novos): 26 testes, incluindo fixtures reais capturados ao vivo (codex-cli 0.148.0, agy 1.1.17) e
+  um caso que garante que nenhum comando de instalação carrega uma chave de API.
+
 ## [4.3.0] — 2026-08-21
 
 ### Saneamento da ingestão OpenSpec (`openspec-change`) e correções de documentação

@@ -34,6 +34,8 @@ Four roles — `backendExecutor`, `frontendExecutor`, `backendReviewer`, `fronte
 
 Preflight also detects two optional MCP servers — the Codebase Memory MCP (`codebase-memory-mcp`, code graph queries used for architecture/impact analysis) and Context7 (up-to-date library docs in sub-agent prompts). Either one missing is a `warnings` entry, never a blocker; see `skills/orchestrator-multi-agent-development/references/mcp-context.md`.
 
+That aggregate check only proves a server is registered *somewhere* on the machine — not that Codex or AGY specifically have it. Run `node scripts/preflight.mjs --check-agent-mcp` to also query `codex mcp list --json`/`agy mcp list` live and get `checks.optional.mcpPerAgent.<agent>.<server>`, with an `install` field carrying the exact `mcp add` command to register it for that agent. Nothing installs automatically: the orchestrator only runs it after the user approves via `AskUserQuestion`, same pattern as the Open Design installer.
+
 ### Complete Workflow
 
 - **Phase 0 - Preflight, project configuration and assisted install:** validates dependencies, Node.js 22.13+, `node:sqlite`/FTS5, `Bash(node:*)`, resolves the Project_Config (roles above), detects the two optional MCPs, and offers to install any missing dependency actually required by the resolved roles.
@@ -291,6 +293,7 @@ Run:
 
 ```bash
 node scripts/preflight.mjs
+node scripts/preflight.mjs --check-agent-mcp   # also queries codex/agy live for per-agent MCP status
 ```
 
 The JSON includes:
