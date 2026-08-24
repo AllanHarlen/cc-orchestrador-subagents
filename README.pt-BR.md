@@ -17,9 +17,9 @@ Codex e Antigravity/AGY entram como subagentes especializados:
 | Papel | Executor | Responsabilidade |
 |---|---|---|
 | Orchestrador de Harness | Claude CLI / Claude Code | Ingere o PRD/spec e coordena o workflow, contratos, ondas, validações, logs e decisões do usuário. |
-| Implementação back-end, banco, testes e ajustes | Codex (`codex:codex-rescue`) | Executa tasks não front-end com `--effort medium`, sem fixar `--model`. |
+| Implementação back-end, banco, testes e ajustes | Codex (despacho direto via `codex-companion.mjs`; fallback `codex:codex-rescue`) | Executa tasks não front-end com `--effort medium --write`, sem fixar `--model`. |
 | Implementação front-end e UX | Antigravity/AGY (`cc-antigravity-plugin:antigravity-coder`) | Executa tasks `FRONTEND_ONLY` e fatias front-end de `FULLSTACK`, incluindo setup Vite/React, rotas e implementação de UI. |
-| Review back-end pós-implementação | Codex (`codex:codex-rescue`) | Revisa **apenas o back-end** com `--effort high` ou cai para review interno read-only do orquestrador quando faltar quota. |
+| Review back-end pós-implementação | Codex (despacho direto via `codex-companion.mjs`, sem `--write`; fallback `codex:codex-rescue`) | Revisa **apenas o back-end** com `--effort high` ou cai para review interno read-only do orquestrador quando faltar quota. |
 | Review front-end pós-implementação | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--read-only --format json --model pro-high --effort high`) | Revisa **apenas o front-end** em modo read-only ou cai para review interno do orquestrador quando o AGY estiver indisponível. |
 
 ### Stack de agentes configurável
@@ -91,7 +91,7 @@ Este plugin depende do Codex plugin oficial para Claude Code: https://github.com
 /codex:setup
 ```
 
-O marketplace/dependency usado nos manifests é `openai-codex`, e o subagente esperado é `codex:codex-rescue`.
+O marketplace/dependency usado nos manifests é `openai-codex`. O orquestrador despacha direto para ele via `codex-companion.mjs` (path resolvido em `checks.plugins["openai-codex"].companionPath`, publicado por `scripts/preflight.mjs`); o subagente `codex:codex-rescue` é um fallback documentado para quando esse path não resolve.
 
 Para front-end, o orquestrador exige `cc-antigravity-plugin >= 4.0.0` e AGY `>= 1.1.8` (`1.1.16` recomendado), com estes arquivos presentes no plugin instalado:
 
@@ -197,8 +197,9 @@ O workflow não fixa modelos Codex como `gpt-5.4` ou `gpt-5.5`.
 
 Use:
 
-- `codex:codex-rescue` com `--effort medium` para implementação, handoff e ajustes;
-- `codex:codex-rescue` com `--effort high` para review back-end pós-implementação.
+- despacho direto via `codex-companion.mjs` com `--effort medium --write` para implementação, handoff e ajustes;
+- despacho direto via `codex-companion.mjs` com `--effort high`, **sem `--write`**, para review back-end pós-implementação — omitir a flag é o que torna o review read-only, não uma instrução de prompt;
+- `codex:codex-rescue` é o subagente de fallback quando `companionPath` não resolve.
 
 O modelo fica no padrão disponível na conta do usuário. Codex nunca revisa front-end.
 
@@ -292,8 +293,8 @@ Overrides do usuário também podem usar um slug dinâmico seguro. O bridge o va
 Rode:
 
 ```bash
-node scripts/preflight.mjs
-node scripts/preflight.mjs --check-agent-mcp   # tambem consulta codex/agy ao vivo para status por agente
+node scripts/preflight.mjs --check-agent-mcp   # caminho padrao (Fase 0 de SKILL.md/workflow.md); tambem consulta codex/agy ao vivo
+node scripts/preflight.mjs                     # sem o bloco optional.mcpPerAgent; so se quiser pular o custo do subprocesso
 ```
 
 O JSON inclui:

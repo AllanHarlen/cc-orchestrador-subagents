@@ -292,7 +292,7 @@ function checkCodexCompanionBashPermission() {
   return {
     ok: false,
     error:
-      "Missing Claude Code permission to run the Codex companion via Bash. The codex:codex-rescue subagent needs a compatible Bash rule such as Bash(node:*) so it can invoke codex-companion.mjs without an approval prompt.",
+      "Missing Claude Code permission to run the Codex companion via Bash. The orchestrator's direct codex-companion.mjs dispatch (checks.plugins['openai-codex'].companionPath), and the codex:codex-rescue fallback subagent, both need a compatible Bash rule such as Bash(node:*) so they can invoke codex-companion.mjs without an approval prompt.",
     expected: 'permissions.allow includes a compatible rule such as "Bash(node:*)"',
     inspected,
     parseErrors,
@@ -589,6 +589,19 @@ const initialCodexCompanionBash = checkCodexCompanionBashPermission();
 const autoRemediation = autoRemediateCodexCompanionBashPermission(initialCodexCompanionBash);
 const finalCodexCompanionBash = checkCodexCompanionBashPermission();
 
+// Resolvido uma vez aqui para que `checks.plugins["openai-codex"].companionPath`
+// seja o unico lugar do workflow que sabe o path versionado do companion —
+// references/workflow.md e subagent-prompts.md despacham direto para
+// `node "<companionPath>" task ...` sem nunca hardcodar a versao instalada
+// (cc-plugins-allan/CLAUDE.md: plugins de terceiro sao sobrescritos a cada
+// update, entao nada fora deste script pode fixar "1.0.4" ou similar).
+const openaiCodexPlugin = checkPlugin("openai-codex", "codex", {
+  requiredFiles: ["scripts/codex-companion.mjs"],
+});
+const codexCompanionPath = openaiCodexPlugin.path
+  ? join(openaiCodexPlugin.path, "scripts", "codex-companion.mjs")
+  : undefined;
+
 const checks = {
   config: {
     "project-config": projectConfigState.check,
@@ -613,7 +626,7 @@ const checks = {
         "scripts/antigravity-bridge.js",
       ],
     }),
-    "openai-codex": checkPlugin("openai-codex", "codex"),
+    "openai-codex": { ...openaiCodexPlugin, companionPath: codexCompanionPath },
   },
   permissions: {
     "codex-companion-bash": finalCodexCompanionBash,

@@ -10,7 +10,7 @@
 - **Ondas executadas:** `<N>`
 - **Subagentes executados:** `<N total>`
 - **Subagentes por tipo:**
-  - `codex:codex-rescue`: `<N>`
+  - `codex-companion.mjs` (Codex, direto): `<N>`
   - `cc-antigravity-plugin:antigravity-coder` (implementacao front-end): `<N>`
   - `cc-antigravity-plugin:antigravity-agent` (review front-end, somente leitura): `<N>`
 - **Fallbacks/handoffs realizados:** `<nenhum | resumo>`
@@ -29,8 +29,11 @@
 
 - **Onda:** `<wave>`
 - **Task:** `<ID e título>`
-- **Subagent type:** `<codex:codex-rescue | cc-antigravity-plugin:antigravity-coder (implementacao) | cc-antigravity-plugin:antigravity-agent (review, somente leitura)>`
-- **Execucao:** `<--effort medium/high | AGY --mode accept-edits --format stream-json --model <agyModel> [--effort <agyEffort>] [--timeout <agyTimeout>] [--parallel] [--subagent-model <model>] | AGY review --read-only --format json --model pro-high --effort high [--timeout <agyTimeout>]>`
+- **Subagent type:** `<codex-companion.mjs direto (fallback: codex:codex-rescue) | cc-antigravity-plugin:antigravity-coder (implementacao) | cc-antigravity-plugin:antigravity-agent (review, somente leitura)>`
+- **Execucao:** `<--effort medium/high [--write] | AGY --mode accept-edits --format stream-json --model <agyModel> [--effort <agyEffort>] [--timeout <agyTimeout>] [--parallel] [--subagent-model <model>] | AGY review --read-only --format json --model pro-high --effort high [--timeout <agyTimeout>]>`
+- **Prompt enviado:** `<run/prompts/<taskId>.md | run/prompts/<taskId>-review.md | run/prompts/<taskId>.agy.txt>` / `<N chars>` / `<sha256 curto>`
+- **Contexto degradado:** `<nao | sim: N arquivos inline descartados (prompt-overflow-windows)>`
+- **Arquivos descartados pelo corte:** `<nenhum | lista com motivo (max-files-exceeded | prompt-overflow-windows | ignored-path | ...)>`
 - **Modelo solicitado / resolvido / source / evidence:** `<agyModel>` / `<resolvedModel|N/A>` / `<user|heuristic|adaptive>` / `<agyModelEvidence|N/A>`
 - **Conversa / retry / usage / duração / turnos:** `<conversationId|N/A>` / `<--conversation id|--continue|N/A>` / `<usage|N/A>` / `<durationSeconds|N/A>` / `<numTurns|N/A>`
 - **Fan-out Gemini:** `<agyParallel: yes|no>`
@@ -71,9 +74,9 @@
 
 | Agente | Papel | Tasks | input | output | cache_read | total |
 |---|---|---|---|---|---|---|
-| `codex:codex-rescue` | implementacao back-end (`--effort medium`) | `<IDs>` | `<N>` | `<N>` | `<N>` | `<N>` |
+| `codex-companion.mjs` (Codex, direto) | implementacao back-end (`--effort medium`) | `<IDs>` | `<N>` | `<N>` | `<N>` | `<N>` |
 | `cc-antigravity-plugin:antigravity-coder` | implementacao front-end (`--mode accept-edits --format stream-json --model <agyModel>`) | `<IDs>` | `<N>` | `<N>` | `<N>` | `<N>` |
-| `codex:codex-rescue` | review back-end (`--effort high`) | `<N rodadas>` | `<N>` | `<N>` | `<N>` | `<N>` |
+| `codex-companion.mjs` (Codex, direto) | review back-end (`--effort high`) | `<N rodadas>` | `<N>` | `<N>` | `<N>` | `<N>` |
 | `cc-antigravity-plugin:antigravity-agent` | review front-end (`--read-only --format json --model pro-high --effort high`) | `<N rodadas>` | `<N>` | `<N>` | `<N>` | `<N>` |
 | orquestrador | coordenacao, integracao e Fase 9.5 | `<N/A>` | `<N>` | `<N>` | `<N>` | `<N>` |
 | **Consolidado** | | | `<N>` | `<N>` | `<N>` | `<N>` |

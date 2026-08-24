@@ -17,9 +17,9 @@ Codex and Antigravity/AGY enter as specialized sub-agents:
 | Role | Executor | Responsibility |
 |---|---|---|
 | Harness Orchestrator | Claude CLI / Claude Code | Ingests the PRD/spec and coordinates workflow, contracts, waves, validations, logs and user decisions. |
-| Back-end implementation, database, tests and adjustments | Codex (`codex:codex-rescue`) | Executes non-front-end tasks with `--effort medium`, without fixing `--model`. |
+| Back-end implementation, database, tests and adjustments | Codex (direct `codex-companion.mjs` dispatch; fallback `codex:codex-rescue`) | Executes non-front-end tasks with `--effort medium --write`, without fixing `--model`. |
 | Front-end implementation and UX | Antigravity/AGY (`cc-antigravity-plugin:antigravity-coder`) | Executes `FRONTEND_ONLY` tasks and front-end slices of `FULLSTACK`, including Vite/React setup, routing, and UI implementation. |
-| Back-end post-implementation review | Codex (`codex:codex-rescue`) | Reviews **back-end only** with `--effort high` or falls back to orchestrator's internal read-only review when quota is exhausted. |
+| Back-end post-implementation review | Codex (direct `codex-companion.mjs` dispatch, no `--write`; fallback `codex:codex-rescue`) | Reviews **back-end only** with `--effort high` or falls back to orchestrator's internal read-only review when quota is exhausted. |
 | Front-end post-implementation review | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--read-only --format json --model pro-high --effort high`) | Reviews **front-end only** read-only or falls back to orchestrator's internal review when AGY is unavailable. |
 
 ### Configurable Agent Stack
@@ -91,7 +91,7 @@ This plugin depends on the official Codex plugin for Claude Code: https://github
 /codex:setup
 ```
 
-The marketplace/dependency used in manifests is `openai-codex`, and the expected sub-agent is `codex:codex-rescue`.
+The marketplace/dependency used in manifests is `openai-codex`. The orchestrator dispatches to it directly via `codex-companion.mjs` (path resolved from `checks.plugins["openai-codex"].companionPath`, published by `scripts/preflight.mjs`); the `codex:codex-rescue` sub-agent is a documented fallback for when that path cannot be resolved.
 
 For front-end, the orchestrator requires `cc-antigravity-plugin >= 4.0.0` and AGY `>= 1.1.8` (`1.1.16` recommended), with these files present in the installed plugin:
 
@@ -197,8 +197,9 @@ The workflow no longer fixes Codex models like `gpt-5.4` or `gpt-5.5`.
 
 Use:
 
-- `codex:codex-rescue` with `--effort medium` for implementation, handoff and adjustments;
-- `codex:codex-rescue` with `--effort high` for back-end post-implementation review.
+- direct `codex-companion.mjs` dispatch with `--effort medium --write` for implementation, handoff and adjustments;
+- direct `codex-companion.mjs` dispatch with `--effort high`, **no `--write`**, for back-end post-implementation review — omitting the flag is what makes the review read-only, not a prompt instruction;
+- `codex:codex-rescue` is the fallback sub-agent when `companionPath` cannot be resolved.
 
 The model defaults to what is available in the user's account. Codex never reviews front-end.
 
@@ -292,8 +293,8 @@ User overrides may also pass a safe dynamic model slug. The bridge validates it 
 Run:
 
 ```bash
-node scripts/preflight.mjs
-node scripts/preflight.mjs --check-agent-mcp   # also queries codex/agy live for per-agent MCP status
+node scripts/preflight.mjs --check-agent-mcp   # default path (SKILL.md/workflow.md Phase 0); also queries codex/agy live for per-agent MCP status
+node scripts/preflight.mjs                     # without the optional.mcpPerAgent block; only if you want to skip the subprocess cost
 ```
 
 The JSON includes:

@@ -72,3 +72,37 @@ test("mcp-context.md continua afirmando que o bloco esta no template de subagent
     "mcp-context.md deveria continuar referenciando subagent-prompts.md como o local do bloco de contexto do grafo",
   );
 });
+
+/**
+ * `subagent-prompts.md` manda preferir `checks.optional.mcpPerAgent` (sinal ao
+ * vivo por agente), mas esse bloco so existe no relatorio quando o preflight
+ * roda com `--check-agent-mcp` (opt-in, custo real de subprocesso). Se o
+ * caminho padrao do preflight (SKILL.md Fase 0.1, workflow.md Fase 0) nao
+ * passar a flag, a regra das "Regras comuns" e inalcancavel na run normal e o
+ * roteamento sempre cai no agregado fraco que `mcp-context.md` avisa nao
+ * distinguir CLI.
+ */
+test("preflight e invocado com --check-agent-mcp no caminho padrao (SKILL.md e workflow.md)", () => {
+  const skillPath = join(
+    REPO_ROOT,
+    "skills",
+    "orchestrator-multi-agent-development",
+    "SKILL.md",
+  );
+  const workflowPath = join(
+    REPO_ROOT,
+    "skills",
+    "orchestrator-multi-agent-development",
+    "references",
+    "workflow.md",
+  );
+
+  for (const path of [skillPath, workflowPath]) {
+    const content = readFileSync(path, "utf8");
+    assert.match(
+      content,
+      /preflight\.mjs["'`]?\s+--check-agent-mcp/,
+      `${path} deveria invocar preflight.mjs com --check-agent-mcp no caminho padrao da Fase 0`,
+    );
+  }
+});

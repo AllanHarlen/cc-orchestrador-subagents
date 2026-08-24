@@ -250,7 +250,24 @@ test("stack toda claude-code reprova task que ainda invoca codex:codex-rescue ou
   writeProjectConfig(leftoverCodex.root, config);
   const codexResult = runValidator(leftoverCodex.artifactDir);
   assert.equal(codexResult.status, 1, codexResult.output);
-  assert.match(codexResult.output, /invoca `codex:codex-rescue`/);
+  assert.match(codexResult.output, /invoca Codex \(`codex:codex-rescue` ou `codex-companion\.mjs` direto\)/);
+
+  const leftoverCodexDirect = fixture({
+    "tasks-classification.md": [
+      "# Classificacao",
+      "",
+      "## BE-02 - API direta",
+      "- categoria: BACKEND_ONLY",
+      "- executor: claude-code",
+      "- executorSource: project-config",
+      "- assignedAgent: node \"<companionPath>/codex-companion.mjs\" task --effort medium",
+    ].join("\n"),
+    "waves.md": ["# Waves", "", "## Wave 1", "- BE-02"].join("\n"),
+  });
+  writeProjectConfig(leftoverCodexDirect.root, config);
+  const codexDirectResult = runValidator(leftoverCodexDirect.artifactDir);
+  assert.equal(codexDirectResult.status, 1, codexDirectResult.output);
+  assert.match(codexDirectResult.output, /invoca Codex \(`codex:codex-rescue` ou `codex-companion\.mjs` direto\)/);
 
   const leftoverAgy = fixture({
     "tasks-classification.md": [

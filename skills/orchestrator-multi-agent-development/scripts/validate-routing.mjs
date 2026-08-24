@@ -66,8 +66,12 @@ const AGY_EFFORT_RE = /(?:agyEffort|--agy-effort|--effort)\b\s*[:=]?\s*`?([^`\s|
 const AGY_TIMEOUT_RE = /(?:agyTimeout|--agy-timeout|--timeout)\b\s*[:=]?\s*`?([^`\s|,]+)/i;
 const AGY_FORMAT_RE = /(?:agyFormat|--format)\b\s*[:=]?\s*`?([^`\s|,]+)/i;
 // Identificadores de subagente externo. Task com executor `claude-code` nao pode
-// invocar `codex:codex-rescue` nem subagente do `cc-antigravity-plugin` (Req 7.11).
-const CODEX_SUBAGENT_RE = /\bcodex:codex-rescue\b/i;
+// invocar Codex (direto via codex-companion.mjs, ou via o fallback `codex:codex-rescue`)
+// nem subagente do `cc-antigravity-plugin` (Req 7.11). Cobre os dois caminhos porque o
+// orquestrador despacha para Codex chamando codex-companion.mjs diretamente
+// (references/subagent-prompts.md Secao 1), e cai para codex:codex-rescue apenas quando
+// companionPath nao resolve.
+const CODEX_SUBAGENT_RE = /\bcodex:codex-rescue\b|\bcodex-companion\.mjs\b/i;
 const AGY_PLUGIN_SUBAGENT_RE = /\bcc-antigravity-plugin:[a-z-]+/i;
 // `executor` declarado no bloco. O lookahead descarta `executorSource`, que e o
 // campo de origem da decisao e nunca carrega o nome do executor.
@@ -473,7 +477,7 @@ function validateBlock(source, block, categoryByTask) {
     // Stack toda `claude-code` nao invoca subagente externo (Req 7.11).
     if (effective.length > 0 && effective.every((value) => value === "claude-code")) {
       if (CODEX_SUBAGENT_RE.test(block.text)) {
-        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas invoca \`codex:codex-rescue\`. Com a Project_Config (${projectConfigLabel}) essa task e implementada por subagente do Claude Code.`);
+        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas invoca Codex (\`codex:codex-rescue\` ou \`codex-companion.mjs\` direto). Com a Project_Config (${projectConfigLabel}) essa task e implementada por subagente do Claude Code.`);
       }
       if (AGY_PLUGIN_SUBAGENT_RE.test(block.text)) {
         errors.push(`${source}: ${id} tem executor \`claude-code\`, mas invoca subagente do \`cc-antigravity-plugin\`. Com a Project_Config (${projectConfigLabel}) essa task e implementada por subagente do Claude Code.`);

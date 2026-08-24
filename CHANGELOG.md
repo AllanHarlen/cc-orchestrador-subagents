@@ -1,5 +1,44 @@
 # Changelog
 
+## [4.5.0] — 2026-08-24
+
+### Despacho direto ao Codex, prompt persistido como artefato da run, e `--check-agent-mcp` no caminho padrão
+
+O contexto do workflow atravessa quatro fronteiras (orquestrador → subagente → bridge/companion →
+CLI externa) e três delas degradavam em silêncio: o prompt efetivo que chegava na CLI nunca era
+persistido, o orçamento de 28.000 chars existia só como prosa aqui (embora já fosse um script no
+plugin errado, `cc-executor-subagents`), e `codex:codex-rescue` custava um Sonnet reescrevendo o
+prompt sem devolver isolamento de contexto nenhum — ele é instruído a devolver o stdout do Codex
+exatamente como recebeu.
+
+- **`scripts/preflight.mjs`**: `checkPlugin("openai-codex", "codex", ...)` agora exige
+  `scripts/codex-companion.mjs` e publica `checks.plugins["openai-codex"].companionPath` — o único
+  lugar do workflow que resolve o path versionado do companion, para que nada fora deste script
+  hardcode a versão instalada (plugin de terceiro, sobrescrito a cada update).
+- **`references/subagent-prompts.md`, `references/workflow.md`**: despacho para Codex passa a ser
+  `node "<companionPath>" task --prompt-file <path> --effort ... [--write] --background --json`,
+  chamado direto pelo orquestrador em vez de via subagente `codex:codex-rescue` (que vira fallback
+  documentado para quando `companionPath` não resolve). No review de back-end (Fase 8), `--write` é
+  **omitido**, o que torna o `read-only` uma garantia estrutural (`handleTask` em
+  `codex-companion.mjs` faz `write = Boolean(options.write)`) em vez de uma frase de prompt.
+- **`scripts/check-prompt-budget.mjs`** (novo, com wrapper em `scripts/`): mede o prompt persistido
+  contra o limite de 28.000 chars — duro para `--agent agy` (exit 1, o gargalo real é
+  `agy --print <prompt>` no bridge, que sempre vai por argv), apenas indicativo para `--agent codex`
+  (exit 0 mesmo acima do limite, porque `--prompt-file` não passa pelo limite de argv do Windows).
+- **Prompt efetivo como artefato da run**: `run/prompts/` já existia declarado em
+  `scripts/lib/artifact-layout.mjs` mas nunca era preenchido. Agora todo dispatch persiste o corpo
+  do prompt em `run/prompts/<taskId>.md` (ou `<taskId>-review.md`) antes de delegar, e para AGY o
+  novo `--dump-prompt` do bridge (`cc-antigravity-plugin` 4.1.0) grava o prompt real da run e um
+  sidecar de auditoria. `assets/subagents-context-template.md` ganha os campos **Prompt enviado**,
+  **Contexto degradado** e **Arquivos descartados pelo corte**, alimentados a partir desse sidecar.
+- **`scripts/validate-routing.mjs`**: `CODEX_SUBAGENT_RE` agora também reconhece `codex-companion.mjs`
+  além de `codex:codex-rescue`, para que o gate do Req 7.11 (executor `claude-code` não invoca
+  executor externo) cubra o novo caminho de despacho direto.
+- **`--check-agent-mcp` entra no caminho padrão da Fase 0`** (`SKILL.md` 0.1, `references/workflow.md`
+  Fase 0): a versão anterior deste changelog introduziu a flag como opt-in porque "Regras comuns" já
+  instruía preferir `checks.optional.mcpPerAgent` (sinal ao vivo por agente) ao agregado de arquivo,
+  mas sem a flag no caminho padrão esse bloco nunca existia e a regra era inalcançável na prática.
+
 ## [4.4.0] — 2026-08-24
 
 ### Detecção de MCP por agente (`--check-agent-mcp`) e oferta de instalação

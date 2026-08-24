@@ -3,8 +3,8 @@
 ## Como rodar
 
 ```bash
-node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
-node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" --check-agent-mcp   # tambem sonda codex/agy ao vivo, ver abaixo
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" --check-agent-mcp   # caminho padrao (SKILL.md Fase 0.1, workflow.md Fase 0); sonda codex/agy ao vivo, ver abaixo
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"                     # sem o bloco optional.mcpPerAgent; so use se quiser pular o custo do subprocesso
 ```
 
 ## Saida
@@ -129,4 +129,4 @@ Se a auto-remediacao nao puder agir, ajuste manualmente:
 
 - `checked: false` (`reason`: `BINARY_MISSING`, `TIMEOUT`, `EXEC_ERROR` ou `UNPARSEABLE_OUTPUT`) **nao e prova de ausencia** — cai para `checks.optional.mcp.<servidor>.ok`.
 - `install` so vem preenchido quando `checked: true, ok: false` — a CLI respondeu e o servidor genuinamente nao esta la. Traz o comando exato de registro (`mcp-agent-install.mjs`), nunca disparado automaticamente: ver "Oferta de instalacao por agente" em `references/mcp-context.md`.
-- Off por padrao (custo real de subprocesso, ate `AGENT_CLI_TIMEOUT_MS` por agente por servidor); pass `--check-agent-mcp` quando for delegar a uma task Codex/AGY que dependa de uma dessas ferramentas.
+- `--check-agent-mcp` faz parte do caminho padrao da Fase 0 (custo real de subprocesso, ate `AGENT_CLI_TIMEOUT_MS` por agente por servidor, mas necessario sempre que alguma task Codex/AGY puder depender de Context7/Codebase Memory). Rodar sem a flag e a excecao, nao o padrao — so faz sentido quando nenhuma task da run vai prometer essas ferramentas no prompt.

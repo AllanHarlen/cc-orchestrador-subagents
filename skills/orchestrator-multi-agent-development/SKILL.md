@@ -34,7 +34,7 @@ Ao concluir, o orquestrador grava um `report/handoff.json` em `.orchestration/<s
 10. O roteamento de implementacao e decidido pela **categoria da task**, nao pela aparencia do trabalho. Toda task `FRONTEND_ONLY` vai para Antigravity/AGY; Codex so assume front-end em fallback operacional registrado.
 11. Limites de sandbox Codex como rede externa bloqueada, pacote ausente do cache local ou escrita fora do working directory permitido sao bloqueios operacionais: registre evidencia e peca decisao do usuario.
 12. `--parallel` e `--subagent-model` sao **modificadores de execucao** da delegacao AGY, nao criterios de roteamento. A categoria da task continua decidindo o agente; o fan-out nativo Gemini e apenas uma otimizacao interna da sessao AGY.
-13. Antes de delegar para AGY, monte o prompt completo e meca os caracteres. Se exceder 28.000 chars, divida a task em subtasks por entregaveis antes de delegar — nunca envie prompt acima do limite.
+13. Antes de delegar, persista o prompt em `run/prompts/<taskId>.md` e meca-o com `scripts/check-prompt-budget.mjs --agent agy|codex --file <path>` (nunca conte manualmente). Para AGY o limite de 28.000 chars e duro — divida a task em subtasks por entregaveis antes de delegar. Para Codex (`--prompt-file`, sem limite de argv) a mesma checagem e so indicativa; nunca bloqueia o dispatch.
 14. Quando toda a atividade for `FRONTEND_ONLY` (todas as tasks classificadas como tal), o Codex nao participa do fluxo: a Fase 8 (review back-end) e ignorada e o review fica inteiramente com o AGY na Fase 9.
 15. **Design system (Open Design) e contrato visual, nao decoracao.** Quando a especificacao tiver design system — `design-system.md` (modo PRD) ou `design.md` + `specs/ui-design-system/spec.md` (modo Spec OpenSpec) — o orquestrador primeiro **materializa** os arquivos verbatim do Pensador (`design-system-files`, em `.pensador/<slug>-vN/design-systems/<id>/`) para o alvo real via `materializeInto` (ex.: `packages/ui/design-systems/<id>/` — `tokens.css`, `components.html`, `preview/`; ver Fase 4.0 e `references/handoff-contract.md` secao 6). Em seguida **passa os caminhos materializados no prompt de toda task front-end** e exige que o AGY **consuma `tokens.css` (sem inventar tokens)** e bata os componentes com `components.html`. Na Fase 9, o review aplica o **gate de design**: `tokens.css` consumido via `var(--*)`, accent contido (≤ 2x/pagina), telas-chave conferidas contra o diretorio `preview/` (os arquivos variam por system, dos ~150 curados: `colors.html`, `spacing.html`, `typography.html` — so 1 system (`default`) tem `app.html`), anti-padroes da secao 9 ausentes; violacao de requisito explicito e BLOQUEANTE.
 16. **Execucao continua ate a conclusao integral do que ja foi elaborado — sem corte unilateral de escopo, sem pausa para perguntar sobre fasear.** Na Fase 1.2, extraia da especificacao **todas** as tasks implicadas — nunca reduza para uma "primeira onda", "fundacao" ou MVP que o orquestrador julgue razoavel para uma unica execucao. A decisao de escopo ja foi tomada rio acima (pelo Pensador, na integracao Pensador → Orquestrador — o Pensador ja conduziu a entrevista de descoberta com o usuario no modo conjunto —, ou pelo proprio usuario ao escrever/fornecer o PRD/spec no modo independente) — o papel do orquestrador e **implementar o que ja foi decidido ate o fim**, nao redecidir o tamanho do trabalho nem pausar no meio para confirmar se deve continuar. Quando a especificacao gerar tasks suficientes para multiplas ondas de execucao, o orquestrador monta as ondas (Fase 3) e as executa **sequencialmente ate a ultima**, sem parar entre elas para perguntar ao usuario se deve prosseguir. Pausas so acontecem por bloqueio real: lacuna bloqueante da Fase 1.3, bloqueio de sandbox/quota (secoes dedicadas deste documento), ou reprovacao em review (Fase 8/9, que aciona o loop de correcao da Fase 7 antes de seguir). Reducao de escopo so e aceitavel quando o **proprio usuario** pedir explicitamente, na mensagem que invocou o orquestrador — nunca por iniciativa do orquestrador.
@@ -60,8 +60,14 @@ A Fase 0 tem quatro etapas, nesta ordem: preflight, resolucao da Project_Config 
 Execute:
 
 ```bash
-node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" --check-agent-mcp
 ```
+
+`--check-agent-mcp` sonda `codex mcp list --json`/`agy mcp list` ao vivo e publica
+`checks.optional.mcpPerAgent`; sem essa flag o bloco nao existe e o roteamento de
+Context7/Codebase Memory cai no agregado de arquivo, que so prova que o MCP esta registrado
+em algum lugar da maquina, nao necessariamente na CLI que vai executar a task (ver
+`references/mcp-context.md`). Custo: um subprocesso por CLI, uma vez por run.
 
 Use o JSON retornado como fonte da verdade. O relatorio traz o bloco `projectConfig` (os quatro papeis efetivos, `path`, `updatedAt`, `requiredCliSet` e `source: "file" | "default"`) e um array `warnings` no topo para reprovado opcional e MCP ausente — nenhum dos dois bloqueia. `failed` so contem reprovado obrigatorio, decidido pelo Required_CLI_Set da Project_Config vigente.
 
@@ -319,7 +325,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] contratos criados para toda troca front-back
 - [ ] prompts Codex sem `--model`
 - [ ] prompts AGY de implementacao com `--mode accept-edits --format stream-json --model <agyModel>` coerente com override ou heuristica
-- [ ] prompts AGY verificados contra o limite de 28.000 chars antes da delegacao; tasks que excedem foram divididas em subtasks por entregaveis
+- [ ] prompts persistidos em `run/prompts/` e verificados com `check-prompt-budget.mjs` antes da delegacao; tasks AGY que excedem 28.000 chars foram divididas em subtasks por entregaveis
 - [ ] tasks AGY com dois ou mais entregaveis independentes registram `agyParallel` e `agyParallelSource`
 - [ ] `agySubagentModel` (quando diferente de `inherit`) e alias ou slug dinamico seguro aceito pelo bridge
 - [ ] bloqueios de sandbox Codex tratados como `BLOCKED` com evidencia

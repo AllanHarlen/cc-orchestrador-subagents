@@ -34,7 +34,7 @@ Antes de iniciar uma fase, execute `orchestration-state.mjs phase --status RUNNI
 Rode:
 
 ```bash
-node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" --check-agent-mcp
 ```
 
 Regras:
@@ -146,9 +146,9 @@ O Executor de cada task vem da categoria combinada com a Project_Config (`refere
 
 | Categoria | Papel da Project_Config | Execucao sob os defaults (`codex`/`agy`) |
 |---|---|---|
-| `BACKEND_ONLY` | `backendExecutor` | `codex:codex-rescue` com `--effort medium` |
-| `DATABASE_ONLY` | `backendExecutor` | `codex:codex-rescue` com `--effort medium` |
-| `REVIEW_ONLY` | `backendReviewer` | `codex:codex-rescue` com `--effort high` |
+| `BACKEND_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --effort medium --write` (chamada direta; fallback `codex:codex-rescue`) |
+| `DATABASE_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --effort medium --write` (chamada direta; fallback `codex:codex-rescue`) |
+| `REVIEW_ONLY` | `backendReviewer` | Codex via `codex-companion.mjs task --effort high` **sem `--write`** (chamada direta; fallback `codex:codex-rescue`) |
 | `FRONTEND_ONLY` | `frontendExecutor` | AGY (`cc-antigravity-plugin:antigravity-coder`) com `--mode accept-edits --format stream-json --model <agyModel>` |
 | `FULLSTACK` | `backendExecutor` + `frontendExecutor` | Codex para back-end; AGY com `--mode accept-edits --format stream-json --model <agyModel>` para front-end |
 
@@ -282,11 +282,48 @@ Para cada dispatch, persista a task como `RUNNING` **antes** de iniciar o execut
 
 Quando o executor retornar, converta sinais de quota/auth/tooling para `BLOCKED` + `reasonCode`, ou persista `DONE`/`FAILED`, **antes** de anunciar o retorno na conversa ou avancar a wave.
 
+### Prompt efetivo como artefato da run
+
+Antes de cada dispatch (Codex ou AGY), monte o corpo do prompt seguindo o template de
+`subagent-prompts.md` com os placeholders preenchidos, e **persista-o em arquivo antes de
+delegar** — nunca so em memoria, nunca so em argv:
+
+- `.orchestration/<slug>/run/prompts/<taskId>.md` para implementacao/handoff/ajuste;
+- `.orchestration/<slug>/run/prompts/<taskId>-review.md` para review (Fases 8/9).
+
+Isso alimenta dois pontos que antes nao existiam: o prompt que de fato chegou na CLI vira algo
+auditavel depois (nao so o retorno do subagente, que e o unico rastro hoje), e a medicao do
+orcamento abaixo passa a medir o arquivo real, nao uma estimativa mental.
+
+Para AGY, ao invocar o `antigravity-coder`/`antigravity-agent`, passe tambem
+`--dump-prompt ".orchestration/<slug>/run/prompts/<taskId>.agy.txt"` (ver `subagent-prompts.md`
+Secao 2) — o bridge grava o prompt final **da run real** (pos fallback de overflow, nao um dry run)
+e um sidecar `<path>.audit.json` com `{ promptChars, limit, degraded, droppedFiles, included,
+skipped }`. Preencha os campos "Prompt enviado" e "Contexto degradado" de
+`assets/subagents-context-template.md` a partir desse sidecar.
+
+**Quando `degraded: true`** (o bridge descartou arquivos inline por causa do limite de 28.000 chars
+no Windows), a task **nao conta como executada com contexto completo** — registre em
+`run/monitoring.md` a lista de arquivos descartados (`skipped` com `reason:
+"prompt-overflow-windows"`) e decida entre redespachar com `--priority-files` apontando para os
+arquivos que ficaram de fora, ou dividir a task por entregaveis (ver abaixo). Hoje essa degradacao
+so aparecia como um aviso em stderr que ninguem le; a partir daqui e um fato registrado na run.
+
 ### Regra de limite de prompt AGY (28.000 chars)
 
-Antes de delegar qualquer task para AGY, monte o prompt completo seguindo o template de `subagent-prompts.md` e conte os caracteres do texto montado.
+Antes de delegar, meca o arquivo persistido (nao conte manualmente):
 
-**Threshold:** 28.000 chars. Prompts reais com aspas, barras invertidas, XML e quebras de linha inflariam ~14% na linha de comando codificada pelo Node.js no Windows, causando `ENAMETOOLONG`. O threshold conservador garante margem segura.
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/check-prompt-budget.mjs" --agent agy \
+  --file ".orchestration/<slug>/run/prompts/<taskId>.md"
+```
+
+**Threshold:** 28.000 chars. Prompts reais com aspas, barras invertidas, XML e quebras de linha inflariam ~14% na linha de comando codificada pelo Node.js no Windows, causando `ENAMETOOLONG`. O threshold conservador garante margem segura. Para AGY isso e limite duro: `ok: false` sai com exit 1 e o chamador deve tratar a falha antes de despachar.
+
+**Para Codex, a mesma checagem (`--agent codex`) e apenas indicativa** (`advisory: true`, nunca
+falha, exit 0 mesmo acima do limite) — a chamada direta ao companion usa `--prompt-file`
+(`codex-companion.mjs`), que nao passa pelo limite de argv do Windows. Um prompt muito acima do
+limite ainda pode indicar contexto mal recortado; considere dividir por entregaveis mesmo sem erro.
 
 Se o prompt montado **exceder 28.000 chars**:
 

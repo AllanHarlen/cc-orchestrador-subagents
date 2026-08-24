@@ -19,11 +19,47 @@ Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 
 ## 1. Back-end - Codex
 
-**Subagent type:** `codex:codex-rescue`
+**Despacho: chamada direta ao companion, nao mais `codex:codex-rescue`.** O subagente
+`codex:codex-rescue` e instruido a devolver o stdout do Codex exatamente como recebeu
+(`Return the stdout of the task command exactly as-is`) e e proibido de chamar `status`/`result` —
+ou seja, ele nao isola contexto nenhum: o relatorio final que ele devolve *e* o stdout do Codex, e o
+prompt de entrada o orquestrador ja tinha, porque foi ele que montou. A camada custava um Sonnet
+reescrevendo o prompt sem devolver isolamento em troca. Por isso o despacho e direto:
+
+1. Persista o corpo do prompt abaixo (com os placeholders preenchidos) em
+   `.orchestration/<slug>/run/prompts/<taskId>.md` — nunca em argv (ver "Prompt efetivo como
+   artefato da run" mais abaixo).
+2. Meca o prompt: `node "${CLAUDE_SKILL_DIR}/scripts/check-prompt-budget.mjs" --agent codex --file
+   .orchestration/<slug>/run/prompts/<taskId>.md`. Para Codex isso e apenas indicativo
+   (`advisory: true`, nunca falha) porque `--prompt-file` nao passa pelo limite de argv do Windows —
+   mas um prompt muito grande ainda degrada qualidade de contexto, então considere dividir por
+   entregaveis mesmo sem erro.
+3. Resolva o path do companion em `checks.plugins["openai-codex"].companionPath`
+   (`node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" --json`) — nunca hardcode a versao instalada,
+   ela e sobrescrita a cada update do plugin de terceiro.
+4. Despache:
+
+```bash
+node "<companionPath>" task \
+  --cwd "<workspace da task>" \
+  --prompt-file ".orchestration/<slug>/run/prompts/<taskId>.md" \
+  --effort medium --write --background --json
+# → { jobId, status: "queued", logFile }  —  jobId e o sessionId da task no state
+# resultado grande depois: node "<companionPath>" result <jobId> --json
+```
+
+`--effort medium` para implementacao/handoff/ajuste; `--effort high` para review (Fase 8). **Omita
+`--write` no review de back-end** — isso torna o `read-only` uma garantia estrutural
+(`handleTask` em `codex-companion.mjs` faz `write = Boolean(options.write)`), nao uma frase de prompt
+que o executor pode ignorar.
+
+**Fallback documentado:** se `checks.plugins["openai-codex"].companionPath` nao resolver (plugin
+ausente ou corrompido), use `codex:codex-rescue` com o mesmo corpo de prompt como texto da task, e
+registre o fallback em `report/workflow-log.md` com o motivo.
+
+**Corpo do prompt** (o que vai em `run/prompts/<taskId>.md`):
 
 ```text
---effort medium
-
 Voce e o subagente back-end desta task.
 
 Antes de implementar, liste as skills disponiveis no ambiente com `/skills` ou equivalente.
@@ -99,12 +135,32 @@ Retorno:
 **Parametros:**
 
 ```text
---mode accept-edits --format stream-json --model <AGY_MODEL> [--effort <AGY_EFFORT>] [--timeout <AGY_TIMEOUT>] [--parallel] [--subagent-model <SUBAGENT_MODEL>] --dirs <DIRS>
+--mode accept-edits --format stream-json --model <AGY_MODEL> [--effort <AGY_EFFORT>] [--timeout <AGY_TIMEOUT>] [--parallel] [--subagent-model <SUBAGENT_MODEL>] --dirs <DIRS> \
+--task-file ".orchestration/<slug>/run/prompts/<taskId>.md" \
+--dump-prompt ".orchestration/<slug>/run/prompts/<taskId>.agy.txt"
 ```
 
 O bridge resolve aliases com `agy models` e encaminha `--model` nativamente, sem modificar configuracoes do usuario. `stream-json` permite acompanhar `init`, `step_update` e `result`; progresso fica separado em `stderr` e apenas a resposta final segue em `stdout`.
 
 Passe `--parallel` quando `agyParallel: yes` para a task. Se `agySubagentModel` for diferente de `inherit`, inclua tambem `--subagent-model <SUBAGENT_MODEL>`.
+
+**Sempre use `--task-file`, nunca argv, para o corpo do prompt abaixo:** o **orquestrador** (nao o
+subagente — `antigravity-coder` nao tem ferramenta de escrita, so `Bash(node *antigravity-bridge.js*)`)
+persiste o corpo em `run/prompts/<taskId>.md` antes de invocar o subagente, e a instrucao do
+subagente e so passar `--task-file ".orchestration/<slug>/run/prompts/<taskId>.md"` para o bridge —
+o proprio bridge le o arquivo. Isso protege o salto Bash→bridge do limite de linha de comando (nao
+muda o orcamento de 28.000 chars do salto bridge→agy, que continua real). Meca o mesmo arquivo antes
+de despachar:
+`node "${CLAUDE_SKILL_DIR}/scripts/check-prompt-budget.mjs" --agent agy --file
+.orchestration/<slug>/run/prompts/<taskId>.md` — para AGY isso e limite duro (`advisory: false`,
+exit 1 se estourar); acima do limite, divida a task por entregaveis antes de delegar (ver "Regra de
+limite de prompt AGY" em `references/workflow.md`).
+
+**`--dump-prompt` audita o contexto que de fato chegou ao AGY.** O sidecar `<path>.audit.json`
+(`{ promptChars, limit, degraded, droppedFiles, included, skipped }`) alimenta os campos "Prompt
+enviado" e "Contexto degradado" de `assets/subagents-context-template.md`. Quando
+`degraded: true`, a task nao conta como executada com contexto completo — ver "Prompt efetivo como
+artefato da run" em `references/workflow.md`.
 
 **Corpo do prompt:**
 
@@ -245,11 +301,23 @@ Responda sem implementar trabalho novo nesta mensagem:
 
 ## 4. Review back-end pos-implementacao - Codex (Fase 8)
 
-**Subagent type:** `codex:codex-rescue`
+**Despacho: chamada direta ao companion (ver Secao 1). O `read-only` deste review e uma garantia
+estrutural, nao uma frase de prompt: `handleTask` em `codex-companion.mjs` faz
+`write = Boolean(options.write)`, entao omitir `--write` na chamada abaixo torna a escrita
+impossivel, independente do que o texto do prompt disser.**
+
+```bash
+node "<companionPath>" task \
+  --cwd "<workspace do review>" \
+  --prompt-file ".orchestration/<slug>/run/prompts/<taskId>-review.md" \
+  --effort high --background --json
+# SEM --write. Fallback se companionPath nao resolver: codex:codex-rescue, mesmo corpo de prompt,
+# sem pedir escrita — e registre o fallback em report/workflow-log.md.
+```
+
+Corpo do prompt (persistido em `run/prompts/<taskId>-review.md`):
 
 ```text
---effort high
-
 Nao modifique arquivos. Apenas revise. Revise SOMENTE o back-end.
 
 Revise a implementacao back-end realizada pelos subagentes para a especificacao <nome>.
