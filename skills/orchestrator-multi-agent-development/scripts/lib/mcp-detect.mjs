@@ -1,6 +1,14 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
+import {
+  CODEBASE_MEMORY_CONFIG_CANDIDATES,
+  CODEBASE_MEMORY_SKILL_CANDIDATES,
+  CONTEXT7_CONFIG_CANDIDATES,
+  CONTEXT7_MCP_DIRECTORY_CANDIDATES,
+  CONTEXT7_SKILL_CANDIDATES,
+  resolveCandidate,
+} from "./mcp-candidates.mjs";
 
 /**
  * Deteccao dos MCPs opcionais do orquestrador: o CBM_MCP (`codebase-memory-mcp`)
@@ -15,8 +23,13 @@ import { delimiter, join, resolve } from "node:path";
  * O que a deteccao faz, para os dois MCPs:
  *
  * - Varre candidatos conhecidos (arquivos de configuracao MCP, diretorios de
- *   servidor, SKILL.md de skill correspondente) e procura o marcador do
- *   servidor no conteudo, registrando evidencia `{ type, path }`.
+ *   servidor, SKILL.md de skill correspondente), registrando evidencia
+ *   `{ type, path }`. Candidato `.json` e parseado e casado por estrutura
+ *   (nome em `mcpServers`, ou em `projects.<cwd>.mcpServers` de
+ *   `~/.claude.json`, excluindo `disabledMcpjsonServers`) — nunca um substring
+ *   solto no arquivo inteiro. O unico candidato `.toml`
+ *   (`~/.codex/config.toml`) segue casado por marcador sobre o texto bruto,
+ *   limitacao aceita (ver `inspectConfig`).
  * - Resolve o binario do servidor no `PATH` por leitura da propria variavel de
  *   ambiente, sem shell e sem executar nada.
  * - Tipos de evidencia: `mcp-config`, `mcp-config-unreadable`, `binary`,
@@ -60,6 +73,10 @@ export const CONTEXT7_MCP = "context7";
 
 /** Nomes dos servidores na ordem canonica do relatorio. */
 export const MCP_SERVER_NAMES = Object.freeze([CODEBASE_MEMORY_MCP, CONTEXT7_MCP]);
+
+/** Nomes de registro reconhecidos em `mcpServers` — casamento estrutural, nao substring. */
+export const CODEBASE_MEMORY_SERVER_NAMES = Object.freeze(["codebase-memory-mcp", "codebase-memory"]);
+export const CONTEXT7_SERVER_NAMES = Object.freeze(["context7", "context7-mcp", "ctx7"]);
 
 /** Motivos aceitos no array `warnings` do preflight para MCP. */
 export const MCP_DETECT_REASONS = Object.freeze({
@@ -143,8 +160,10 @@ export function mcpInstallCommands(server, platform = process.platform) {
  * entra depois, como evidencia adicional.
  */
 function codebaseMemorySpec({ home, projectRoot }) {
+  const ctx = { home, cwd: projectRoot };
   return {
     name: CODEBASE_MEMORY_MCP,
+    names: CODEBASE_MEMORY_SERVER_NAMES,
     marker: /codebase[-_]memory/i,
     usage: CODEBASE_MEMORY_USAGE,
     notDetected: CODEBASE_MEMORY_NOT_DETECTED,
@@ -152,36 +171,28 @@ function codebaseMemorySpec({ home, projectRoot }) {
     steps: [
       {
         kind: "config",
-        paths: [
-          join(projectRoot, ".mcp.json"),
-          join(home, ".claude.json"),
-          join(home, ".claude", "mcp.json"),
-          join(home, ".codex", "config.toml"),
-          join(home, ".gemini", "config", "mcp_config.json"),
-        ],
+        paths: CODEBASE_MEMORY_CONFIG_CANDIDATES.map((c) => resolveCandidate(c, ctx)),
       },
       { kind: "binary", names: [CODEBASE_MEMORY_MCP_BINARY] },
       {
         kind: "skill",
-        paths: [
-          join(home, ".claude", "skills", "codebase-memory", "SKILL.md"),
-          join(home, ".claude", "skills", "codebase-memory-mcp", "SKILL.md"),
-        ],
+        paths: CODEBASE_MEMORY_SKILL_CANDIDATES.map((c) => resolveCandidate(c, ctx)),
       },
     ],
   };
 }
 
 /**
- * Candidatos do Context7_MCP.
- *
- * Preserva a lista que o preflight ja inspecionava inline (skill, diretorio de
- * servidor do Antigravity e as configuracoes de Claude/Codex/Gemini/projeto) e
- * acrescenta a resolucao da CLI `ctx7` no `PATH`.
+ * Candidatos do Context7_MCP — skill, diretorio de servidor do Antigravity,
+ * configuracoes de Claude/Codex/Gemini/projeto e a CLI `ctx7` no `PATH`. Lista
+ * canonica (union com Pensador/Executor) em `mcp-candidates.mjs` — ver
+ * `test/mcp-detection-parity.test.js` em cc-pensador.
  */
 function context7Spec({ home, projectRoot }) {
+  const ctx = { home, cwd: projectRoot };
   return {
     name: CONTEXT7_MCP,
+    names: CONTEXT7_SERVER_NAMES,
     marker: /\bcontext7\b|@upstash\/context7-mcp|mcp\.context7\.com|ctx7/i,
     usage: CONTEXT7_USAGE,
     notDetected: CONTEXT7_NOT_DETECTED,
@@ -189,33 +200,15 @@ function context7Spec({ home, projectRoot }) {
     steps: [
       {
         kind: "skill",
-        paths: [
-          join(home, ".claude", "skills", "context7", "SKILL.md"),
-          join(home, ".claude", "skills", "context7-mcp", "SKILL.md"),
-        ],
+        paths: CONTEXT7_SKILL_CANDIDATES.map((c) => resolveCandidate(c, ctx)),
       },
       {
         kind: "mcp-directory",
-        paths: [
-          join(home, ".gemini", "antigravity-cli", "mcp", "context7"),
-          join(home, ".gemini", "antigravity-cli", "plugins", "context7"),
-        ],
+        paths: CONTEXT7_MCP_DIRECTORY_CANDIDATES.map((c) => resolveCandidate(c, ctx)),
       },
       {
         kind: "config",
-        paths: [
-          join(projectRoot, ".mcp.json"),
-          join(home, ".claude.json"),
-          join(home, ".claude", "mcp.json"),
-          join(home, ".config", "claude", "mcp.json"),
-          join(home, ".codex", "config.toml"),
-          join(home, ".gemini", "config", "mcp_config.json"),
-          join(home, ".gemini", "settings.json"),
-          join(home, ".gemini", "mcp.json"),
-          join(home, ".gemini", "antigravity-cli", "settings.json"),
-          join(home, ".gemini", "antigravity-cli", "import_manifest.json"),
-          join(home, ".gemini", "antigravity-cli", "plugins", "context7", "mcp_config.json"),
-        ],
+        paths: CONTEXT7_CONFIG_CANDIDATES.map((c) => resolveCandidate(c, ctx)),
       },
       { kind: "binary", names: ["ctx7"] },
     ],
@@ -242,6 +235,64 @@ function firstLine(message, fallback) {
 
 function stripBom(text) {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+/** `<path>` normalizado para casar a chave `projects.<cwd>` em `~/.claude.json`. */
+function normalizePathKey(p) {
+  return String(p).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/**
+ * Extrai os mapas `{ servers, disabled }` de um JSON de config MCP ja
+ * parseado: o `mcpServers` de topo (se houver) e, para `~/.claude.json`
+ * especificamente, o `projects.<cwd>.mcpServers` do projeto ATUAL (casado por
+ * `normalizePathKey`), junto do `disabledMcpjsonServers` desse projeto.
+ */
+function extractServerMaps(json, cwd) {
+  const maps = [];
+  if (json?.mcpServers && typeof json.mcpServers === "object") {
+    maps.push({ servers: json.mcpServers, disabled: [] });
+  }
+  if (json?.projects && typeof json.projects === "object") {
+    const wanted = normalizePathKey(cwd);
+    for (const [key, project] of Object.entries(json.projects)) {
+      if (normalizePathKey(key) !== wanted) continue;
+      if (project?.mcpServers && typeof project.mcpServers === "object") {
+        maps.push({
+          servers: project.mcpServers,
+          disabled: Array.isArray(project.disabledMcpjsonServers)
+            ? project.disabledMcpjsonServers
+            : [],
+        });
+      }
+    }
+  }
+  return maps;
+}
+
+/**
+ * Casa `names`/`marker` contra os mapas `mcpServers` de `json`, excluindo
+ * servidores em `disabledMcpjsonServers`. Retorna o nome do servidor casado,
+ * ou `null`.
+ */
+function matchServerMaps(json, cwd, names, marker) {
+  const wanted = new Set(names.map((n) => n.toLowerCase()));
+  for (const { servers, disabled } of extractServerMaps(json, cwd)) {
+    const off = new Set(disabled.map((n) => String(n).toLowerCase()));
+    for (const [name, definition] of Object.entries(servers)) {
+      const key = name.toLowerCase();
+      if (off.has(key)) continue;
+      if (wanted.has(key)) return name;
+      let blob = "";
+      try {
+        blob = JSON.stringify(definition ?? "").toLowerCase();
+      } catch {
+        blob = "";
+      }
+      if (marker.test(blob)) return name;
+    }
+  }
+  return null;
 }
 
 function isRegularFile(path) {
@@ -309,10 +360,21 @@ function pushEvidence(evidence, seen, item) {
  *
  * Arquivo ausente nao gera evidencia. Arquivo ilegivel — ou JSON invalido, no
  * caso de candidato `.json` — gera `mcp-config-unreadable` com a primeira linha
- * do erro. Somente o resultado booleano do teste de marcador entra no
- * resultado; o conteudo lido nunca e copiado para a evidencia.
+ * do erro. Somente o resultado booleano do teste entra no resultado; o
+ * conteudo lido nunca e copiado para a evidencia.
+ *
+ * Candidatos `.json` sao parseados e casados por estrutura
+ * (`matchServerMaps`/`extractServerMaps`): nome do servidor em `mcpServers`
+ * (ou em `projects.<cwd>.mcpServers` de `~/.claude.json`), excluindo
+ * `disabledMcpjsonServers`, ou o marcador dentro da definicao serializada de
+ * um servidor com outro nome — nunca um substring solto no arquivo inteiro
+ * (`~/.claude.json` guarda 100+ KB de dados arbitrarios por projeto; um hit
+ * ali sem essa estrutura nao e evidencia de nada). O unico candidato `.toml`
+ * (`~/.codex/config.toml`) nao tem parser estruturado aqui — casado pelo
+ * marcador sobre o texto bruto, mesma classe de checagem que antes, limitacao
+ * aceita (ver `mcp-candidates.mjs` em cc-pensador/cc-executor-subagents).
  */
-function inspectConfig(path, spec, evidence, seen) {
+function inspectConfig(path, spec, evidence, seen, cwd) {
   if (!existsSync(path)) return;
 
   let contents;
@@ -327,21 +389,29 @@ function inspectConfig(path, spec, evidence, seen) {
     return;
   }
 
-  if (path.toLowerCase().endsWith(".json")) {
-    try {
-      JSON.parse(stripBom(contents));
-    } catch (error) {
-      pushEvidence(evidence, seen, {
-        type: MCP_EVIDENCE_UNREADABLE,
-        path,
-        error: firstLine(error?.message, "invalid JSON"),
-      });
-      return;
+  if (!path.toLowerCase().endsWith(".json")) {
+    // TOML (or any other non-JSON candidate): raw marker match, documented limitation.
+    if (spec.marker.test(contents)) {
+      pushEvidence(evidence, seen, { type: "mcp-config", path });
     }
+    return;
   }
 
-  if (spec.marker.test(contents)) {
-    pushEvidence(evidence, seen, { type: "mcp-config", path });
+  let json;
+  try {
+    json = JSON.parse(stripBom(contents));
+  } catch (error) {
+    pushEvidence(evidence, seen, {
+      type: MCP_EVIDENCE_UNREADABLE,
+      path,
+      error: firstLine(error?.message, "invalid JSON"),
+    });
+    return;
+  }
+
+  const matched = matchServerMaps(json, cwd, spec.names ?? [], spec.marker);
+  if (matched) {
+    pushEvidence(evidence, seen, { type: "mcp-config", path, server: matched });
   }
 }
 
@@ -384,7 +454,7 @@ function scan(spec, context) {
           break;
         }
         if (step.kind === "config") {
-          inspectConfig(path, spec, evidence, seen);
+          inspectConfig(path, spec, evidence, seen, context.projectRoot);
           continue;
         }
         if (existsSync(path)) {
