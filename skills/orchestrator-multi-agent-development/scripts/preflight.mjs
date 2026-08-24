@@ -10,7 +10,11 @@
  *  - A compatible Bash permission for the Codex companion runtime
  *  - A summary of the broader agent permission profile when available
  *  - Claude Code hook settings compatible with /goal
- *  - Optional MCP servers: codebase-memory and context7 (reported, never blocking)
+ *  - Optional MCP servers: codebase-memory and context7 (reported, never blocking).
+ *    `checks.optional.mcp` is a file-based aggregate (any config location, any
+ *    agent); pass `--check-agent-mcp` to also probe `codex mcp list --json`
+ *    and `agy mcp list` directly and get `checks.optional.mcpPerAgent`, live
+ *    per-agent ground truth (see `lib/mcp-agent-cli.mjs`).
  *
  * Report contract:
  *  - `projectConfig` carries the four effective roles, the file path, `updatedAt`,
@@ -25,8 +29,8 @@
  * Outputs a JSON report to stdout.
  *
  * Usage:
- *   node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" [--json] [--silent]
- *   node scripts/preflight.mjs [--json] [--silent] # compatibility wrapper
+ *   node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" [--json] [--silent] [--check-agent-mcp]
+ *   node scripts/preflight.mjs [--json] [--silent] [--check-agent-mcp] # compatibility wrapper
  */
 
 import { execFileSync, execSync } from "node:child_process";
@@ -34,7 +38,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { detectMcpServers } from "./lib/mcp-detect.mjs";
+import { detectMcpServers, detectMcpServersPerAgent } from "./lib/mcp-detect.mjs";
 import {
   DEFAULT_PROJECT_CONFIG,
   PROJECT_CONFIG_RELATIVE_PATH,
@@ -53,6 +57,17 @@ const MIN_ANTIGRAVITY_PLUGIN_VERSION = "4.0.0";
 const MIN_AGY_VERSION = "1.1.8";
 const RECOMMENDED_AGY_VERSION = "1.1.16";
 const MIN_SQLITE_NODE_VERSION = "22.13.0";
+
+/**
+ * Opt-in: probes each installed agent's own `mcp list` subcommand for live,
+ * per-agent ground truth (see `lib/mcp-agent-cli.mjs`), instead of just the
+ * file-based aggregate `checks.optional.mcp`. Off by default because it shells
+ * out (real wall-clock cost, up to `AGENT_CLI_TIMEOUT_MS` per agent per
+ * server) and depends on `codex`/`agy` being reachable on PATH — neither of
+ * which the rest of this script requires. Pass `--check-agent-mcp` to include
+ * `checks.optional.mcpPerAgent` in the report.
+ */
+const CHECK_AGENT_MCP = process.argv.includes("--check-agent-mcp");
 
 function checkNodeSqlite() {
   const current = process.versions.node;
@@ -606,6 +621,7 @@ const checks = {
   },
   optional: {
     mcp: detectMcpServers({ projectRoot: PROJECT_ROOT, home: HOME, platform: process.platform }),
+    ...(CHECK_AGENT_MCP ? { mcpPerAgent: detectMcpServersPerAgent() } : {}),
   },
 };
 

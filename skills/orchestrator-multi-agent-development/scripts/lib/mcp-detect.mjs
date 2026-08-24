@@ -9,6 +9,8 @@ import {
   CONTEXT7_SKILL_CANDIDATES,
   resolveCandidate,
 } from "./mcp-candidates.mjs";
+import { detectAgentMcpServers } from "./mcp-agent-cli.mjs";
+import { agentMcpInstallCommand } from "./mcp-agent-install.mjs";
 
 /**
  * Deteccao dos MCPs opcionais do orquestrador: o CBM_MCP (`codebase-memory-mcp`)
@@ -554,4 +556,62 @@ export function detectMcpServers(options = {}) {
     [CODEBASE_MEMORY_MCP]: detectCodebaseMemoryMcp(options),
     [CONTEXT7_MCP]: detectContext7Mcp(options),
   };
+}
+
+/** Agents whose own CLI exposes a real `mcp list` subcommand (see `mcp-agent-cli.mjs`). */
+export const MCP_INTROSPECTABLE_AGENTS = Object.freeze(["codex", "agy"]);
+
+/**
+ * Live per-agent ground truth for the two MCP servers, via each agent's own
+ * `mcp list` subcommand — see `mcp-agent-cli.mjs` for why this exists and
+ * what it does and does not extract.
+ *
+ * This is deliberately a separate function from `detectMcpServers`, not a
+ * field merged into it: `detectMcpServers` stays a pure filesystem scan
+ * (fast, no subprocess, exercised by the existing property tests), while this
+ * one shells out per agent and therefore costs real wall-clock time and
+ * requires the agent binary to be reachable. Callers that only need the
+ * aggregate file-based signal (e.g. "is codebase-memory installed anywhere
+ * on this machine") should keep using `detectMcpServers`; callers deciding
+ * whether to promise the tool in a Codex- or AGY-targeted subagent prompt
+ * should prefer this result for that agent, and fall back to the aggregate
+ * `.ok` from `detectMcpServers` only when `checked` is `false` here (binary
+ * unreachable, timeout, unparseable output — not proof of absence).
+ *
+ * @param {{
+ *   agents?: string[],
+ *   execFn?: (bin: string, args: string[], opts: {timeoutMs: number}) => string,
+ *   timeoutMs?: number,
+ * }} [options] `agents` defaults to `MCP_INTROSPECTABLE_AGENTS`; pass a subset
+ *   to skip probing an agent that is not in play for this Run.
+ * @returns {Record<string, Record<string, {checked: boolean, reason: string|null, matched: string|null, ok: boolean, install: string|null}>>}
+ *   Keyed by agent, then by server name (`codebase-memory`, `context7`).
+ *   `install` carries the exact `mcp add` command to offer via
+ *   `AskUserQuestion` (see `mcp-agent-install.mjs`) whenever `checked: true,
+ *   ok: false` — i.e. the agent's own CLI was reachable and genuinely does
+ *   not have the server registered. It stays `null` when `ok: true` (nothing
+ *   to install) or `checked: false` (absence not established — offering an
+ *   install here would act on a guess).
+ */
+export function detectMcpServersPerAgent(options = {}) {
+  const agents = Array.isArray(options.agents) ? options.agents : MCP_INTROSPECTABLE_AGENTS;
+  const execOptions = { execFn: options.execFn, timeoutMs: options.timeoutMs };
+
+  const withInstall = (agent, server, detection) => ({
+    ...detection,
+    install: detection.checked && !detection.ok ? agentMcpInstallCommand(agent, server) : null,
+  });
+
+  const result = {};
+  for (const agent of agents) {
+    result[agent] = {
+      [CODEBASE_MEMORY_MCP]: withInstall(
+        agent,
+        CODEBASE_MEMORY_MCP,
+        detectAgentMcpServers(agent, CODEBASE_MEMORY_SERVER_NAMES, execOptions),
+      ),
+      [CONTEXT7_MCP]: withInstall(agent, CONTEXT7_MCP, detectAgentMcpServers(agent, CONTEXT7_SERVER_NAMES, execOptions)),
+    };
+  }
+  return result;
 }
