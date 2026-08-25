@@ -1249,10 +1249,16 @@ function parseTaskPlanningMetadata(text) {
     ? null
     : /^(?:yes|sim|true|required|obrigatorio|obrigatório)$/i.test(contractRaw);
   const model = parseScalarField(text, ["agyModel", "model", "modelo"]);
+  const agyEffort = parseScalarField(text, ["agyEffort"]);
+  const agyTimeout = parseScalarField(text, ["agyTimeout"]);
+  const agyFormat = parseScalarField(text, ["agyFormat"]);
   return {
     complexity,
     contractRequired,
     model,
+    agyEffort,
+    agyTimeout,
+    agyFormat,
     validationPlan: parseBacktickValues(
       text,
       /(?:validationPlan|validation command|comando de validacao|comando de validação|validacoes|validações)/i,
@@ -1326,6 +1332,9 @@ export function parseTaskArtifacts(artifactDir) {
           complexity: null,
           contractRequired: null,
           model: null,
+          agyEffort: null,
+          agyTimeout: null,
+          agyFormat: null,
           validationPlan: [],
           allowedPaths: [],
           contractIds: [],
@@ -1365,6 +1374,11 @@ function initialTask(metadata, now) {
     attemptHistory: [],
     sessionId: null,
     conversationId: null,
+    resolvedModel: null,
+    retryDirective: null,
+    usage: null,
+    durationSeconds: null,
+    numTurns: null,
     commitBefore: null,
     commitAfter: null,
     startedAt: null,
@@ -1963,6 +1977,11 @@ function mergeTaskFields(previous, status, options, now, git) {
   if (options.complexity !== undefined) task.complexity = options.complexity || null;
   if (options.sessionId !== undefined) task.sessionId = options.sessionId || null;
   if (options.conversationId !== undefined) task.conversationId = options.conversationId || null;
+  if (options.resolvedModel !== undefined) task.resolvedModel = options.resolvedModel || null;
+  if (options.retryDirective !== undefined) task.retryDirective = options.retryDirective || null;
+  if (options.usage !== undefined) task.usage = options.usage ? clone(options.usage) : null;
+  if (options.durationSeconds !== undefined) task.durationSeconds = options.durationSeconds ?? null;
+  if (options.numTurns !== undefined) task.numTurns = options.numTurns ?? null;
   if (options.reasonCode !== undefined) task.reasonCode = options.reasonCode || null;
   if (options.reason !== undefined) task.reason = options.reason || null;
   if (options.currentTool !== undefined) task.currentTool = options.currentTool || null;
@@ -1986,6 +2005,12 @@ function mergeTaskFields(previous, status, options, now, git) {
       Number(task.attempt ?? 0) > 0 && options.newAttempt !== true;
     const newAttempt = !sameStatus && !recoveringSameAttempt;
     if (newAttempt) task.attempt = Number(task.attempt ?? 0) + 1;
+    if (newAttempt) {
+      if (options.resolvedModel === undefined) task.resolvedModel = null;
+      if (options.usage === undefined) task.usage = null;
+      if (options.durationSeconds === undefined) task.durationSeconds = null;
+      if (options.numTurns === undefined) task.numTurns = null;
+    }
     task.startedAt = sameStatus || recoveringSameAttempt ? task.startedAt ?? now : now;
     task.completedAt = null;
     task.lastActivityAt = now;
@@ -2011,6 +2036,11 @@ function mergeTaskFields(previous, status, options, now, git) {
       regressions: 0,
       sessionId: task.sessionId ?? null,
       conversationId: task.conversationId ?? null,
+      resolvedModel: task.resolvedModel ?? null,
+      retryDirective: task.retryDirective ?? null,
+      usage: task.usage ? clone(task.usage) : null,
+      durationSeconds: task.durationSeconds ?? null,
+      numTurns: task.numTurns ?? null,
       commitBefore: task.commitBefore ?? null,
       commitAfter: null,
     };
@@ -2048,6 +2078,7 @@ function mergeTaskFields(previous, status, options, now, git) {
       executor: task.executor ?? previousAttempt.executor ?? null,
       executorSource: task.executorSource ?? previousAttempt.executorSource ?? null,
       model: task.model ?? previousAttempt.model ?? null,
+      resolvedModel: task.resolvedModel ?? previousAttempt.resolvedModel ?? null,
       status,
       completedAt,
       durationMs: Number.isFinite(startedMs) && Number.isFinite(completedMs)
@@ -2057,6 +2088,11 @@ function mergeTaskFields(previous, status, options, now, git) {
       reviewResult: task.reviewResult ?? null,
       regressions: Number(task.regressions ?? 0),
       commitAfter: task.commitAfter ?? null,
+      conversationId: task.conversationId ?? previousAttempt.conversationId ?? null,
+      retryDirective: task.retryDirective ?? previousAttempt.retryDirective ?? null,
+      usage: task.usage ? clone(task.usage) : previousAttempt.usage ?? null,
+      durationSeconds: task.durationSeconds ?? previousAttempt.durationSeconds ?? null,
+      numTurns: task.numTurns ?? previousAttempt.numTurns ?? null,
     };
     if (attemptIndex >= 0) task.attemptHistory[attemptIndex] = record;
     else task.attemptHistory.push(record);
@@ -2381,6 +2417,12 @@ function reconcileTask(task, probe, projectRoot, git, now) {
   const next = clone(task);
   const previousStatus = next.status;
   if (TERMINAL_TASK_STATUSES.has(next.status)) return next;
+  if (probe?.conversationId) next.conversationId = probe.conversationId;
+  if (probe?.model) next.resolvedModel = probe.model;
+  if (probe?.retryDirective) next.retryDirective = probe.retryDirective;
+  if (probe?.usage) next.usage = clone(probe.usage);
+  if (probe?.durationSeconds != null) next.durationSeconds = probe.durationSeconds;
+  if (probe?.numTurns != null) next.numTurns = probe.numTurns;
   const external = normalizeExternalStatus(probe);
   const externalStatus = external.status;
   const expected = pathEvidence(projectRoot, [
@@ -2513,6 +2555,11 @@ function reconcileTask(task, probe, projectRoot, git, now) {
       startedAt: next.startedAt ?? probe?.startedAt ?? now,
       sessionId: next.sessionId ?? null,
       conversationId: next.conversationId ?? null,
+      resolvedModel: next.resolvedModel ?? null,
+      retryDirective: next.retryDirective ?? null,
+      usage: next.usage ? clone(next.usage) : null,
+      durationSeconds: next.durationSeconds ?? null,
+      numTurns: next.numTurns ?? null,
       commitBefore: next.commitBefore ?? null,
     };
     const terminal = ["DONE", "FAILED", "BLOCKED", "CANCELLED"].includes(next.status);
@@ -2533,6 +2580,12 @@ function reconcileTask(task, probe, projectRoot, git, now) {
       reviewResult: next.reviewResult ?? null,
       regressions: Number(next.regressions ?? 0),
       commitAfter: next.commitAfter ?? null,
+      conversationId: next.conversationId ?? previousAttempt.conversationId ?? null,
+      resolvedModel: next.resolvedModel ?? previousAttempt.resolvedModel ?? null,
+      retryDirective: next.retryDirective ?? previousAttempt.retryDirective ?? null,
+      usage: next.usage ? clone(next.usage) : previousAttempt.usage ?? null,
+      durationSeconds: next.durationSeconds ?? previousAttempt.durationSeconds ?? null,
+      numTurns: next.numTurns ?? previousAttempt.numTurns ?? null,
     };
     if (attemptIndex >= 0) next.attemptHistory[attemptIndex] = record;
     else next.attemptHistory.push(record);
@@ -3198,6 +3251,14 @@ function completionAudit(artifactDir, state) {
   const gatesWithoutEvidence = Object.values(completionGates).filter(
     (gate) => gate.status === "DONE" && (gate.evidence ?? []).length === 0,
   );
+  // A waivable gate (e.g. browserE2E) explicitly marked N/A via `--required false`
+  // still means the corresponding verification never ran — it just did so with a
+  // documented reason instead of silently. `incompleteGates` alone can't see this,
+  // because a waived gate's status (N/A) already satisfies its own (now false)
+  // `required` flag. A run with any waived gate must never self-report `complete:
+  // true`: it needs to close as PARTIAL (WORKFLOW.md sec. 14, scenario E), with the
+  // waiver surfaced for a human to accept, reject, or unblock instead.
+  const waivedGates = Object.values(completionGates).filter((gate) => gate.requiredOverride === false);
   const requiredArtifacts = [
     "workflow-log.md",
     "subagents-context.md",
@@ -3219,6 +3280,7 @@ function completionAudit(artifactDir, state) {
     unresolvedScope: unresolvedScope.map((task) => task.id),
     incompleteGates: incompleteGates.map((gate) => ({ id: gate.id, status: gate.status })),
     gatesWithoutEvidence: gatesWithoutEvidence.map((gate) => gate.id),
+    waivedGates: waivedGates.map((gate) => ({ id: gate.id, reason: gate.reason })),
     missingArtifacts,
     complete:
       tasks.length > 0 &&
@@ -3228,6 +3290,7 @@ function completionAudit(artifactDir, state) {
       unresolvedScope.length === 0 &&
       incompleteGates.length === 0 &&
       gatesWithoutEvidence.length === 0 &&
+      waivedGates.length === 0 &&
       missingArtifacts.length === 0,
   };
 }

@@ -11,6 +11,41 @@ Regra que vale para os dois: **resultado de MCP é evidência corroborativa**. N
 
 A detecção é feita por `scripts/lib/mcp-detect.mjs` e publicada pelo preflight. Antes de usar qualquer MCP nesta referência, leia o check correspondente do relatório: `ok: false` com `reason: "NOT_DETECTED"` ou `"TIMEOUT"` significa que o MCP não está disponível nesta Run, mesmo que o usuário afirme tê-lo instalado. Se o usuário instalou durante a Fase 0, o agente de código precisa ser reiniciado para carregar o servidor — o novo preflight é que confirma.
 
+### `checks.optional.mcp` é agregado por arquivo; `checks.optional.mcpPerAgent` é por agente e ao vivo
+
+`checks.optional.mcp.<servidor>.ok` vem de uma varredura de arquivo (`.claude.json`, `.codex/config.toml`, `.gemini/...`, entre outros) que **não distingue** para qual CLI o MCP está de fato registrado — `ok: true` pode significar só que o Claude Code local tem o servidor, sem que Codex ou AGY o tenham. Antes de prometer a ferramenta no prompt de um subagente Codex ou AGY, prefira `checks.optional.mcpPerAgent.<agent>.<servidor>`, obtido rodando `codex mcp list --json`/`agy mcp list` de verdade (ver `scripts/lib/mcp-agent-cli.mjs`). O caminho padrão da Fase 0 (`SKILL.md` 0.1, `references/workflow.md` Fase 0) já roda o preflight com `--check-agent-mcp`, então esse bloco normalmente existe no relatório; ele só falta quando alguém invocou `preflight.mjs` sem a flag deliberadamente — nesse caso caia para o agregado abaixo.
+
+```text
+antes de incluir o bloco de contexto do grafo/Context7 no prompt de uma task Codex/AGY:
+  se checks.optional.mcpPerAgent existir:
+    usar checks.optional.mcpPerAgent.<agent>.<servidor>.ok
+      checked: true, ok: true  -> inclua o bloco
+      checked: true, ok: false -> NAO inclua (servidor nao registrado/desabilitado nesse agente)
+      checked: false           -> nao e prova de ausencia (binario inalcancavel, timeout, saida
+                                   nao parseavel) -> caia para checks.optional.mcp.<servidor>.ok
+  senao:
+    usar checks.optional.mcp.<servidor>.ok (aggregate, mais fraco, mas e o unico sinal disponivel)
+```
+
+### Oferta de instalação por agente (mesmo padrão do Open Design)
+
+Quando `checks.optional.mcpPerAgent.<agent>.<servidor>` chega com `checked: true, ok: false` — o CLI daquele agente respondeu de verdade e o servidor genuinamente não está registrado ali — o campo `install` traz o comando exato de registro (`mcp-agent-install.mjs`, confirmado ao vivo: `codex mcp add context7 --url https://mcp.context7.com/mcp`, `agy mcp add codebase-memory-mcp codebase-memory-mcp`, etc.). Isso **nunca** dispara sozinho. Siga o mesmo padrão do Open Design (`references/open-design.md`, seção Fallback): ofereça via `AskUserQuestion`.
+
+```text
+[Orquestrador | Fase 0/4] O <servidor> não está registrado no <agent>.
+Registrar agora deixa a task usar a ferramenta em vez do fallback determinístico.
+
+Opção A (recomendada): Registrar via `<comando de install>`
+  O Orquestrador roda o comando de registro no CLI do <agent> e confirma com um novo check.
+
+Opção B: Seguir sem registrar
+  A task roda pelo caminho determinístico (grafo/documentação ausente para esse agente).
+```
+
+Se o usuário aprovar a Opção A: rode `installAgentMcp(agent, server)` de `mcp-agent-install.mjs` (nunca construa o comando à mão — use a função, que já é o argv confirmado ao vivo), depois **re-verifique** com `detectAgentMcpServers`/um novo `--check-agent-mcp` antes de prometer a ferramenta no prompt do subagente — não assuma sucesso só porque o comando não lançou erro. Registre a decisão e o resultado em `report/workflow-log.md`. Nunca chame `installAgentMcp` a partir do prompt de um subagente Codex/AGY: é o Orquestrador (este processo) que roda o comando, sempre depois da confirmação do usuário — o mesmo motivo pelo qual o Open Design nunca deixa o `antigravity-coder` disparar sua própria instalação (ver `references/open-design.md`).
+
+⚠️ `installAgentMcp` **sobrescreve** um registro existente do mesmo nome (`mcp add` é "add or update", confirmado ao vivo no AGY). Só ofereça a Opção A quando `checked: true, ok: false` — nunca quando `ok: true` já, e nunca para "corrigir" uma configuração existente sem o usuário pedir explicitamente, para não substituir silenciosamente uma entrada que o usuário configurou com opções próprias (ex.: uma chave de API do Context7 já embutida no comando).
+
 ## Parte 1 — CBM_MCP: grafo de código
 
 ### Gate de índice antes de qualquer uso

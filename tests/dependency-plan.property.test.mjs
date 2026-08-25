@@ -448,14 +448,14 @@ test("Property 8: segredo nao atravessa relatorio de MCP, registro de dependenci
           !serializedMcp.includes(secret),
           "segredo vazou na deteccao de MCP / bloco checks.optional.mcp do relatorio",
         );
-        // A evidencia so pode carregar path, tipo e (quando ilegivel) a primeira
-        // linha de um erro de parsing - nunca uma chave literal do JSON.
+        // A evidencia so pode carregar path, tipo, o nome do servidor registrado
+        // (para `mcp-config` casado por estrutura) e (quando ilegivel) a primeira
+        // linha de um erro de parsing - nunca uma chave literal do JSON, nunca o
+        // conteudo lido.
+        const ALLOWED_EVIDENCE_KEYS = new Set(["type", "path", "server", "error"]);
         for (const server of Object.values(detected)) {
           for (const item of server.evidence ?? []) {
-            assert.deepEqual(
-              Object.keys(item).sort(),
-              [...new Set(["type", "path", ...(item.error !== undefined ? ["error"] : [])])].sort(),
-            );
+            for (const key of Object.keys(item)) assert.ok(ALLOWED_EVIDENCE_KEYS.has(key), key);
           }
         }
 

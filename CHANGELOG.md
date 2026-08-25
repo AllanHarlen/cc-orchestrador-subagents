@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [4.6.0] — 2026-08-25
 
 ### Superfície de comando unificada e legível
 
@@ -8,11 +8,119 @@ Os três plugins do pipeline (`/pensador` → `/orquestrador` → `/executor`) p
 
 - **Renomeado:** o alias em português passou de `/orchestrador` para `/orquestrador` (grafia correta). O nome do plugin permanece `cc-orchestrador-subagents`.
 - **Novos subcomandos:** `help` (imprime a superfície) e `status [runId]` (estado read-only do run, via `orchestration-state.mjs status`). `config` passa a valer como alias de `project-config`.
-- **Flags renomeadas**, com os nomes antigos aceitos em silêncio e com efeito idêntico: `--agy-model` → `--model`, `--agy-parallel` → `--parallel`, `--agy-subagent-model` → `--subagent-model`.
+- **Flags renomeadas**, com os nomes antigos aceitos em silêncio e com efeito idêntico: `--agy-model` → `--model`, `--agy-parallel` → `--parallel`, `--agy-subagent-model` → `--subagent-model`, `--agy-effort` → `--effort`, `--agy-timeout` → `--timeout`.
 - `argument-hint` passa a declarar a superfície completa, incluindo os subcomandos que antes só existiam no corpo do arquivo (`knowledge curate|render|audit|backups|history-project`, `telemetry otlp-preview|otlp-export`).
 - O corpo do alias não enumera mais flags: ele delega ao canônico e repassa `$ARGUMENTS` na íntegra. Era essa duplicação que fazia os dois arquivos derivarem a cada renomeação — `tests/docs-subcommands.test.mjs` agora falha se ela voltar.
 - Corrigido `QUOTA_EXAUSTED` → `QUOTA_EXHAUSTED` (o `reasonCode` estava grafado sem o `H` em duas linhas do comando, efeito colateral da duplicação removida).
 - `handoff-contract.md`: o `nextStage.entrypoint` passou de `/orchestrador` para `/orquestrador` nas três cópias byte-idênticas.
+
+## [4.5.0] — 2026-08-24
+
+### Despacho direto ao Codex, prompt persistido como artefato da run, e `--check-agent-mcp` no caminho padrão
+
+O contexto do workflow atravessa quatro fronteiras (orquestrador → subagente → bridge/companion →
+CLI externa) e três delas degradavam em silêncio: o prompt efetivo que chegava na CLI nunca era
+persistido, o orçamento de 28.000 chars existia só como prosa aqui (embora já fosse um script no
+plugin errado, `cc-executor-subagents`), e `codex:codex-rescue` custava um Sonnet reescrevendo o
+prompt sem devolver isolamento de contexto nenhum — ele é instruído a devolver o stdout do Codex
+exatamente como recebeu.
+
+- **`scripts/preflight.mjs`**: `checkPlugin("openai-codex", "codex", ...)` agora exige
+  `scripts/codex-companion.mjs` e publica `checks.plugins["openai-codex"].companionPath` — o único
+  lugar do workflow que resolve o path versionado do companion, para que nada fora deste script
+  hardcode a versão instalada (plugin de terceiro, sobrescrito a cada update).
+- **`references/subagent-prompts.md`, `references/workflow.md`**: despacho para Codex passa a ser
+  `node "<companionPath>" task --prompt-file <path> --effort ... [--write] --background --json`,
+  chamado direto pelo orquestrador em vez de via subagente `codex:codex-rescue` (que vira fallback
+  documentado para quando `companionPath` não resolve). No review de back-end (Fase 8), `--write` é
+  **omitido**, o que torna o `read-only` uma garantia estrutural (`handleTask` em
+  `codex-companion.mjs` faz `write = Boolean(options.write)`) em vez de uma frase de prompt.
+- **`scripts/check-prompt-budget.mjs`** (novo, com wrapper em `scripts/`): mede o prompt persistido
+  contra o limite de 28.000 chars — duro para `--agent agy` (exit 1, o gargalo real é
+  `agy --print <prompt>` no bridge, que sempre vai por argv), apenas indicativo para `--agent codex`
+  (exit 0 mesmo acima do limite, porque `--prompt-file` não passa pelo limite de argv do Windows).
+- **Prompt efetivo como artefato da run**: `run/prompts/` já existia declarado em
+  `scripts/lib/artifact-layout.mjs` mas nunca era preenchido. Agora todo dispatch persiste o corpo
+  do prompt em `run/prompts/<taskId>.md` (ou `<taskId>-review.md`) antes de delegar, e para AGY o
+  novo `--dump-prompt` do bridge (`cc-antigravity-plugin` 4.1.0) grava o prompt real da run e um
+  sidecar de auditoria. `assets/subagents-context-template.md` ganha os campos **Prompt enviado**,
+  **Contexto degradado** e **Arquivos descartados pelo corte**, alimentados a partir desse sidecar.
+- **`scripts/validate-routing.mjs`**: `CODEX_SUBAGENT_RE` agora também reconhece `codex-companion.mjs`
+  além de `codex:codex-rescue`, para que o gate do Req 7.11 (executor `claude-code` não invoca
+  executor externo) cubra o novo caminho de despacho direto.
+- **`--check-agent-mcp` entra no caminho padrão da Fase 0`** (`SKILL.md` 0.1, `references/workflow.md`
+  Fase 0): a versão anterior deste changelog introduziu a flag como opt-in porque "Regras comuns" já
+  instruía preferir `checks.optional.mcpPerAgent` (sinal ao vivo por agente) ao agregado de arquivo,
+  mas sem a flag no caminho padrão esse bloco nunca existia e a regra era inalcançável na prática.
+
+## [4.4.0] — 2026-08-24
+
+### Detecção de MCP por agente (`--check-agent-mcp`) e oferta de instalação
+
+O check agregado `checks.optional.mcp.<servidor>.ok` prova apenas que o Codebase Memory MCP ou o
+Context7 estão registrados *em algum lugar* da máquina — não que o Codex ou o AGY especificamente
+os têm. Isso fazia o bloco de instrução do grafo/Context7 ir para o prompt de um subagente Codex/AGY
+mesmo quando aquela CLI específica não tinha a ferramenta.
+
+- `scripts/lib/mcp-agent-cli.mjs` (novo): introspecção real via `codex mcp list --json`/`agy mcp
+  list`, em vez de adivinhar por convenção de arquivo. Redação estrita — nunca extrai
+  `transport.http_headers`/`transport.env`/URL/comando (que podem carregar uma chave de API real),
+  só `name`/`enabled`/`type`. Corrige também um bug de plataforma: `execFileSync` sem shell falhava
+  silenciosamente contra o `codex.cmd`/`.ps1` do npm no Windows (`BINARY_MISSING` falso-positivo);
+  trocado por `execSync` com o mesmo padrão já usado por `checkCli()`.
+- `scripts/lib/mcp-agent-install.mjs` (novo): registra (`installAgentMcp`) e remove
+  (`removeAgentMcp`) um servidor no CLI do agente, via os comandos reais confirmados ao vivo (`codex
+  mcp add context7 --url ...`, `agy mcp add codebase-memory-mcp codebase-memory-mcp`, etc.). Nunca
+  roda sozinho — só depois de aprovação explícita via `AskUserQuestion`, mesmo padrão do instalador
+  do Open Design (`cc-pensador`). Nunca embute uma chave de API real no comando.
+- `scripts/lib/mcp-detect.mjs`: nova `detectMcpServersPerAgent()`, separada de `detectMcpServers()`
+  (que continua sendo o scan de arquivo, puro e rápido). Cada resultado carrega `install` — o
+  comando pronto para oferecer — só quando `checked: true, ok: false` (ausência confirmada, não
+  suposta).
+- `scripts/preflight.mjs`: nova flag opt-in `--check-agent-mcp` (custo real de subprocesso, por
+  isso fora do caminho padrão) publica `checks.optional.mcpPerAgent.<agent>.<servidor>`.
+- `references/mcp-context.md`, `references/subagent-prompts.md`, `references/preflight-check.md`:
+  documentam a ordem de preferência (`mcpPerAgent` por agente > `mcp` agregado como fallback quando
+  `checked: false`) e a seção "Oferta de instalação por agente". O bloco de instrução do grafo, que
+  a documentação já afirmava estar "no template de `subagent-prompts.md`" mas não estava, agora
+  está de fato lá (placeholders `Codebase Memory MCP:` ao lado de cada `Context7 MCP:`).
+- `tests/mcp-agent-cli.test.mjs`, `tests/mcp-agent-install.test.mjs`, `tests/mcp-prompt-wiring.test.mjs`
+  (novos): 26 testes, incluindo fixtures reais capturados ao vivo (codex-cli 0.148.0, agy 1.1.17) e
+  um caso que garante que nenhum comando de instalação carrega uma chave de API.
+
+## [4.3.0] — 2026-08-21
+
+### Saneamento da ingestão OpenSpec (`openspec-change`) e correções de documentação
+
+- `references/workflow.md`: a ingestão do change set OpenSpec em modo conjunto agora confirma o
+  estado via `openspec status --change <nome> --json` antes de ler os arquivos, tolera `specs/`
+  ausente (mudanças com `skip_specs: true`) e caminhos aninhados
+  (`specs/<área>/<capability>/spec.md`), e conta subtarefas aninhadas ao derivar tasks.
+- `references/handoff-contract.md`: papel `openspec-change` atualizado para refletir o OpenSpec
+  1.9+ (specs opcionais/aninhadas, mudança gerida por `/opsx:propose` em vez do prefixo
+  `openspec-*` legado). Sincronizado byte-a-byte com a cópia canônica em `cc-pensador`.
+- `README.md`/`README.pt-BR.md`: removida a afirmação de que "o OpenSpec deixou de fazer parte do
+  fluxo" — o preflight de fato não exige o CLI OpenSpec, mas o orquestrador continua podendo
+  ingerir um handoff com artefato `openspec-change` do Pensador em modo conjunto.
+- `.claude/settings.json`: a entrada `Bash(openspec publish:*)` (comando inexistente) foi
+  substituída por `Bash(openspec list:*)`, `show`, `status` e `validate` — as chamadas de CLI
+  realmente usadas pela ingestão.
+- A árvore gerada `.claude/skills/openspec-*` + `.claude/commands/opsx/*` foi regenerada
+  localmente na 1.10.0 via `openspec update`, mas **permanece ignorada pelo git** (`.claude/` no
+  `.gitignore`): é artefato de ambiente, não conteúdo do plugin. `.claude/settings.json` continua
+  versionado, como antes.
+
+## [4.2.0] — 2026-08-20
+
+### Integração com cc-antigravity-plugin 4.0
+
+- O preflight agora exige `cc-antigravity-plugin >= 4.0.0` e AGY `>= 1.1.8`, recomendando a versão validada `1.1.16` sem bloquear versões compatíveis intermediárias.
+- Implementação front-end usa o contrato explícito `--mode accept-edits --format stream-json`; review front-end usa `--read-only --format json --model pro-high --effort high`.
+- O routing deixou de fixar slugs versionados. Heurística e aprendizado usam aliases estáveis (`flash-low`, `flash-medium`, `flash-high`, `pro-low`, `pro-high`), enquanto overrides do usuário aceitam slugs dinâmicos seguros validados pelo catálogo runtime do bridge.
+- Novos overrides públicos `/orchestrator --agy-effort <low|medium|high>` e `--agy-timeout <duração>`. Controles de baixo nível (`--mode`, `--format`, `--agent`, `--json-schema` e retomada) continuam sob responsabilidade do orquestrador.
+- O adapter AGY preserva metadados estruturados allowlisted: conversa, modelo resolvido, usage numérico, duração, turnos e diretiva segura de retry. Retomada prefere `--conversation <id>` e usa `--continue` somente sem ID.
+- `state.json` e `attemptHistory` preservam esses metadados sem migrar runs antigas; novas tentativas mantêm a conversa/retry e limpam métricas pertencentes à tentativa anterior.
+- Documentação, comandos, referências e templates foram sincronizados para não editar `settings.json` do usuário e para distinguir `--agent` customizado do AGY dos subagentes do Claude Code.
 
 ### Stack de agentes configurável (`project-config`)
 

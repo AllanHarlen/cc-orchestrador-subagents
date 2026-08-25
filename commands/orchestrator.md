@@ -1,6 +1,6 @@
 ---
 description: Conduzir, retomar e manter um workflow multiagentico persistente que acumula conhecimento comprovado, com state machine, lifecycle, worktrees, validacao deterministica, telemetria e learning
-argument-hint: "help | preflight | project-config | status [runId] | resume [runId] | knowledge <sub> | telemetry <sub> | [--model <id>] [--parallel] [--subagent-model <id>] <PRD>"
+argument-hint: "help | preflight | project-config | status [runId] | resume [runId] | knowledge <sub> | telemetry <sub> | [--model <id>] [--parallel] [--subagent-model <id>] [--effort <nivel>] [--timeout <duracao>] <PRD>"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
 
@@ -26,6 +26,8 @@ flags (antes do PRD, em qualquer ordem):
   --model <id>           modelo do executor de front-end
   --parallel             fan-out de subagentes no executor de front-end
   --subagent-model <id>  modelo dos subagentes (implica --parallel)
+  --effort <nivel>       effort da implementacao AGY (review permanece high)
+  --timeout <duracao>    timeout de silencio das delegacoes AGY, ex.: 300s, 5m
 ```
 
 ## Subcomandos reservados
@@ -56,11 +58,15 @@ Interceptam o argumento: se `$ARGUMENTS` comeca com um destes, o PRD **nao** e i
 
 | Flag | Valores | Default | Alias legado |
 |---|---|---|---|
-| `--model <id>` | allowlist de modelos do executor de front-end | piso por heuristica + router adaptativo | `--agy-model` |
+| `--model <id>` | alias de capacidade (`flash-low` … `pro-high`) ou slug dinamico valido | piso por heuristica + router adaptativo | `--agy-model` |
 | `--parallel` | — | heuristica por task (2+ entregaveis independentes) | `--agy-parallel` |
-| `--subagent-model <id>` | mesma allowlist; implica `--parallel` | `inherit` | `--agy-subagent-model` |
+| `--subagent-model <id>` | mesmos valores de `--model`; implica `--parallel` | `inherit` | `--agy-subagent-model` |
+| `--effort <nivel>` | `low`, `medium`, `high` | padrao do executor | `--agy-effort` |
+| `--timeout <duracao>` | duracao de silencio, ex.: `300s`, `5m` | padrao do bridge | `--agy-timeout` |
 
-Os aliases legados continuam aceitos em silencio e produzem exatamente o mesmo efeito. A allowlist de modelos, o piso por dificuldade e as regras do router adaptativo vivem em `SKILL.md` e `references/agent-stack.md` — nao os reproduza aqui.
+Os aliases legados continuam aceitos em silencio e produzem exatamente o mesmo efeito. `--effort` vale **apenas para a implementacao AGY**: o review permanece em `high` e nunca e reduzido por override.
+
+A escada de capacidade, o piso por dificuldade e as regras do router adaptativo vivem em `SKILL.md` e `references/agent-stack.md` — nao os reproduza aqui. Overrides do usuario aceitam slug dinamico (o bridge 4.0 resolve o catalogo em runtime); heuristica e adaptacao usam apenas os aliases estaveis, e o historico adaptativo e agregado pelo alias solicitado, nao pelo slug versionado resolvido.
 
 ## Regra central de execucao
 
@@ -68,10 +74,11 @@ O Claude atua **somente como orquestrador**: mantem contexto, decide proximos pa
 
 Roteamento por categoria da task, respeitando a Project_Config do projeto:
 
-- Toda task `FRONTEND_ONLY` vai para o executor de front-end configurado, inclusive setup Vite/React, rotas, tipos TypeScript, servicos API e componentes simples.
+- Toda task `FRONTEND_ONLY` vai para o executor de front-end configurado, inclusive setup Vite/React, rotas, tipos TypeScript, servicos API e componentes simples. A delegacao chama o bridge com `--mode accept-edits --format stream-json --model <agyModel>`; o bridge consulta `agy models`, resolve aliases e encaminha `--model` nativamente, sem modificar configuracoes do usuario.
 - `cc-antigravity-plugin:antigravity-agent` e **somente leitura** (analise, planejamento, review). Manda-lo implementar e erro de roteamento.
+- `--agent` seleciona um agente customizado do AGY e **nao** substitui `antigravity-coder`/`antigravity-agent`.
 - Codex so recebe front-end como fallback operacional registrado, depois de falha/cota do AGY ou decisao explicita do usuario.
-- Review back-end usa Codex com `--effort high`; review front-end usa `gemini-3.1-pro-high`, independente do `--model` de implementacao. Codex nunca revisa front-end.
+- Review back-end usa Codex com `--effort high`; review front-end usa `--read-only --format json --model pro-high --effort high`, independente do `--model` de implementacao. Codex nunca revisa front-end.
 
 Politica de cota, de sandbox Codex e de fallback por `reasonCode` (`QUOTA_EXHAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`): ver `SKILL.md` e `references/agent-stack.md`. Preserve o status cru devolvido pelo bridge em `reasonCode`; nao normalize nem invente codigo.
 
@@ -123,7 +130,7 @@ O relatorio traz:
 
 O JSON inclui `autoRemediation`. Se a permissao `Bash(node:*)` foi criada ou ajustada em `.claude/settings.json`, reporte isso ao usuario junto com o status final e diga se a correcao foi revalidada.
 
-O preflight valida `cc-antigravity-plugin >= 3.6.0` (requerido para `--parallel`/`--subagent-model`), a presenca de `agents/antigravity-coder.md` (implementacao), `agents/antigravity-agent.md` (review read-only), `commands/antigravity.md` e `scripts/antigravity-bridge.js`, alem da versao detectada de `agy` — todos obrigatorios somente quando algum papel da Project_Config e `agy`. O mesmo vale para `cli.codex` e `plugins.openai-codex`, obrigatorios somente quando algum papel e `codex`.
+O preflight valida `cc-antigravity-plugin >= 4.0.0`, AGY `>= 1.1.8` (com recomendacao de `1.1.16`) e a presenca de `agents/antigravity-coder.md` (implementacao), `agents/antigravity-agent.md` (review read-only), `commands/antigravity.md` e `scripts/antigravity-bridge.js` — todos obrigatorios somente quando algum papel da Project_Config e `agy`. O mesmo vale para `cli.codex` e `plugins.openai-codex`, obrigatorios somente quando algum papel e `codex`.
 
 Tambem exige Node.js `>=22.13.0`, `node:sqlite` sem flag experimental e SQLite FTS5. Essa checagem e bloqueante em qualquer configuracao de projeto, porque Project Memory, history, recipes e adaptive routing dependem dela.
 
@@ -163,9 +170,11 @@ Com `checks.optional.mcp.codebase-memory.ok: true`, o protocolo de grafo de `ref
 
 Antes dessas validacoes, parseie as flags no inicio de `$ARGUMENTS` (em qualquer ordem, aceitando tambem os aliases legados da tabela de Flags):
 
-- `--model <id>`: valide contra a allowlist e registre `agyModelSource: user`.
+- `--model <id>`: aceite alias de capacidade ou slug dinamico seguro e registre `agyModelSource: user`.
 - `--parallel`: registre `agyParallel: yes` e `agyParallelSource: user` para todas as tasks AGY.
-- `--subagent-model <id>`: valide contra a allowlist, registre `agySubagentModel: <id>` e ligue `agyParallel: yes` automaticamente.
+- `--subagent-model <id>`: aceite alias ou slug dinamico seguro, registre `agySubagentModel: <id>` e ligue `agyParallel: yes` automaticamente.
+- `--effort <low|medium|high>`: valide e registre `agyEffort` nas tasks AGY de implementacao; **nao** reduza o effort `high` do review.
+- `--timeout <duracao>`: valide e registre `agyTimeout` em toda delegacao AGY.
 
 Remova todos os prefixos reconhecidos do argumento. Sem override de modelo, registre `agyModelSource: heuristic`. Sem `--parallel`, o orquestrador avalia por heuristica task a task.
 

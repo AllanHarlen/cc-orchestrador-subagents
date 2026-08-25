@@ -22,6 +22,7 @@ import {
   initRun,
   loadRun,
   requestRunCancellation,
+  reconcileRunAtDirectory,
   resolveTaskScope,
   resumeRunAtDirectory,
   sweepStalledTasks,
@@ -794,4 +795,76 @@ test("uma Run legada sem snapshot de Project_Config continua legivel, com drift 
   assert.equal(resumed.projectConfigDrift.source, "legacy");
   assert.deepEqual(resumed.projectConfigDrift.differences, []);
   assert.equal(resumed.projectConfigDrift.snapshotUpdatedAt, null);
+});
+
+test("estado AGY persiste parametros de planejamento e metadados estruturados por tentativa", () => {
+  const { root, artifactDir } = fixture({ slug: "agy-bridge-metadata" });
+  const classificationPath = join(artifactDir, "tasks-classification.md");
+  const classification = readFileSync(classificationPath, "utf8").replace(
+    "- validationPlan: `npm run build`",
+    [
+      "- validationPlan: `npm run build`",
+      "- agyModel: `flash-high`",
+      "- agyEffort: `medium`",
+      "- agyTimeout: `5m`",
+      "- agyFormat: `stream-json`",
+    ].join("\n"),
+  );
+  writeFileSync(classificationPath, classification, "utf8");
+  initRun({ projectRoot: root, artifactDir, slug: "agy-bridge-metadata", runId: "agy-meta-001" });
+
+  const planned = loadRun(artifactDir).state.tasks["FE-01"];
+  assert.equal(planned.model, "flash-high");
+  assert.equal(planned.agyEffort, "medium");
+  assert.equal(planned.agyTimeout, "5m");
+  assert.equal(planned.agyFormat, "stream-json");
+
+  updateTaskStatus(artifactDir, "FE-01", "RUNNING", {
+    projectRoot: root,
+    executor: "agy",
+    conversationId: "conversation-42",
+  });
+  const probePath = join(root, "agy-probe.json");
+  writeFileSync(probePath, JSON.stringify({
+    schemaVersion: 1,
+    tasks: {
+      "FE-01": {
+        executorStatus: "BLOCKED",
+        reasonCode: "QUOTA_EXAUSTED",
+        reason: "capacity",
+        conversationId: "conversation-42",
+        model: "gemini-4.2-flash-high",
+        retryDirective: "--conversation conversation-42",
+        usage: { inputTokens: 120, outputTokens: 30, totalTokens: 150 },
+        durationSeconds: 12.5,
+        numTurns: 3,
+        adapter: { executor: "agy", version: 2, authoritative: true },
+      },
+    },
+  }), "utf8");
+  reconcileRunAtDirectory(artifactDir, { projectRoot: root, probeFile: probePath });
+
+  const blocked = loadRun(artifactDir).state.tasks["FE-01"];
+  assert.equal(blocked.status, "BLOCKED");
+  assert.equal(blocked.resolvedModel, "gemini-4.2-flash-high");
+  assert.equal(blocked.retryDirective, "--conversation conversation-42");
+  assert.deepEqual(blocked.usage, { inputTokens: 120, outputTokens: 30, totalTokens: 150 });
+  assert.equal(blocked.durationSeconds, 12.5);
+  assert.equal(blocked.numTurns, 3);
+  assert.equal(blocked.attemptHistory[0].resolvedModel, "gemini-4.2-flash-high");
+
+  updateTaskStatus(artifactDir, "FE-01", "RUNNING", {
+    projectRoot: root,
+    executor: "agy",
+    conversationId: blocked.conversationId,
+    retryDirective: blocked.retryDirective,
+    newAttempt: true,
+  });
+  const retried = loadRun(artifactDir).state.tasks["FE-01"];
+  assert.equal(retried.attempt, 2);
+  assert.equal(retried.conversationId, "conversation-42");
+  assert.equal(retried.retryDirective, "--conversation conversation-42");
+  assert.equal(retried.resolvedModel, null);
+  assert.equal(retried.usage, null);
+  assert.equal(retried.attemptHistory[0].resolvedModel, "gemini-4.2-flash-high");
 });

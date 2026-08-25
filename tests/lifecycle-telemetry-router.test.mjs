@@ -15,6 +15,7 @@ import {
   recordRoutingDecision,
   routeModel,
 } from "../skills/orchestrator-multi-agent-development/scripts/lib/adaptive-router.mjs";
+import { adaptExecutorProbe } from "../skills/orchestrator-multi-agent-development/scripts/lib/executor-adapters.mjs";
 import {
   cancelRunLifecycle,
   interruptTaskLifecycle,
@@ -242,7 +243,7 @@ test("adaptive router escalates only with comparable evidence and keeps user ove
   const context = { taskType: "FRONTEND_ONLY", complexity: "medium", executor: "agy" };
   const decision = routeModel(root, context, { minimumSamples: 5, minimumStratumSamples: 1 });
   assert.equal(decision.source, "adaptive");
-  assert.equal(decision.model, "gemini-3.1-pro-low");
+  assert.equal(decision.model, "pro-low");
   const recorded = recordRoutingDecision(root, decision, context, {
     runId: "router-run-001",
     taskId: "FE-99",
@@ -253,6 +254,148 @@ test("adaptive router escalates only with comparable evidence and keeps user ove
   const override = routeModel(root, { ...context, userModel: "gemini-3.5-flash-high" });
   assert.equal(override.source, "user");
   assert.equal(override.model, "gemini-3.5-flash-high");
+});
+
+test("adaptive router accepts dynamic bridge slugs and rejects unsafe multiline overrides", () => {
+  const { root } = fixture("router-dynamic-model-001");
+  const context = { taskType: "FRONTEND_ONLY", complexity: "medium", executor: "agy" };
+  const dynamic = routeModel(root, { ...context, userModel: "gemini-4.2-pro-ultra" });
+  assert.equal(dynamic.source, "user");
+  assert.equal(dynamic.model, "gemini-4.2-pro-ultra");
+  assert.throws(
+    () => routeModel(root, { ...context, userModel: "pro-high\n--mode accept-edits" }),
+    (error) => error.code === "INVALID_MODEL_OVERRIDE",
+  );
+  assert.throws(
+    () => routeModel(root, { ...context, userModel: "pro-high --mode accept-edits" }),
+    (error) => error.code === "INVALID_MODEL_OVERRIDE",
+  );
+  assert.equal(
+    routeModel(root, { ...context, previousFailed: true, previousModel: "improvisation-high" }).model,
+    "flash-medium",
+  );
+});
+
+test("AGY adapter preserves structured bridge 4.0 metadata and validates retry directives", () => {
+  const probe = adaptExecutorProbe("agy", {
+    status: "QUOTA_EXAUSTED",
+    reason: "capacity",
+    conversation_id: "conversation-42",
+    model: "gemini-3.5-flash-high",
+    retry: "--conversation conversation-42",
+    usage: {
+      input_tokens: 120,
+      output_tokens: 30,
+      cache_read_tokens: 10,
+      ignored_text: "must-not-persist",
+    },
+    duration_seconds: 12.5,
+    num_turns: 3,
+  });
+  assert.equal(probe.executorStatus, "QUOTA_EXAUSTED");
+  assert.equal(probe.conversationId, "conversation-42");
+  assert.equal(probe.retryDirective, "--conversation conversation-42");
+  assert.deepEqual(probe.usage, {
+    inputTokens: 120,
+    outputTokens: 30,
+    cacheReadTokens: 10,
+    totalTokens: 150,
+  });
+  assert.equal(probe.durationSeconds, 12.5);
+  assert.equal(probe.numTurns, 3);
+  assert.equal(probe.adapter.version, 2);
+
+  const unsafe = adaptExecutorProbe("agy", {
+    status: "QUOTA_EXAUSTED",
+    conversation_id: "conversation-42",
+    retry: "--conversation another-id",
+  });
+  assert.equal(unsafe.retryDirective, null);
+});
+
+test("AGY adapter turns stream-json events into observable heartbeat counters", () => {
+  const probe = adaptExecutorProbe("agy", {
+    events: [
+      { event: "init", conversation_id: "conversation-stream", timestamp: "2026-08-20T12:00:00.000Z" },
+      { event: "step_update", timestamp: "2026-08-20T12:00:01.000Z", step_update: { tool_info: { name: "run_command" } } },
+      { event: "step_update", timestamp: "2026-08-20T12:00:02.000Z", step_update: { subagent_info: { conversation_id: "sub-1" } } },
+    ],
+    status: "RUNNING",
+  });
+  assert.equal(probe.executorStatus, "RUNNING");
+  assert.equal(probe.conversationId, "conversation-stream");
+  assert.equal(probe.apiCalls, 2);
+  assert.equal(probe.toolCalls, 1);
+  assert.equal(probe.currentTool, "run_command");
+  assert.equal(probe.inTool, true);
+  assert.equal(probe.lastActivityAt, "2026-08-20T12:00:02.000Z");
+
+  const completed = adaptExecutorProbe("agy", {
+    events: [{
+      event: "result",
+      result: {
+        status: "SUCCESS",
+        conversation_id: "conversation-stream",
+        duration_seconds: 8,
+        num_turns: 2,
+        usage: { input_tokens: 9, output_tokens: 4 },
+      },
+    }],
+  });
+  assert.equal(completed.executorStatus, "DONE");
+  assert.equal(completed.inTool, false);
+  assert.equal(completed.durationSeconds, 8);
+  assert.equal(completed.numTurns, 2);
+  assert.equal(completed.usage.totalTokens, 13);
+
+  const quota = adaptExecutorProbe("agy", {
+    events: [{
+      event: "result",
+      result: { status: "ERROR", error: "resource exhausted", conversation_id: "conversation-stream" },
+    }],
+  });
+  assert.equal(quota.executorStatus, "QUOTA_EXAUSTED");
+  assert.equal(quota.reasonCode, "QUOTA_EXAUSTED");
+});
+
+test("AGY lifecycle dispatch reuses the exact persisted conversation retry directive", () => {
+  const { root, artifactDir } = fixture("agy-retry-001");
+  updateTaskStatus(artifactDir, "BE-01", "RUNNING", {
+    projectRoot: root,
+    executor: "agy",
+    conversationId: "conversation-42",
+    retryDirective: "--conversation conversation-42",
+  });
+  updateTaskStatus(artifactDir, "BE-01", "FAILED", {
+    projectRoot: root,
+    reasonCode: "QUOTA_EXAUSTED",
+    reason: "capacity",
+  });
+
+  const helper = join(root, "agy-retry-helper.mjs");
+  writeFileSync(helper, [
+    "const [retryDirective] = process.argv.slice(2);",
+    "console.log(JSON.stringify({ accepted: true, status: 'RUNNING', conversationId: 'conversation-42', receivedRetry: retryDirective }));",
+  ].join("\n"), "utf8");
+  const adapterConfig = join(root, "agy-retry-control.json");
+  writeFileSync(adapterConfig, JSON.stringify({
+    agy: {
+      dispatch: {
+        command: process.execPath,
+        args: [helper, "{retryDirective}"],
+      },
+    },
+  }), "utf8");
+
+  const retried = retryTaskLifecycle(artifactDir, "BE-01", {
+    projectRoot: root,
+    adapterConfig,
+  });
+  const persisted = JSON.parse(readFileSync(retried.controlResult.path, "utf8"));
+  assert.equal(persisted.result.receivedRetry, "--conversation conversation-42");
+  assert.equal(retried.task.conversationId, "conversation-42");
+  assert.equal(retried.task.retryDirective, "--conversation conversation-42");
+  assert.equal(retried.task.attempt, 2);
 });
 
 test("telemetry rejects user content fields by contract", () => {

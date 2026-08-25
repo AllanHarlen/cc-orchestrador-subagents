@@ -61,6 +61,7 @@ function controlContext(task, projectRoot, artifactDir, extra = {}) {
     executor: task.executor,
     sessionId: task.sessionId,
     conversationId: task.conversationId,
+    retryDirective: task.retryDirective,
     attempt: task.attempt,
     projectRoot,
     artifactDir,
@@ -165,6 +166,7 @@ function applyObservedHeartbeats(artifactDir, probe, options) {
       apiCalls: observation.apiCalls,
       toolCalls: observation.toolCalls,
       currentTool: observation.currentTool,
+      inTool: observation.inTool,
       progressToken: observation.lastActivityAt,
       now: observation.lastActivityAt ?? options.now,
     });
@@ -375,6 +377,7 @@ export function retryTaskLifecycle(artifactDir, taskId, options = {}) {
     }
     options.sessionId = adapted.sessionId ?? options.sessionId;
     options.conversationId = adapted.conversationId ?? options.conversationId;
+    options.resolvedModel = adapted.model ?? options.resolvedModel;
   } else if (!options.externalConfirmed) {
     throw new LifecycleManagerError(
       "EXECUTOR_DISPATCH_REQUIRED",
@@ -386,7 +389,9 @@ export function retryTaskLifecycle(artifactDir, taskId, options = {}) {
     actor: "lifecycle-manager",
     executor: options.executor ?? task.executor,
     sessionId: options.sessionId,
-    conversationId: options.conversationId,
+    conversationId: options.conversationId ?? task.conversationId,
+    resolvedModel: options.resolvedModel,
+    retryDirective: options.retryDirective ?? task.retryDirective,
     reasonCode: null,
     reason: options.reason ?? "Retry after reconciliation",
     evidence: [options.evidence, persisted?.evidence].filter(Boolean),

@@ -17,10 +17,10 @@ Codex e Antigravity/AGY entram como subagentes especializados:
 | Papel | Executor | Responsabilidade |
 |---|---|---|
 | Orchestrador de Harness | Claude CLI / Claude Code | Ingere o PRD/spec e coordena o workflow, contratos, ondas, validações, logs e decisões do usuário. |
-| Implementação back-end, banco, testes e ajustes | Codex (`codex:codex-rescue`) | Executa tasks não front-end com `--effort medium`, sem fixar `--model`. |
+| Implementação back-end, banco, testes e ajustes | Codex (despacho direto via `codex-companion.mjs`; fallback `codex:codex-rescue`) | Executa tasks não front-end com `--effort medium --write`, sem fixar `--model`. |
 | Implementação front-end e UX | Antigravity/AGY (`cc-antigravity-plugin:antigravity-coder`) | Executa tasks `FRONTEND_ONLY` e fatias front-end de `FULLSTACK`, incluindo setup Vite/React, rotas e implementação de UI. |
-| Review back-end pós-implementação | Codex (`codex:codex-rescue`) | Revisa **apenas o back-end** com `--effort high` ou cai para review interno read-only do orquestrador quando faltar quota. |
-| Review front-end pós-implementação | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--model gemini-3.1-pro-high`) | Revisa **apenas o front-end** em modo read-only ou cai para review interno do orquestrador quando o AGY estiver indisponível. |
+| Review back-end pós-implementação | Codex (despacho direto via `codex-companion.mjs`, sem `--write`; fallback `codex:codex-rescue`) | Revisa **apenas o back-end** com `--effort high` ou cai para review interno read-only do orquestrador quando faltar quota. |
+| Review front-end pós-implementação | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--read-only --format json --model pro-high --effort high`) | Revisa **apenas o front-end** em modo read-only ou cai para review interno do orquestrador quando o AGY estiver indisponível. |
 
 ### Stack de agentes configurável
 
@@ -34,6 +34,8 @@ Quatro papéis — `backendExecutor`, `frontendExecutor`, `backendReviewer`, `fr
 
 O preflight também detecta dois MCPs opcionais — o Codebase Memory MCP (`codebase-memory-mcp`, consultas ao grafo de código para análise de arquitetura/impacto) e o Context7 (documentação atualizada de bibliotecas nos prompts dos subagentes). A ausência de qualquer um vira item em `warnings`, nunca bloqueio; ver `skills/orchestrator-multi-agent-development/references/mcp-context.md`.
 
+Esse check agregado só prova que o servidor está registrado *em algum lugar* da máquina — não que o Codex ou o AGY especificamente o têm. Rode `node scripts/preflight.mjs --check-agent-mcp` para também consultar `codex mcp list --json`/`agy mcp list` ao vivo e obter `checks.optional.mcpPerAgent.<agent>.<servidor>`, com um campo `install` trazendo o comando exato de `mcp add` para registrar naquele agente. Nada instala sozinho: o orquestrador só roda isso depois que o usuário aprova via `AskUserQuestion`, o mesmo padrão do instalador do Open Design.
+
 ### Workflow completo
 
 - **Fase 0 - Preflight, configuração do projeto e instalação assistida:** valida dependências, Node.js 22.13+, `node:sqlite`/FTS5, permissão `Bash(node:*)`, resolve a Project_Config (papéis acima), detecta os dois MCPs opcionais e oferece instalar qualquer dependência ausente que os papéis resolvidos realmente exigem.
@@ -45,7 +47,7 @@ O preflight também detecta dois MCPs opcionais — o Codebase Memory MCP (`code
 - **Fase 6 - Lifecycle Manager:** consulta adapters, persiste retornos antes de consumir, renova heartbeat/lease por atividade observável e trata stall/grace/interrupt/retry/cancel sem presumir resultado.
 - **Fase 7 - Integração:** integra worktrees serialmente e usa scripts determinísticos para diff, escopo, API/UI, wire format e resultados de validação antes dos ajustes por categoria.
 - **Fase 8 - Review back-end pós-implementação:** delega review final read-only ao Codex com `--effort high`, **somente do back-end**, e salva `review/review-final.md`. Se Codex ficar sem quota, o próprio Orchestrador faz review interno. Ignorada se não houver back-end.
-- **Fase 9 - Review front-end pós-implementação:** delega review final read-only ao AGY com `--model gemini-3.1-pro-high`, **somente do front-end**, e salva `review/review-frontend.md`. Se o AGY estiver indisponível, o Orchestrador faz review interno. **Ignorada se não houver task front-end.**
+- **Fase 9 - Review front-end pós-implementação:** delega review final read-only ao AGY com `--read-only --format json --model pro-high --effort high`, **somente do front-end**, e salva `review/review-frontend.md`. Se o AGY estiver indisponível, o Orchestrador faz review interno. **Ignorada se não houver task front-end.**
 - **Fase 9.5 - E2E no navegador:** obrigatória sempre que a run tem front-end. Dirige os fluxos críticos em navegador real e verifica CORS, resolução de tenant/host, casing de resposta, estado da UI e o efeito final visível ao usuário. Topologia de mesma origem dispensa o gate por waiver explícito, com motivo registrado — nunca por derivação silenciosa.
 - **Fase 10 - Relatórios finais:** cria `report/workflow-log.md`, `report/subagents-context.md` e `report/implementation-report.md`, consolidando timeline, contratos, validações, subagentes, Conversation IDs do AGY e status de entrega.
 - **Fase 11 - Entrega durável:** prepara e persiste o resumo/instruções, sem anunciar sucesso antes dos gates finais.
@@ -56,9 +58,9 @@ Os artefatos de coordenação e relatórios finais ficam em `.orchestration/<nom
 ### Regras operacionais principais
 
 - **Premissa de uso:** o orquestrador só atua com PRD/spec já pronta. Ele não faz discovery, não cria plano e não reinterpreta a demanda.
-- **Codex revisa apenas back-end;** AGY (`gemini-3.1-pro-high`) revisa apenas front-end.
-- **Fan-out AGY:** `--parallel` e `--subagent-model` ativam subagentes Gemini nativos dentro da task AGY. Requer `cc-antigravity-plugin >= 3.6.0`.
-- **Modelo AGY:** override do usuário e piso heurístico são soberanos; histórico comparável só pode escalar com amostra mínima e `agyModelEvidence`. O review usa sempre `gemini-3.1-pro-high`.
+- **Codex revisa apenas back-end;** AGY (`pro-high`) revisa apenas front-end.
+- **Fan-out AGY:** `--parallel` e `--subagent-model` ativam subagentes Gemini nativos dentro da task AGY. Requer `cc-antigravity-plugin >= 4.0.0`.
+- **Modelo AGY:** override do usuário e piso heurístico são soberanos; histórico comparável só pode escalar com amostra mínima e `agyModelEvidence`. O review usa sempre `pro-high`.
 - **Memória comprovada:** somente fontes `FILE`, `CONTRACT`, `TEST` aprovado, `RUN_EVENT` e `USER` entram na Project Memory; conflitos/stale são excluídos.
 - **Código para mecânica:** três ou mais reads/greps, loops e comparações repetitivas usam `scripts/intelligence`, com JSON compacto e evidence ID.
 - **Isolamento físico:** scope sem overlap pode usar worktree por task; overlap ou scope desconhecido serializa a wave.
@@ -89,9 +91,9 @@ Este plugin depende do Codex plugin oficial para Claude Code: https://github.com
 /codex:setup
 ```
 
-O marketplace/dependency usado nos manifests é `openai-codex`, e o subagente esperado é `codex:codex-rescue`.
+O marketplace/dependency usado nos manifests é `openai-codex`. O orquestrador despacha direto para ele via `codex-companion.mjs` (path resolvido em `checks.plugins["openai-codex"].companionPath`, publicado por `scripts/preflight.mjs`); o subagente `codex:codex-rescue` é um fallback documentado para quando esse path não resolve.
 
-Para front-end, o orquestrador espera `cc-antigravity-plugin >= 3.6.0` (obrigatório para `--parallel`/`--subagent-model`), com estes arquivos presentes no plugin instalado:
+Para front-end, o orquestrador exige `cc-antigravity-plugin >= 4.0.0` e AGY `>= 1.1.8` (`1.1.16` recomendado), com estes arquivos presentes no plugin instalado:
 
 - `agents/antigravity-coder.md` (implementação)
 - `agents/antigravity-agent.md` (review read-only)
@@ -109,8 +111,8 @@ O orquestrador não inventa a demanda. Forneça o PRD/spec de uma destas formas:
 # Spec colada direto no argumento
 /orchestrator "Implemente o fluxo de reservas conforme: <cole aqui a especificação completa>"
 
-# Com override de modelo do executor de front-end
-/orchestrator --model gemini-3.1-pro-low @docs/prd-reservas.md
+# Com override de modelo AGY
+/orchestrator --model pro-low @docs/prd-reservas.md
 
 # Em português (alias)
 /orquestrador @docs/prd-reservas.md
@@ -187,7 +189,9 @@ Também estão disponíveis no slash command: `/orchestrator knowledge status`, 
 | `knowledge <sub>` | `status`, `search`, `pin`, `archive`, `activate`, `curate`, `rollback`, `render`, `audit`, `backups`, `history-project` |
 | `telemetry <sub>` | `report`, `compact`, `otlp-preview`, `otlp-export` |
 
-`/orquestrador` é o alias em português e aceita exatamente a mesma superfície.
+`/orquestrador` é o alias em português e aceita exatamente a mesma superfície. A grafia anterior `/orchestrador` foi renomeada.
+
+As flags são `--model`, `--parallel`, `--subagent-model`, `--effort` e `--timeout`. Os nomes antigos com prefixo `--agy-` (`--agy-model`, `--agy-parallel`, `--agy-subagent-model`, `--agy-effort`, `--agy-timeout`) continuam aceitos como aliases legados silenciosos, com comportamento idêntico.
 
 A separação é deliberada: o LLM toma decisões novas; scripts determinísticos validam mecânica; history/Recipes recuperam decisões já comprovadas; Project Memory fornece contexto estável; Codex/AGY implementam.
 
@@ -212,8 +216,9 @@ O workflow não fixa modelos Codex como `gpt-5.4` ou `gpt-5.5`.
 
 Use:
 
-- `codex:codex-rescue` com `--effort medium` para implementação, handoff e ajustes;
-- `codex:codex-rescue` com `--effort high` para review back-end pós-implementação.
+- despacho direto via `codex-companion.mjs` com `--effort medium --write` para implementação, handoff e ajustes;
+- despacho direto via `codex-companion.mjs` com `--effort high`, **sem `--write`**, para review back-end pós-implementação — omitir a flag é o que torna o review read-only, não uma instrução de prompt;
+- `codex:codex-rescue` é o subagente de fallback quando `companionPath` não resolve.
 
 O modelo fica no padrão disponível na conta do usuário. Codex nunca revisa front-end.
 
@@ -235,18 +240,18 @@ Codex só deve receber front-end como fallback operacional registrado depois de 
 
 ## AGY: delegação front-end
 
-Tasks de front-end são direcionadas ao Antigravity/AGY por categoria, passando `--model <agyModel>` para o bridge do plugin.
+Tasks de front-end são direcionadas ao Antigravity/AGY por categoria. Implementação usa `--mode accept-edits --format stream-json --model <agyModel>`; o bridge resolve aliases pelo catálogo runtime e nunca edita configurações do usuário.
 
 Política padrão (implementação):
 
-- `gemini-3.5-flash-medium` para a maioria das tasks;
-- `gemini-3.1-pro-low` para tasks complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressão;
-- `gemini-3.1-pro-high` apenas em casos críticos;
+- `flash-medium` para a maioria das tasks;
+- `pro-low` para tasks complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressão;
+- `pro-high` apenas em casos críticos;
 - override manual disponível em `/orchestrator --model <modelo> <demanda>`.
 
 Sem override, essa política define o **piso**. O router adaptativo pode escalar quando há amostra comparável suficiente por tipo/complexidade, usando first-pass success, review failures, regressões, duração e intervalo Wilson. Ele nunca rebaixa o piso, nunca explora aleatoriamente tasks críticas e registra a decisão em `agyModelEvidence`.
 
-O **review front-end (Fase 9)** usa sempre `gemini-3.1-pro-high`, independentemente do `agyModel` de implementação.
+O **review front-end (Fase 9)** usa sempre `--read-only --format json --model pro-high --effort high`, independentemente do `agyModel` de implementação.
 
 ## AGY: fan-out nativo de subagentes Gemini
 
@@ -254,15 +259,14 @@ Quando uma task front-end produz dois ou mais entregáveis independentes (ex.: t
 
 O mecanismo é puramente intra-task: continua sendo 1 task = 1 delegação AGY; `run/monitoring.md`, contratos e `validate-routing.mjs` ficam intactos.
 
-### Flags
+### Flags novas
 
-| Flag | Comportamento | Alias legado |
-|---|---|---|
-| `--model <modelo>` | Modelo do executor de front-end. | `--agy-model` |
-| `--parallel` | Força fan-out em todas as tasks AGY da execução. O AGY decide a contagem. | `--agy-parallel` |
-| `--subagent-model <modelo>` | Modelo dos subagentes Gemini. Implica `--parallel`. Default: `inherit` (herda o modelo principal). | `--agy-subagent-model` |
-
-Os aliases legados continuam aceitos em silêncio e produzem o mesmo efeito.
+| Flag | Comportamento |
+|---|---|
+| `--parallel` | Força fan-out em todas as tasks AGY da execução. O AGY decide a contagem. |
+| `--subagent-model <modelo>` | Modelo dos subagentes Gemini. Implica `--parallel`. Default: `inherit` (herda `agyModel`). |
+| `--effort <low|medium|high>` | Override opcional de effort na implementação; o review permanece em `high`. |
+| `--timeout <duração>` | Timeout de silêncio de toda delegação AGY, inclusive review, como `300s` ou `5m`. |
 
 ### Exemplos
 
@@ -271,7 +275,7 @@ Os aliases legados continuam aceitos em silêncio e produzem o mesmo efeito.
 /orchestrator --parallel "Crie três componentes React independentes: Header, Sidebar e Footer"
 
 # Planejador Pro coordenando subagentes Flash
-/orchestrator --model gemini-3.1-pro-low --subagent-model gemini-3.5-flash-medium \
+/orchestrator --model pro-low --subagent-model flash-medium \
   "Gere dois relatórios HTML: impostos em carros elétricos e em carros a combustão"
 
 # Heurística automática (orquestrador decide)
@@ -290,26 +294,26 @@ Entregáveis dependentes ou que compartilham estado permanecem no subagente AGY 
 - `agyParallelSource: user|heuristic`
 - `agySubagentModel: <modelo>|inherit`
 
-Modelos aceitos em `--model` e `--subagent-model`:
+Aliases estáveis usados pela heurística e pelo routing adaptativo:
 
 | Modelo | Tier |
 |---|---|
-| `gemini-3.5-flash-low` | Flash |
-| `gemini-3.5-flash-medium` | Flash |
-| `gemini-3.5-flash-high` | Flash |
-| `gemini-3.1-pro-low` | Pro |
-| `gemini-3.1-pro-high` | Pro |
-| `claude-4.6-sonnet-thinking` | Claude |
-| `claude-4.6-opus-thinking` | Claude |
-| `gpt-oss-120b-medium` | GPT |
+| `flash-low` | Flash |
+| `flash-medium` | Flash |
+| `flash-high` | Flash |
+| `pro-low` | Pro |
+| `pro-high` | Pro |
 | `auto` | — |
+
+Overrides do usuário também podem usar um slug dinâmico seguro. O bridge o valida contra `agy models`; o histórico de routing continua agrupado pelo alias estável solicitado.
 
 ## Preflight e auto-remediação
 
 Rode:
 
 ```bash
-node scripts/preflight.mjs
+node scripts/preflight.mjs --check-agent-mcp   # caminho padrao (Fase 0 de SKILL.md/workflow.md); tambem consulta codex/agy ao vivo
+node scripts/preflight.mjs                     # sem o bloco optional.mcpPerAgent; so se quiser pular o custo do subprocesso
 ```
 
 O JSON inclui:
@@ -324,11 +328,11 @@ O `preflight` valida:
 
 - versão do `agy` encontrada no PATH;
 - Codex CLI no PATH;
-- `cc-antigravity-plugin >= 3.6.0` e plugin `openai-codex`;
+- `cc-antigravity-plugin >= 4.0.0` e plugin `openai-codex`;
 - presença de `agents/antigravity-coder.md`, `agents/antigravity-agent.md`, `commands/antigravity.md` e `scripts/antigravity-bridge.js` no plugin AGY instalado;
 - permissão `Bash(node:*)` para o companion do Codex.
 
-> A partir da versão 3.0.0, o preflight não exige mais OpenSpec CLI nem skills `openspec-*`, porque o OpenSpec deixou de fazer parte do fluxo.
+> A partir da versão 3.0.0, o preflight não exige mais OpenSpec CLI nem skills `openspec-*` — o orquestrador não aciona o OpenSpec por conta própria. Ele continua podendo ingerir, em modo conjunto, um handoff do Pensador com artefato de role `openspec-change` (ver `references/workflow.md` e `references/handoff-contract.md`); essa ingestão nunca depende do CLI do OpenSpec estar instalado.
 
 ### Escopo da auto-remediação
 
@@ -434,7 +438,7 @@ O validador de roteamento exige esses campos nas tasks AGY e falha se:
 - uma task AGY não registrar `agyModel`;
 - `agyModelSource` estiver ausente;
 - `agyModelSource: adaptive` não tiver evidência auditável;
-- o modelo estiver fora da allowlist;
+- uma decisão heurística/adaptativa usar slug dinâmico em vez de alias estável, ou um slug do usuário for sintaticamente inseguro;
 - uma task de design system (`tokens.css`, `components.html`, `DESIGN.md`) usar modelo de tier baixo;
 - `FRONTEND_ONLY` estiver apontando para Codex como agente primário;
 - `FRONTEND_ONLY` ou `FULLSTACK` delegar implementação ao `antigravity-agent`, que é somente leitura, em vez do `antigravity-coder`.
@@ -502,5 +506,5 @@ node --test tests/*.test.mjs
 rg --line-number --fixed-strings -- 'QUOTA_EXAUSTED' README.md commands skills
 rg --line-number --fixed-strings -- 'agyModelSource' README.md commands skills
 rg --line-number --fixed-strings -- 'agyParallel' README.md commands skills
-rg --line-number --fixed-strings -- 'gemini-3.1-pro-high' README.md commands skills
+rg --line-number --fixed-strings -- 'pro-high' README.md commands skills
 ```

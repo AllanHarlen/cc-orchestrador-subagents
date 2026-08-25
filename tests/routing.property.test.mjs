@@ -143,7 +143,7 @@ function taskId(seed) {
 function requiredExtraLines(category, executor) {
   const lines = [];
   if (executor === "agy") {
-    lines.push("- agyModel: `gemini-3.1-pro-low`");
+    lines.push("- agyModel: `pro-low`");
     lines.push("- agyModelSource: `heuristic`");
   }
   if (category === "REVIEW_ONLY" && executor === "codex") {
@@ -176,7 +176,7 @@ function fullstackBlock(id, config) {
   if (frontend !== backend) lines.push(`- executor: ${frontend}`);
   lines.push("- executorSource: project-config");
   if (backend === "agy" || frontend === "agy") {
-    lines.push("- agyModel: `gemini-3.1-pro-low`");
+    lines.push("- agyModel: `pro-low`");
     lines.push("- agyModelSource: `heuristic`");
   }
   return { text: lines.join("\n"), backend, frontend };
@@ -264,7 +264,7 @@ function buildPoolCases() {
       const role = CATEGORY_ROLE[category];
       const config = { ...roles, [role]: "claude-code" };
       const blockText = singleRoleBlock(id, category, "claude-code", [
-        "- agyModel: `gemini-3.1-pro-low`",
+        "- agyModel: `pro-low`",
       ]);
       cases.push({ kind: "agy-params-claude-code", id, category, config, blockText });
     }

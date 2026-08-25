@@ -34,7 +34,7 @@ Antes de iniciar uma fase, execute `orchestration-state.mjs phase --status RUNNI
 Rode:
 
 ```bash
-node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" --check-agent-mcp
 ```
 
 Regras:
@@ -85,7 +85,7 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" init \
 
 - Em modo conjunto, ingira os artefatos do Pensador na ordem do handoff contract (secao 7):
   - **Modo PRD:** `prd` → `userhistory` → `architecture` → `api-contract` → `communication-contract` → `design-system`/`design-system-files`.
-  - **Modo Spec (OpenSpec):** ingira o change set em `openspec/changes/<nome>/` (`proposal.md`, `design.md`, `specs/`, `tasks.md`); derive as tasks de `tasks.md` preservando IDs/ordem.
+  - **Modo Spec (OpenSpec):** confirme o estado via `openspec status --change <nome> --json` (ou `openspec show <nome> --json`) antes de ler os arquivos; ingira o change set em `openspec/changes/<nome>/` (`proposal.md`, `design.md`, `tasks.md`, `specs/` quando presente — omitido sob `skip_specs`, podendo estar aninhado em `specs/<area>/<capability>/spec.md`); derive as tasks de `tasks.md` preservando IDs/ordem (contando subtarefas aninhadas).
 - Em modo independente, leia o arquivo de PRD/spec apontado pelo usuario com `Read`. Se o usuario apontar varios arquivos ou um diretorio de specs, leia todos os relevantes.
 - Nao reescreva, nao replaneje e nao reinterprete a demanda. O papel do orquestrador e **orquestrar**, nao planejar.
 - **Contrato de API:** quando houver `api-contract` (maquina-legivel), ele e a **fonte da verdade** dos contratos da Fase 4 — suba o mock a partir dele e valide o codigo contra ele (campo `validation`). O `communication-contract` e apenas a visao legivel.
@@ -146,11 +146,11 @@ O Executor de cada task vem da categoria combinada com a Project_Config (`refere
 
 | Categoria | Papel da Project_Config | Execucao sob os defaults (`codex`/`agy`) |
 |---|---|---|
-| `BACKEND_ONLY` | `backendExecutor` | `codex:codex-rescue` com `--effort medium` |
-| `DATABASE_ONLY` | `backendExecutor` | `codex:codex-rescue` com `--effort medium` |
-| `REVIEW_ONLY` | `backendReviewer` | `codex:codex-rescue` com `--effort high` |
-| `FRONTEND_ONLY` | `frontendExecutor` | AGY (`cc-antigravity-plugin:antigravity-coder`) com `--model <agyModel>` |
-| `FULLSTACK` | `backendExecutor` + `frontendExecutor` | Codex para back-end; AGY com `--model <agyModel>` para front-end |
+| `BACKEND_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --effort medium --write` (chamada direta; fallback `codex:codex-rescue`) |
+| `DATABASE_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --effort medium --write` (chamada direta; fallback `codex:codex-rescue`) |
+| `REVIEW_ONLY` | `backendReviewer` | Codex via `codex-companion.mjs task --effort high` **sem `--write`** (chamada direta; fallback `codex:codex-rescue`) |
+| `FRONTEND_ONLY` | `frontendExecutor` | AGY (`cc-antigravity-plugin:antigravity-coder`) com `--mode accept-edits --format stream-json --model <agyModel>` |
+| `FULLSTACK` | `backendExecutor` + `frontendExecutor` | Codex para back-end; AGY com `--mode accept-edits --format stream-json --model <agyModel>` para front-end |
 
 Quando o papel resolvido e `claude-code`, o `executor` da task e `claude-code`: delegue pela ferramenta `Agent` a um subagente do proprio Claude Code (implementacao) ou rode a task em modo read-only gravando em `review/review-final.md`/`review/review-frontend.md` (review). Uma task com `executor: claude-code` nunca registra `agyModel`, `agyModelSource`, `agyParallel` nem `agySubagentModel` — o validador reprova o bloco se algum desses campos aparecer. Artefato legado sem o campo `executor` continua validado pela heuristica antiga de mencao de agente (`assignedAgent`).
 
@@ -282,11 +282,48 @@ Para cada dispatch, persista a task como `RUNNING` **antes** de iniciar o execut
 
 Quando o executor retornar, converta sinais de quota/auth/tooling para `BLOCKED` + `reasonCode`, ou persista `DONE`/`FAILED`, **antes** de anunciar o retorno na conversa ou avancar a wave.
 
+### Prompt efetivo como artefato da run
+
+Antes de cada dispatch (Codex ou AGY), monte o corpo do prompt seguindo o template de
+`subagent-prompts.md` com os placeholders preenchidos, e **persista-o em arquivo antes de
+delegar** — nunca so em memoria, nunca so em argv:
+
+- `.orchestration/<slug>/run/prompts/<taskId>.md` para implementacao/handoff/ajuste;
+- `.orchestration/<slug>/run/prompts/<taskId>-review.md` para review (Fases 8/9).
+
+Isso alimenta dois pontos que antes nao existiam: o prompt que de fato chegou na CLI vira algo
+auditavel depois (nao so o retorno do subagente, que e o unico rastro hoje), e a medicao do
+orcamento abaixo passa a medir o arquivo real, nao uma estimativa mental.
+
+Para AGY, ao invocar o `antigravity-coder`/`antigravity-agent`, passe tambem
+`--dump-prompt ".orchestration/<slug>/run/prompts/<taskId>.agy.txt"` (ver `subagent-prompts.md`
+Secao 2) — o bridge grava o prompt final **da run real** (pos fallback de overflow, nao um dry run)
+e um sidecar `<path>.audit.json` com `{ promptChars, limit, degraded, droppedFiles, included,
+skipped }`. Preencha os campos "Prompt enviado" e "Contexto degradado" de
+`assets/subagents-context-template.md` a partir desse sidecar.
+
+**Quando `degraded: true`** (o bridge descartou arquivos inline por causa do limite de 28.000 chars
+no Windows), a task **nao conta como executada com contexto completo** — registre em
+`run/monitoring.md` a lista de arquivos descartados (`skipped` com `reason:
+"prompt-overflow-windows"`) e decida entre redespachar com `--priority-files` apontando para os
+arquivos que ficaram de fora, ou dividir a task por entregaveis (ver abaixo). Hoje essa degradacao
+so aparecia como um aviso em stderr que ninguem le; a partir daqui e um fato registrado na run.
+
 ### Regra de limite de prompt AGY (28.000 chars)
 
-Antes de delegar qualquer task para AGY, monte o prompt completo seguindo o template de `subagent-prompts.md` e conte os caracteres do texto montado.
+Antes de delegar, meca o arquivo persistido (nao conte manualmente):
 
-**Threshold:** 28.000 chars. Prompts reais com aspas, barras invertidas, XML e quebras de linha inflariam ~14% na linha de comando codificada pelo Node.js no Windows, causando `ENAMETOOLONG`. O threshold conservador garante margem segura.
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/check-prompt-budget.mjs" --agent agy \
+  --file ".orchestration/<slug>/run/prompts/<taskId>.md"
+```
+
+**Threshold:** 28.000 chars. Prompts reais com aspas, barras invertidas, XML e quebras de linha inflariam ~14% na linha de comando codificada pelo Node.js no Windows, causando `ENAMETOOLONG`. O threshold conservador garante margem segura. Para AGY isso e limite duro: `ok: false` sai com exit 1 e o chamador deve tratar a falha antes de despachar.
+
+**Para Codex, a mesma checagem (`--agent codex`) e apenas indicativa** (`advisory: true`, nunca
+falha, exit 0 mesmo acima do limite) — a chamada direta ao companion usa `--prompt-file`
+(`codex-companion.mjs`), que nao passa pelo limite de argv do Windows. Um prompt muito acima do
+limite ainda pode indicar contexto mal recortado; considere dividir por entregaveis mesmo sem erro.
 
 Se o prompt montado **exceder 28.000 chars**:
 
@@ -318,12 +355,14 @@ Para Codex:
 Para Antigravity/AGY (implementacao):
 
 - delegue ao `cc-antigravity-plugin:antigravity-coder` (unico subagente AGY com permissao de escrita; `antigravity-agent` e somente leitura e nao deve receber tasks de implementacao);
-- passe `--model <agyModel>` para o bridge do plugin;
+- passe `--mode accept-edits --format stream-json --model <agyModel>` para o bridge do plugin;
+- inclua `--effort <agyEffort>` e `--timeout <agyTimeout>` somente quando os overrides publicos correspondentes existirem;
 - registre `agyModelSource: user|heuristic|adaptive`; a opcao `adaptive` exige `agyModelEvidence` completo;
 - quando `agyParallel: yes`, passe tambem `--parallel` ao bridge; quando `agySubagentModel` for diferente de `inherit`, passe `--subagent-model <agySubagentModel>` (implica `--parallel`);
 - por padrao (`agySubagentModel: inherit`), omita `--subagent-model`; os subagentes herdam o modelo da sessao AGY principal;
 - `--subagent-model` (alias legado: `--agy-subagent-model`) informado pelo usuario liga `--parallel` automaticamente;
-- nao trate isso como flag nativa do `agy`, porque o bridge aplica o modelo via `settings.json`.
+- o bridge consulta `agy models`, resolve aliases e encaminha `--model` nativamente; nao leia nem altere `settings.json` do usuario;
+- eventos NDJSON `init`, `step_update` e `result` que chegarem ao adapter renovam heartbeat somente com atividade observavel; persista apenas contadores e metadados seguros.
 
 Cada prompt deve incluir:
 
@@ -389,12 +428,13 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-lifecycle.mjs" watch \
   --interval-seconds 30
 ```
 
-O adapter recebe apenas placeholders allowlisted e roda sem shell. Cada probe bruto redigido e limitado e salvo em `run/executor-results/` antes de atualizar task, heartbeat, lease, history e telemetry. `interrupt`, `retry` e `cancel` exigem adapter ou `--external-confirmed`; nunca simule sucesso da acao externa. Veja `lifecycle-telemetry.md` e `assets/executor-control-config.schema.json`.
+O adapter recebe apenas placeholders allowlisted e roda sem shell. Cada probe bruto redigido e limitado e salvo em `run/executor-results/` antes de atualizar task, heartbeat, lease, history e telemetry. Para AGY, preserve `conversationId`, modelo resolvido, `usage`, duracao, turnos e a diretiva de retry validada. `interrupt`, `retry` e `cancel` exigem adapter ou `--external-confirmed`; nunca simule sucesso da acao externa. Retry confirmado usa exatamente `--conversation <id>` quando houver ID e `--continue` apenas quando nao houver. Veja `lifecycle-telemetry.md` e `assets/executor-control-config.schema.json`.
 
 ### Politica de quota
 
 - `QUOTA_EXHAUSTED` no Antigravity/AGY:
-  - registre evidencia;
+  - registre evidencia, `conversationId`, modelo resolvido, uso e retry seguro;
+  - nao retente automaticamente enquanto a quota continuar indisponivel;
   - se o fallback for seguro, redelegue para Codex com `--effort medium`;
   - se mudar muito a natureza da entrega, peca confirmacao do usuario.
 
@@ -531,7 +571,7 @@ O prompt do review back-end deve pedir verificacao explicita de:
 
 > **Ignorar quando nao houver front-end:** Se nao houver nenhuma task `FRONTEND_ONLY` nem fatia front-end de `FULLSTACK`, pule a Fase 9 e registre `review/review-frontend.md` com a nota `"Sem front-end: review front-end nao aplicavel"`. Se nao existir `review/review-frontend.md`, basta registrar a ausencia em `report/workflow-log.md`.
 
-Objetivo da fase: validar a implementacao **front-end** final. O review e feito pelo **AGY** com `--model gemini-3.1-pro-high`, em modo read-only. Codex nunca participa desta fase.
+Objetivo da fase: validar a implementacao **front-end** final. O review e feito pelo **AGY** com `--read-only --format json --model pro-high --effort high`. Codex nunca participa desta fase.
 
 ### 9.1 Preparar pacote de review
 
@@ -545,7 +585,7 @@ Monte um pacote de contexto com:
 
 ### 9.2 Fluxo principal
 
-- delegue ao `cc-antigravity-plugin:antigravity-agent` com `--model gemini-3.1-pro-high`;
+- delegue ao `cc-antigravity-plugin:antigravity-agent` com `--read-only --format json --model pro-high --effort high` e inclua `--timeout <agyTimeout>` quando o usuario o definiu;
 - informe que o review e somente leitura — o AGY nao modifica arquivos;
 - exija achados com severidade, arquivo/trecho quando aplicavel, impacto e correcao esperada;
 - salve o resultado em `review/review-frontend.md`.
@@ -658,7 +698,7 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" verify \
   --dir ".orchestration/<slug>"
 ```
 
-`audit.complete` precisa ser `true`; falha de gate/integridade bloqueia a entrega. Nao corrija `revision`/`lastEventId` manualmente; reproduza o event log ou restaure um backup coerente. O `report/handoff.json` so pode usar `DONE` quando as tasks obrigatorias estiverem `DONE`, cada task tiver evidence plan e os gates aplicaveis tiverem passado com evidencia; `UNKNOWN`, `STALLED` ou `BLOCKED` pendente exige `PARTIAL`/`BLOCKED` com resumo explicito. Projete history/telemetry novamente depois do evento `RUN_STATUS_UPDATED(DONE)` para capturar o terminal e so entao publique a mensagem preparada na Fase 11.
+`audit.complete` precisa ser `true`; falha de gate/integridade bloqueia a entrega. Nao corrija `revision`/`lastEventId` manualmente; reproduza o event log ou restaure um backup coerente. O `report/handoff.json` so pode usar `DONE` quando as tasks obrigatorias estiverem `DONE`, cada task tiver evidence plan e os gates aplicaveis tiverem passado com evidencia; `UNKNOWN`, `STALLED` ou `BLOCKED` pendente exige `PARTIAL`/`BLOCKED` com resumo explicito. Um gate `waivable` (hoje so `browserE2E`) marcado `N/A` via `--required false` aparece em `audit.waivedGates` e por si so ja forca `audit.complete: false` — dispensar a verificacao com motivo documentado nao e o mesmo que ela ter passado; o handoff sai `PARTIAL`, nunca `DONE`, ate o usuario decidir disponibilizar a ferramenta, aceitar formalmente a limitacao (registrando isso fora do gate) ou reverter a dispensa. Projete history/telemetry novamente depois do evento `RUN_STATUS_UPDATED(DONE)` para capturar o terminal e so entao publique a mensagem preparada na Fase 11.
 
 ### Contagem de tokens
 

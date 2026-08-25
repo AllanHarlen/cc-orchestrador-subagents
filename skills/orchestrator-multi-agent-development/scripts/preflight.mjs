@@ -10,7 +10,11 @@
  *  - A compatible Bash permission for the Codex companion runtime
  *  - A summary of the broader agent permission profile when available
  *  - Claude Code hook settings compatible with /goal
- *  - Optional MCP servers: codebase-memory and context7 (reported, never blocking)
+ *  - Optional MCP servers: codebase-memory and context7 (reported, never blocking).
+ *    `checks.optional.mcp` is a file-based aggregate (any config location, any
+ *    agent); pass `--check-agent-mcp` to also probe `codex mcp list --json`
+ *    and `agy mcp list` directly and get `checks.optional.mcpPerAgent`, live
+ *    per-agent ground truth (see `lib/mcp-agent-cli.mjs`).
  *
  * Report contract:
  *  - `projectConfig` carries the four effective roles, the file path, `updatedAt`,
@@ -25,8 +29,8 @@
  * Outputs a JSON report to stdout.
  *
  * Usage:
- *   node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" [--json] [--silent]
- *   node scripts/preflight.mjs [--json] [--silent] # compatibility wrapper
+ *   node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" [--json] [--silent] [--check-agent-mcp]
+ *   node scripts/preflight.mjs [--json] [--silent] [--check-agent-mcp] # compatibility wrapper
  */
 
 import { execFileSync, execSync } from "node:child_process";
@@ -34,7 +38,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { detectMcpServers } from "./lib/mcp-detect.mjs";
+import { detectMcpServers, detectMcpServersPerAgent } from "./lib/mcp-detect.mjs";
 import {
   DEFAULT_PROJECT_CONFIG,
   PROJECT_CONFIG_RELATIVE_PATH,
@@ -49,8 +53,21 @@ const PROJECT_ROOT = process.cwd();
 const PLUGINS_CACHE = join(HOME, ".claude", "plugins", "cache");
 const PROJECT_CLAUDE_DIR = join(process.cwd(), ".claude");
 const PROJECT_SETTINGS_FILE = join(PROJECT_CLAUDE_DIR, "settings.json");
-const MIN_ANTIGRAVITY_PLUGIN_VERSION = "3.6.0";
+const MIN_ANTIGRAVITY_PLUGIN_VERSION = "4.0.0";
+const MIN_AGY_VERSION = "1.1.8";
+const RECOMMENDED_AGY_VERSION = "1.1.16";
 const MIN_SQLITE_NODE_VERSION = "22.13.0";
+
+/**
+ * Opt-in: probes each installed agent's own `mcp list` subcommand for live,
+ * per-agent ground truth (see `lib/mcp-agent-cli.mjs`), instead of just the
+ * file-based aggregate `checks.optional.mcp`. Off by default because it shells
+ * out (real wall-clock cost, up to `AGENT_CLI_TIMEOUT_MS` per agent per
+ * server) and depends on `codex`/`agy` being reachable on PATH — neither of
+ * which the rest of this script requires. Pass `--check-agent-mcp` to include
+ * `checks.optional.mcpPerAgent` in the report.
+ */
+const CHECK_AGENT_MCP = process.argv.includes("--check-agent-mcp");
 
 function checkNodeSqlite() {
   const current = process.versions.node;
@@ -92,7 +109,7 @@ function checkNodeSqlite() {
   }
 }
 
-function checkCli(cli) {
+function checkCli(cli, options = {}) {
   try {
     const out = execSync(`${cli} --version`, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -100,16 +117,37 @@ function checkCli(cli) {
     })
       .toString()
       .trim();
-    return { ok: true, version: out.split(/\r?\n/)[0] };
+    const versionLine = out.split(/\r?\n/)[0];
+    const version = versionLine.match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/)?.[0] ?? null;
+    if (options.minVersion && (!version || compareSemver(version, options.minVersion) < 0)) {
+      return {
+        ok: false,
+        version: version ?? versionLine,
+        minVersion: options.minVersion,
+        error: `${cli} ${options.minVersion}+ is required (found ${version ?? versionLine})`,
+      };
+    }
+    return {
+      ok: true,
+      version: version ?? versionLine,
+      minVersion: options.minVersion ?? null,
+      recommendedVersion: options.recommendedVersion ?? null,
+      recommended: options.recommendedVersion && version
+        ? compareSemver(version, options.recommendedVersion) >= 0
+        : null,
+    };
   } catch (err) {
     return { ok: false, error: err.message?.split(/\r?\n/)[0] ?? "not found" };
   }
 }
 
 function parseSemver(version) {
-  const match = /^\d+\.\d+\.\d+$/.test(version) ? version : null;
+  const match = String(version ?? "").match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/);
   if (!match) return null;
-  return version.split(".").map((part) => Number(part));
+  return {
+    core: match.slice(1, 4).map((part) => Number(part)),
+    prerelease: match[4]?.split(".") ?? [],
+  };
 }
 
 function compareSemver(left, right) {
@@ -118,7 +156,21 @@ function compareSemver(left, right) {
   if (!a || !b) return null;
 
   for (let i = 0; i < 3; i += 1) {
-    if (a[i] !== b[i]) return a[i] - b[i];
+    if (a.core[i] !== b.core[i]) return a.core[i] - b.core[i];
+  }
+  if (a.prerelease.length === 0 || b.prerelease.length === 0) {
+    return a.prerelease.length === b.prerelease.length ? 0 : a.prerelease.length === 0 ? 1 : -1;
+  }
+  const length = Math.max(a.prerelease.length, b.prerelease.length);
+  for (let i = 0; i < length; i += 1) {
+    if (a.prerelease[i] == null) return -1;
+    if (b.prerelease[i] == null) return 1;
+    if (a.prerelease[i] === b.prerelease[i]) continue;
+    const aNumber = /^\d+$/.test(a.prerelease[i]);
+    const bNumber = /^\d+$/.test(b.prerelease[i]);
+    if (aNumber && bNumber) return Number(a.prerelease[i]) - Number(b.prerelease[i]);
+    if (aNumber !== bNumber) return aNumber ? -1 : 1;
+    return a.prerelease[i].localeCompare(b.prerelease[i]);
   }
   return 0;
 }
@@ -240,7 +292,7 @@ function checkCodexCompanionBashPermission() {
   return {
     ok: false,
     error:
-      "Missing Claude Code permission to run the Codex companion via Bash. The codex:codex-rescue subagent needs a compatible Bash rule such as Bash(node:*) so it can invoke codex-companion.mjs without an approval prompt.",
+      "Missing Claude Code permission to run the Codex companion via Bash. The orchestrator's direct codex-companion.mjs dispatch (checks.plugins['openai-codex'].companionPath), and the codex:codex-rescue fallback subagent, both need a compatible Bash rule such as Bash(node:*) so they can invoke codex-companion.mjs without an approval prompt.",
     expected: 'permissions.allow includes a compatible rule such as "Bash(node:*)"',
     inspected,
     parseErrors,
@@ -537,6 +589,19 @@ const initialCodexCompanionBash = checkCodexCompanionBashPermission();
 const autoRemediation = autoRemediateCodexCompanionBashPermission(initialCodexCompanionBash);
 const finalCodexCompanionBash = checkCodexCompanionBashPermission();
 
+// Resolvido uma vez aqui para que `checks.plugins["openai-codex"].companionPath`
+// seja o unico lugar do workflow que sabe o path versionado do companion —
+// references/workflow.md e subagent-prompts.md despacham direto para
+// `node "<companionPath>" task ...` sem nunca hardcodar a versao instalada
+// (cc-plugins-allan/CLAUDE.md: plugins de terceiro sao sobrescritos a cada
+// update, entao nada fora deste script pode fixar "1.0.4" ou similar).
+const openaiCodexPlugin = checkPlugin("openai-codex", "codex", {
+  requiredFiles: ["scripts/codex-companion.mjs"],
+});
+const codexCompanionPath = openaiCodexPlugin.path
+  ? join(openaiCodexPlugin.path, "scripts", "codex-companion.mjs")
+  : undefined;
+
 const checks = {
   config: {
     "project-config": projectConfigState.check,
@@ -545,7 +610,10 @@ const checks = {
     "node-sqlite-fts5": checkNodeSqlite(),
   },
   cli: {
-    agy: checkCli("agy"),
+    agy: checkCli("agy", {
+      minVersion: MIN_AGY_VERSION,
+      recommendedVersion: RECOMMENDED_AGY_VERSION,
+    }),
     codex: checkCli("codex"),
   },
   plugins: {
@@ -558,7 +626,7 @@ const checks = {
         "scripts/antigravity-bridge.js",
       ],
     }),
-    "openai-codex": checkPlugin("openai-codex", "codex"),
+    "openai-codex": { ...openaiCodexPlugin, companionPath: codexCompanionPath },
   },
   permissions: {
     "codex-companion-bash": finalCodexCompanionBash,
@@ -566,6 +634,7 @@ const checks = {
   },
   optional: {
     mcp: detectMcpServers({ projectRoot: PROJECT_ROOT, home: HOME, platform: process.platform }),
+    ...(CHECK_AGENT_MCP ? { mcpPerAgent: detectMcpServersPerAgent() } : {}),
   },
 };
 
@@ -636,6 +705,17 @@ for (const [group, results] of Object.entries(REQUIRED_BY_CHECK)) {
   }
 }
 
+if (checks.cli.agy.ok && checks.cli.agy.recommended === false) {
+  warnings.push({
+    category: "cli",
+    name: "agy",
+    required: requiredCliSet.agy,
+    reason: "BELOW_RECOMMENDED_VERSION",
+    version: checks.cli.agy.version,
+    recommendedVersion: RECOMMENDED_AGY_VERSION,
+  });
+}
+
 const status = failed.length === 0 ? "ok" : "failed";
 
 const report = {
@@ -692,6 +772,7 @@ function remediationFor(f) {
           "  macOS/Linux: curl -fsSL https://antigravity.google/cli/install.sh | bash",
           "Abrir `agy` uma vez para concluir a autenticacao interativa.",
           "Garantir que o binario 'agy' esta no PATH global.",
+          `Confirmar AGY >= ${MIN_AGY_VERSION}; a versao ${RECOMMENDED_AGY_VERSION} e recomendada e validada com o bridge 4.0.`,
         ],
         docs: "https://antigravity.google/cli",
       };
@@ -713,7 +794,7 @@ function remediationFor(f) {
         steps: [
           "Dentro do Claude Code:",
           "  claude plugin install AllanHarlen/cc-antigravity-plugin",
-          `Confirme que a versao instalada seja >= ${MIN_ANTIGRAVITY_PLUGIN_VERSION} (requerido para --parallel e --subagent-model).`,
+          `Confirme que a versao instalada seja >= ${MIN_ANTIGRAVITY_PLUGIN_VERSION} (requerida para modelos nativos, JSON/stream-json, read-only forte e retomada estruturada).`,
           "Valide que o plugin instalado contenha agents/antigravity-coder.md (implementacao), agents/antigravity-agent.md (review, somente leitura), commands/antigravity.md e scripts/antigravity-bridge.js.",
         ],
         docs: "https://github.com/AllanHarlen/cc-antigravity-plugin",

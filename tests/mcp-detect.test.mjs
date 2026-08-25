@@ -134,13 +134,17 @@ test("detecta o CBM_MCP no .mcp.json do projeto e o Context7 na configuracao do 
   assert.ok(evidenceOf(context7, "mcp-config", claudeConfig), "Context7 deveria vir de ~/.claude.json");
   assert.equal(context7.install, undefined);
 
-  // Req 1.10: evidencia carrega apenas tipo e caminho; a chave de API semeada
-  // no conteudo lido nao chega ao relatorio.
+  // Req 1.10: evidencia carrega so tipo, caminho, nome do servidor registrado
+  // (para `mcp-config`) e a primeira linha de erro (para `*-unreadable`); a
+  // chave de API semeada no conteudo lido nunca chega ao relatorio.
+  const ALLOWED_EVIDENCE_KEYS = new Set(["type", "path", "server", "error"]);
   for (const result of Object.values(results)) {
     for (const entry of result.evidence) {
-      assert.deepEqual(Object.keys(entry).sort(), ["path", "type"]);
+      for (const key of Object.keys(entry)) assert.ok(ALLOWED_EVIDENCE_KEYS.has(key), key);
     }
   }
+  assert.equal(cbm.evidence.find((e) => e.type === "mcp-config")?.server, "codebase-memory-mcp");
+  assert.equal(context7.evidence.find((e) => e.type === "mcp-config")?.server, "context7");
   assert.ok(
     !JSON.stringify(results).includes(SEEDED_API_KEY),
     "o resultado nao pode conter chave de API",
@@ -176,6 +180,64 @@ test("binario resolvido no PATH conta como evidencia, sem shell e sem executar n
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.evidence, [{ type: "binary", path: binary }]);
+});
+
+/* -------------------------------------------------------------------------- */
+/* Casamento estrutural: disabledMcpjsonServers e candidatos novos            */
+/* -------------------------------------------------------------------------- */
+
+test("nao conta um servidor desabilitado para o projeto atual em ~/.claude.json", (t) => {
+  const paths = fixture(t);
+  const projectKey = paths.projectRoot.split("\\").join("/");
+  seedFile(
+    join(paths.home, ".claude.json"),
+    JSON.stringify({
+      projects: {
+        [projectKey]: {
+          mcpServers: { "codebase-memory-mcp": { command: "node" } },
+          disabledMcpjsonServers: ["codebase-memory-mcp"],
+        },
+      },
+    }),
+  );
+
+  const result = detectCodebaseMemoryMcp(options(paths));
+  assert.equal(result.ok, false);
+});
+
+test("ignora uma mencao de 'codebase-memory-mcp' fora de mcpServers (nao e substring solto)", (t) => {
+  const paths = fixture(t);
+  seedFile(
+    join(paths.home, ".claude.json"),
+    JSON.stringify({ history: [{ display: "como configuro o codebase-memory-mcp aqui?" }] }),
+  );
+
+  const result = detectCodebaseMemoryMcp(options(paths));
+  assert.equal(result.ok, false);
+});
+
+test("detecta um servidor registrado so em .kiro/settings/mcp.json (candidato do Pensador)", (t) => {
+  const paths = fixture(t);
+  const kiroConfig = seedFile(
+    join(paths.projectRoot, ".kiro", "settings", "mcp.json"),
+    mcpConfig("codebase-memory-mcp"),
+  );
+
+  const result = detectCodebaseMemoryMcp(options(paths));
+  assert.equal(result.ok, true);
+  assert.ok(evidenceOf(result, "mcp-config", kiroConfig));
+});
+
+test("Context7 detecta um servidor registrado so em ~/.claude/settings/mcp.json (candidato do Pensador)", (t) => {
+  const paths = fixture(t);
+  const claudeSettings = seedFile(
+    join(paths.home, ".claude", "settings", "mcp.json"),
+    mcpConfig("context7"),
+  );
+
+  const result = detectContext7Mcp(options(paths));
+  assert.equal(result.ok, true);
+  assert.ok(evidenceOf(result, "mcp-config", claudeSettings));
 });
 
 /* -------------------------------------------------------------------------- */
@@ -273,7 +335,9 @@ test("deadline estourado encerra com TIMEOUT preservando a evidencia coletada", 
   assert.equal(result.optional, true);
   assert.equal(result.reason, MCP_DETECT_REASONS.TIMEOUT);
   assert.match(result.error, /Codebase Memory MCP detection exceeded the 3 ms deadline/);
-  assert.deepEqual(result.evidence, [{ type: "mcp-config", path: projectConfig }]);
+  assert.deepEqual(result.evidence, [
+    { type: "mcp-config", path: projectConfig, server: "codebase-memory-mcp" },
+  ]);
   assert.deepEqual(result.install, codebaseMemoryInstallCommands("linux"));
   assert.ok(result.elapsedMs >= 3, `elapsedMs deveria refletir o relogio injetado: ${result.elapsedMs}`);
 });
@@ -315,7 +379,7 @@ test("cada MCP recebe o seu proprio deadline, nao um deadline compartilhado", (t
 
   assert.equal(results[CODEBASE_MEMORY_MCP].reason, MCP_DETECT_REASONS.TIMEOUT);
   assert.deepEqual(results[CODEBASE_MEMORY_MCP].evidence, [
-    { type: "mcp-config", path: projectConfig },
+    { type: "mcp-config", path: projectConfig, server: "codebase-memory-mcp" },
   ]);
 
   assert.equal(results[CONTEXT7_MCP].reason, MCP_DETECT_REASONS.TIMEOUT);

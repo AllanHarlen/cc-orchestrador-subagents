@@ -28,7 +28,7 @@ Cada estagio e **produtor** para o proximo e **consumidor** do anterior. Nenhum 
 
 ## 2. Modos de operacao: independente e conjunto
 
-Cada plugin funciona **isoladamente** (recebendo a demanda direto do usuario) **ou em conjunto** (consumindo o `report/handoff.json` do estagio anterior). O `report/handoff.json` upstream e o unico sinal que distingue os dois modos.
+Cada plugin funciona **isoladamente** (recebendo a demanda direto do usuario) **ou em conjunto** (consumindo o `handoff.json` do estagio anterior). O `handoff.json` upstream e o unico sinal que distingue os dois modos. O nome do arquivo e sempre `handoff.json`; onde ele mora dentro da pasta de artefatos depende do layout de cada estagio (secao 4).
 
 | Plugin | Modo independente (sem upstream) | Modo conjunto (com upstream) |
 |---|---|---|
@@ -36,7 +36,7 @@ Cada plugin funciona **isoladamente** (recebendo a demanda direto do usuario) **
 | **Orchestrador** | `/orquestrador "Desenvolva um CRUD de clientes"` — o usuario fornece a demanda/PRD/spec direto (via `@arquivo` ou texto). O orquestrador trata o texto/arquivo como fonte da verdade. | Detecta `.pensador/*/handoff.json` (`stage: pensador`, `status: DONE`) e ingere PRD/Spec + contrato + design como fonte da verdade, sem re-planejar. Ver secao 7. |
 | **Executor** | `/executor <demanda de resolucao rapida>` — feature pequena ou hotfix, com ou sem plano pre-definido no proprio enunciado. | Detecta `.orchestration/<slug>/report/handoff.json` (`stage: orchestrador`) e o adota como **plano pre-definido baseline** para review plano-vs-entrega, correcoes e ajustes finos. Ver secao 7. |
 
-Regra de deteccao (consumidor): antes de tratar a demanda como independente, procure o `report/handoff.json` do estagio anterior (secao 7). Se existir e estiver `DONE`, entre em **modo conjunto**; se nao existir, siga **independente**. Em duvida (varios slugs/versoes), confirme via `AskUserQuestion`.
+Regra de deteccao (consumidor): antes de tratar a demanda como independente, procure o `handoff.json` do estagio anterior no caminho que a secao 7 define para esse estagio especifico. Se existir e estiver `DONE`, entre em **modo conjunto**; se nao existir, siga **independente**. Em duvida (varios slugs/versoes), confirme via `AskUserQuestion`.
 
 ---
 
@@ -48,7 +48,7 @@ Regra de deteccao (consumidor): antes de tratar a demanda como independente, pro
 | Orchestrador | `.orchestration/<slug>/` | `slug` (sem versao) |
 | Executor | `.executor/<demanda_slug>/artefatos/` | `demanda_slug` da demanda de review |
 
-Regra absoluta: **nenhum artefato `.md`/`.json` de coordenacao na raiz do projeto**. Tudo vive sob a raiz oculta do estagio. Excecao unica: o change set do OpenSpec (`openspec/changes/<nome>/`), que e gerido pelos comandos `openspec-*` e vive na arvore padrao do OpenSpec — o `report/handoff.json` o referencia como caminho relativo ao projeto (ver secao 5).
+Regra absoluta: **nenhum artefato `.md`/`.json` de coordenacao na raiz do projeto**. Tudo vive sob a raiz oculta do estagio. Excecao unica: o change set do OpenSpec (`openspec/changes/<nome>/`), que e gerido por `/opsx:propose` e vive na arvore padrao do OpenSpec (specs podem estar aninhadas: `specs/<area>/<capability>/spec.md`) — o `handoff.json` do produtor o referencia como caminho relativo ao projeto (ver secao 5).
 
 ### Correlacao por `slug`
 
@@ -62,9 +62,15 @@ O `slug` e a chave que liga os tres estagios. Deriva da demanda original (kebab-
 
 ---
 
-## 4. Manifesto de handoff: `report/handoff.json`
+## 4. Manifesto de handoff: `handoff.json`
 
-Cada produtor grava um `report/handoff.json` na raiz da sua pasta de artefatos ao concluir. Esse arquivo e a **ancora unica de descoberta**: o consumidor le o `report/handoff.json` do estagio anterior antes de qualquer outra coisa.
+Cada produtor grava um `handoff.json` ao concluir. O nome do arquivo e sempre `handoff.json`; **onde** ele fica dentro da pasta de artefatos e especifico de cada estagio, porque cada um usa seu proprio layout (secao 5 detalha por estagio):
+
+- **Pensador:** raiz de `artifactRoot` — `.pensador/<slug>-vN/handoff.json`.
+- **Orchestrador:** agrupado sob `report/` (layout v2, que reune todo artefato de categoria "report") — `.orchestration/<slug>/report/handoff.json`. Runs em layout anterior ao v2 tem o arquivo na raiz.
+- **Executor:** raiz de `artefatos_dir` — `.executor/<slug>/artefatos/handoff.json`. Como o Executor e o ultimo estagio, esse arquivo nao tem consumidor a jusante.
+
+Esse arquivo e a **ancora unica de descoberta**: o consumidor le o `handoff.json` do estagio anterior, no caminho que essa lista define para aquele estagio, antes de qualquer outra coisa. Nao existe um caminho unico valido para os tres estagios — nunca assuma que o caminho de um estagio vale para outro.
 
 ### Envelope comum
 
@@ -101,7 +107,7 @@ Cada produtor grava um `report/handoff.json` na raiz da sua pasta de artefatos a
 - `artifacts[].role` segue o vocabulario por estagio (secao 5).
 - `status: BLOCKED` ou `PARTIAL` deve trazer `summary` explicando o bloqueio; o consumidor entao pergunta ao usuario antes de prosseguir.
 
-O consumidor nunca adivinha caminhos: descobre tudo via `report/handoff.json`. Se o `report/handoff.json` estiver ausente (execucao de versao antiga), faz fallback para descoberta por convencao (secao 7) e avisa o usuario.
+O consumidor nunca adivinha caminhos: descobre tudo via o `handoff.json` do estagio anterior, no local que a secao 4 define para aquele estagio. Se estiver ausente (execucao de versao antiga), faz fallback para descoberta por convencao (secao 7) e avisa o usuario.
 
 ---
 
@@ -117,7 +123,7 @@ O consumidor nunca adivinha caminhos: descobre tudo via `report/handoff.json`. S
 | `communication-contract` | `communication.md` | quando `backendConfirmed` — **visao legivel derivada** do `api-contract` (`derivedFrom` aponta o arquivo fonte). Nao e a fonte da verdade. |
 | `design-system` | `design-system.md` | **somente no fallback** (front-end sem Open Design) — DESIGN.md inline das 9 secoes. Quando o Open Design e usado, o `DESIGN.md` verbatim (role `design-system-files`) substitui este doc. |
 | `design-system-files` | `design-systems/<id>/` | quando `hasFrontend` **e** um system foi selecionado — **uma entrada por `<id>` concreto** (de `state.designSystems`), relativa ao `artifactRoot` (`.pensador/<slug>-vN/`), com os arquivos verbatim (`tokens.css`, `DESIGN.md`, `components.html`, `preview/`, …). Cada entrada carrega `materializeInto` (o alvo em `state.uiPackageDir`, ex.: `packages/ui/design-systems/<id>/`) que o Orchestrador/Executor usa ao materializar os arquivos na arvore de codigo real (secao 6). |
-| `openspec-change` | `openspec/changes/<nome>/` | quando `artifactMode = spec` — change set OpenSpec (`proposal.md`, `design.md`, `tasks.md`, `specs/`). **Caminho relativo ao projeto**, nao ao `artifactRoot` (gerido pelos comandos `openspec-*`). Substitui `prd`/`userhistory`/`communication-contract` no modo Spec. |
+| `openspec-change` | `openspec/changes/<nome>/` | quando `artifactMode = spec` — change set OpenSpec (`proposal.md`, `design.md`, `tasks.md`, `specs/` — `specs/` omitido quando a mudanca declara `skip_specs: true`). **Caminho relativo ao projeto**, nao ao `artifactRoot` (gerido por `/opsx:propose`; consumidores confirmam o estado via `openspec status --change <nome> --json`, nao varredura de arquivos). Substitui `prd`/`userhistory`/`communication-contract` no modo Spec. |
 | `codebase-memory` | `codebase-memory.md` | opcional |
 | `shared-agents` | `shared-agents/` | opcional |
 
@@ -133,7 +139,7 @@ O consumidor nunca adivinha caminhos: descobre tudo via `report/handoff.json`. S
 | `monitoring` | `run/monitoring.md` | sim |
 | `workflow-log` | `report/workflow-log.md` | sim |
 | `subagents-context` | `report/subagents-context.md` | sim |
-| `openspec-change` | `openspec/changes/<nome>/` | quando OpenSpec for usado (relativo ao projeto) |
+| `openspec-change` | `openspec/changes/<nome>/` | quando OpenSpec for usado (relativo ao projeto; `specs/` opcional sob `skip_specs`) |
 
 ### Executor (`stage: executor`)
 | role | arquivo padrao | required |
@@ -166,28 +172,28 @@ grava VERBATIM em                     MATERIALIZA em (via materializeInto)
     preview/
 ```
 
-- O Pensador **nunca** escreve na arvore de codigo real; persiste os arquivos dentro da pasta da feature. Cada entrada `design-system-files` do `report/handoff.json` carrega `materializeInto` com o alvo real.
+- O Pensador **nunca** escreve na arvore de codigo real; persiste os arquivos dentro da pasta da feature. Cada entrada `design-system-files` do `handoff.json` do Pensador (raiz de `.pensador/<slug>-vN/`) carrega `materializeInto` com o alvo real.
 - O **Orchestrador** (modo conjunto ou quando recebe design via PRD/spec) **materializa** os arquivos em `materializeInto`, passa `tokens.css`/`components.html`/`DESIGN.md` (ou `design.md` + `specs/ui-design-system/spec.md` no modo Spec) e o diretorio `preview/` no prompt de toda task front-end, e aplica o **gate de design** no review: `tokens.css` consumido via `var(--*)` (nunca hex literal), accent contido (≤ 2x por pagina), telas-chave conferidas contra `preview/`, anti-padroes da secao 9 do DESIGN.md ausentes. Violacao de requisito explicito e **BLOQUEANTE**.
 - O **Executor** consome o mesmo contrato visual ao corrigir/ajustar o front-end: nao reinventa tokens, respeita `tokens.css` e valida a fidelidade contra `preview/`.
-- Regra inviolavel herdada do Open Design: **never invent new tokens.** Divergencia justificada vira override documentado (na secao *Decisions* do `design.md` no modo Spec, ou nota no `report/handoff.json` no modo PRD), nunca um valor solto no `theme.ts`.
+- Regra inviolavel herdada do Open Design: **never invent new tokens.** Divergencia justificada vira override documentado (na secao *Decisions* do `design.md` no modo Spec, ou nota no `handoff.json` do Pensador no modo PRD), nunca um valor solto no `theme.ts`.
 
 ---
 
-## 7. Descoberta pelo consumidor (fallback sem `report/handoff.json`)
+## 7. Descoberta pelo consumidor (fallback sem `handoff.json`)
 
 ### Orchestrador ingere Pensador (modo conjunto)
 1. Procure `.pensador/*/handoff.json`. Para multiplos `slug`, confirme com o usuario qual demanda implementar via `AskUserQuestion`.
 2. Para o mesmo `slug` com varias versoes `-vN`, **use a maior versao** (mais recente). Confirme via `AskUserQuestion` se houver duvida.
 3. Sem `handoff.json`: leia `.pensador/<slug>-vN/.pensador-progress.json` (`checkpointVersion: 2`) e o array `artifacts`.
 4. **Modo PRD** — ingira na ordem: `prd` → `userhistory` → `architecture` → `api-contract` → `communication-contract` → `design-system`/`design-system-files`. Use o `api-contract` (maquina-legivel) como **fonte da verdade** dos contratos API/UI da Fase 4 — suba o mock a partir dele e valide contra ele no CI (campo `validation`); o `communication-contract` e apenas a visao legivel. Trate o PRD/spec como **fonte da verdade**: **nao** reabra discovery nem replaneje.
-5. **Modo Spec (OpenSpec)** — a `role` `openspec-change` aponta `openspec/changes/<nome>/`. Ingira `proposal.md`, `design.md`, `specs/` e `tasks.md`; derive a classificacao de tasks a partir de `tasks.md` preservando IDs/ordem. O contrato de API esta dobrado em `design.md` + `specs/` (nao ha `api-contract` standalone).
+5. **Modo Spec (OpenSpec)** — a `role` `openspec-change` aponta `openspec/changes/<nome>/`. Ingira `proposal.md`, `design.md`, `tasks.md` e `specs/` (quando presente — omitido sob `skip_specs`; pode estar aninhado em `specs/<area>/<capability>/spec.md`); confirme via `openspec status --change <nome> --json` antes de assumir completude. Derive a classificacao de tasks a partir de `tasks.md` preservando IDs/ordem (incluindo subtarefas aninhadas). O contrato de API esta dobrado em `design.md` + `specs/` (nao ha `api-contract` standalone).
 6. **Design (Open Design), quando houver front-end** — materialize os arquivos verbatim de `design-system-files` conforme secao 6 e trate-os como contrato visual do front-end. Se so houver o fallback `design-system.md` (sem Open Design), use-o como referencia inline.
 
 ### Executor ingere Orchestrador (modo conjunto)
-1. Procure `.orchestration/<slug>/report/handoff.json`.
+1. Procure `.orchestration/<slug>/report/handoff.json` — o Orchestrador agrupa `handoff.json` sob `report/` desde o layout v2 (secao 4). Caia para `.orchestration/<slug>/handoff.json` (raiz) apenas em runs anteriores a esse layout.
 2. Adote a entrega do Orchestrador como **plano pre-definido baseline**: registre `plano_predefinido: true`, preserve o conteudo relevante em `{artefatos_dir}/initial-plan-baseline.md` e execute o review plano-vs-entrega (Codex high) comparando o baseline com o estado atual do codigo. As correcoes e ajustes finos derivam desse review.
-3. Sem `report/handoff.json`: leia `.orchestration/<slug>/report/implementation-report.md` + `plan/tasks-classification.md` + `plan/waves.md` + `contracts/`.
-4. Para rastreabilidade, siga `upstream` ate o `report/handoff.json` do Pensador e use o `prd`/`api-contract`/`communication-contract` como baseline de referencia do review; use `design-system-files` como criterio visual dos ajustes de front-end.
+3. Sem `handoff.json`: leia `.orchestration/<slug>/report/implementation-report.md` + `.orchestration/<slug>/plan/tasks-classification.md` + `.orchestration/<slug>/plan/waves.md` + `.orchestration/<slug>/contracts/`.
+4. Para rastreabilidade, siga `upstream` ate o `handoff.json` do Pensador (raiz de `.pensador/<slug>-vN/` — nao leva o prefixo `report/`, que e especifico do layout do Orchestrador) e use o `prd`/`api-contract`/`communication-contract` como baseline de referencia do review; use `design-system-files` como criterio visual dos ajustes de front-end.
 5. Registre as fontes em `plano_predefinido_fonte` e `plano_predefinido` no `.executor/checkpoint.json`.
 
 ---

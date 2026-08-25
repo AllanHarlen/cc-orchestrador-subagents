@@ -3,7 +3,8 @@
 ## Como rodar
 
 ```bash
-node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" --check-agent-mcp   # caminho padrao (SKILL.md Fase 0.1, workflow.md Fase 0); sonda codex/agy ao vivo, ver abaixo
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"                     # sem o bloco optional.mcpPerAgent; so use se quiser pular o custo do subprocesso
 ```
 
 ## Saida
@@ -13,7 +14,7 @@ O JSON inclui:
 - `status` — `"ok"` ou `"failed"`; so item obrigatorio reprovado muda para `"failed"`
 - `generatedAt`
 - `projectConfig` — bloco com os quatro papeis efetivos, `path`, `updatedAt` e `requiredCliSet`, ver abaixo
-- `checks` — `config`, `runtime`, `cli`, `plugins`, `permissions`, `optional.mcp`
+- `checks` — `config`, `runtime`, `cli`, `plugins`, `permissions`, `optional.mcp` (e `optional.mcpPerAgent` com `--check-agent-mcp`)
 - `autoRemediation`
 - `warnings` — array no topo, ver abaixo
 - `failed` — so item **obrigatorio** reprovado
@@ -111,3 +112,21 @@ Se a auto-remediacao nao puder agir, ajuste manualmente:
 ## MCPs opcionais
 
 `checks.optional.mcp.context7` e `checks.optional.mcp.codebase-memory` sao ambos detectados pelo preflight e continuam opcionais — ausencia de qualquer um vira `warnings`, nunca `failed`. Ver `references/mcp-context.md` para o protocolo de uso de cada um quando `ok: true`.
+
+### `checks.optional.mcpPerAgent` (com `--check-agent-mcp`)
+
+`checks.optional.mcp.<servidor>.ok` e um agregado de varredura de arquivo: `true` pode significar so que o Claude Code local tem o servidor registrado, sem que o Codex ou o AGY o tenham. Com a flag `--check-agent-mcp`, o preflight roda `codex mcp list --json`/`agy mcp list` de verdade e publica `checks.optional.mcpPerAgent.<agent>.<servidor>`:
+
+```json
+{
+  "codex": {
+    "codebase-memory": { "checked": true, "reason": null, "matched": "codebase-memory-mcp", "ok": true, "install": null },
+    "context7": { "checked": true, "reason": null, "matched": null, "ok": false, "install": "codex mcp add context7 --url https://mcp.context7.com/mcp" }
+  },
+  "agy": { "...": "mesma forma" }
+}
+```
+
+- `checked: false` (`reason`: `BINARY_MISSING`, `TIMEOUT`, `EXEC_ERROR` ou `UNPARSEABLE_OUTPUT`) **nao e prova de ausencia** — cai para `checks.optional.mcp.<servidor>.ok`.
+- `install` so vem preenchido quando `checked: true, ok: false` — a CLI respondeu e o servidor genuinamente nao esta la. Traz o comando exato de registro (`mcp-agent-install.mjs`), nunca disparado automaticamente: ver "Oferta de instalacao por agente" em `references/mcp-context.md`.
+- `--check-agent-mcp` faz parte do caminho padrao da Fase 0 (custo real de subprocesso, ate `AGENT_CLI_TIMEOUT_MS` por agente por servidor, mas necessario sempre que alguma task Codex/AGY puder depender de Context7/Codebase Memory). Rodar sem a flag e a excecao, nao o padrao — so faz sentido quando nenhuma task da run vai prometer essas ferramentas no prompt.

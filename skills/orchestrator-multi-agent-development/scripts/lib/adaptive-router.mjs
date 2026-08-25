@@ -3,11 +3,11 @@ import { createHash } from "node:crypto";
 import { readTelemetry, recordTelemetry } from "./telemetry.mjs";
 
 const AGY_MODELS = Object.freeze([
-  "gemini-3.5-flash-low",
-  "gemini-3.5-flash-medium",
-  "gemini-3.5-flash-high",
-  "gemini-3.1-pro-low",
-  "gemini-3.1-pro-high",
+  "flash-low",
+  "flash-medium",
+  "flash-high",
+  "pro-low",
+  "pro-high",
 ]);
 const AGY_MODEL_SET = new Set(AGY_MODELS);
 const REVIEW_FAILURES = new Set(["FAIL", "FAILED", "CHANGES_REQUESTED"]);
@@ -33,8 +33,36 @@ function isAgy(executor) {
   return /agy|antigravity/i.test(String(executor ?? "agy"));
 }
 
+// Runtime model versions are intentionally collapsed into stable capability
+// aliases. This keeps adaptive evidence comparable when `agy models` exposes a
+// newer member of the same family, while the bridge resolves the concrete slug.
+function canonicalAgyModel(model) {
+  const value = String(model ?? "").trim().toLowerCase();
+  if (value === "auto") return value;
+  const family = /(?:^|[-_.])flash(?:[-_.]|$)/.test(value)
+    ? "flash"
+    : /(?:^|[-_.])pro(?:[-_.]|$)/.test(value)
+      ? "pro"
+      : null;
+  const tier = ["low", "medium", "high"].find((candidate) =>
+    value === `${family}-${candidate}` || value.endsWith(`-${candidate}`),
+  );
+  return family && tier ? `${family}-${tier}` : value;
+}
+
+function normalizeUserModel(model) {
+  const value = String(model ?? "").trim();
+  if (value.length === 0 || value.length > 200 || !/^[a-z0-9][a-z0-9._-]*$/i.test(value)) {
+    throw new AdaptiveRoutingError(
+      "INVALID_MODEL_OVERRIDE",
+      "AGY model override must be a single non-empty value",
+    );
+  }
+  return value;
+}
+
 function modelRank(model) {
-  return AGY_MODELS.indexOf(model);
+  return AGY_MODELS.indexOf(canonicalAgyModel(model));
 }
 
 function nextModel(model) {
@@ -56,14 +84,14 @@ function heuristicModel(context) {
   const complexContract = Boolean(context.contractRequired) && ["HIGH", "CRITICAL"].includes(complexity);
   const complexUi = /complex form|wizard|state machine|realtime|real-time|drag.?drop/i.test(text);
   const designSystem = /tokens\.css|components\.html|DESIGN\.md|design[- ]system/i.test(text);
-  if (review || critical) return { model: "gemini-3.1-pro-high", reason: review ? "review-floor" : "critical-risk-floor" };
+  if (review || critical) return { model: "pro-high", reason: review ? "review-floor" : "critical-risk-floor" };
   if (complexContract || complexUi || complexity === "HIGH") {
-    return { model: "gemini-3.1-pro-low", reason: complexContract ? "complex-contract" : "high-complexity" };
+    return { model: "pro-low", reason: complexContract ? "complex-contract" : "high-complexity" };
   }
   if (designSystem || Boolean(context.highFidelity)) {
-    return { model: "gemini-3.5-flash-high", reason: "visual-fidelity-floor" };
+    return { model: "flash-high", reason: "visual-fidelity-floor" };
   }
-  return { model: "gemini-3.5-flash-medium", reason: "default-front-end" };
+  return { model: "flash-medium", reason: "default-front-end" };
 }
 
 function canonicalAttempts(events) {
@@ -102,9 +130,11 @@ function median(values) {
 
 function metricsByModel(events) {
   const groups = new Map();
-  for (const event of events.filter((item) => AGY_MODEL_SET.has(item.model))) {
-    const group = groups.get(event.model) ?? {
-      model: event.model,
+  for (const event of events) {
+    const model = canonicalAgyModel(event.model);
+    if (!AGY_MODEL_SET.has(model)) continue;
+    const group = groups.get(model) ?? {
+      model,
       samples: 0,
       successes: 0,
       firstPassSamples: 0,
@@ -125,7 +155,7 @@ function metricsByModel(events) {
     if (Number.isFinite(event.durationMs) && Number(event.durationMs) >= 0) {
       group.durations.push(Number(event.durationMs));
     }
-    groups.set(event.model, group);
+    groups.set(model, group);
   }
   const allMedians = [...groups.values()].map((group) => median(group.durations)).filter(Number.isFinite);
   const fastest = allMedians.length ? Math.min(...allMedians) : null;
@@ -187,12 +217,10 @@ export function routeModel(projectRoot, context, options = {}) {
     };
   }
   if (context.userModel) {
-    if (!AGY_MODEL_SET.has(context.userModel) && context.userModel !== "auto") {
-      throw new AdaptiveRoutingError("MODEL_NOT_ALLOWED", `Unsupported AGY model override: ${context.userModel}`);
-    }
+    const userModel = normalizeUserModel(context.userModel);
     return {
       executor,
-      model: context.userModel,
+      model: userModel,
       source: "user",
       reason: "Explicit user override has priority over learned routing",
       adaptive: false,
@@ -200,8 +228,9 @@ export function routeModel(projectRoot, context, options = {}) {
   }
   const heuristic = heuristicModel(context);
   let floor = heuristic.model;
-  if (context.previousFailed && context.previousModel && AGY_MODEL_SET.has(context.previousModel)) {
-    const escalated = nextModel(context.previousModel);
+  const previousModel = canonicalAgyModel(context.previousModel);
+  if (context.previousFailed && AGY_MODEL_SET.has(previousModel)) {
+    const escalated = nextModel(previousModel);
     if (modelRank(escalated) > modelRank(floor)) floor = escalated;
   }
   const evidence = adaptiveRoutingEvidence(projectRoot, context, options);
@@ -213,7 +242,7 @@ export function routeModel(projectRoot, context, options = {}) {
   let selected = floor;
   let source = "heuristic";
   let reason = context.previousFailed && floor !== heuristic.model
-    ? `Escalated one tier after a failed ${context.previousModel} attempt`
+    ? `Escalated one tier after a failed ${previousModel} attempt`
     : heuristic.reason;
 
   if (baseline?.samples >= minimumSamples && eligible.length > 1) {

@@ -8,9 +8,9 @@
 |---|---|---|---|---|
 | Orquestrador | Claude Sonnet 4.6 | voce mesmo | Medium | coordena e consolida |
 | Back-end | Codex padrao da conta | `codex:codex-rescue` | Medium | implementacao |
-| Front-end | AGY por override, piso heuristico ou escalada adaptativa comprovada | `cc-antigravity-plugin:antigravity-coder` | - | usar `--model <agyModel>` no bridge; `adaptive` exige evidence; edita arquivos |
+| Front-end | AGY por override, piso heuristico ou escalada adaptativa comprovada | `cc-antigravity-plugin:antigravity-coder` | - | `--mode accept-edits --format stream-json --model <agyModel>`; `adaptive` exige evidence; edita arquivos |
 | Review back-end pos-implementacao | Codex padrao da conta | `codex:codex-rescue` | High | read-only, apenas back-end |
-| Review front-end pos-implementacao | AGY `gemini-3.1-pro-high` | `cc-antigravity-plugin:antigravity-agent` | - | read-only, apenas front-end — **nunca usar para implementar** |
+| Review front-end pos-implementacao | AGY `pro-high` | `cc-antigravity-plugin:antigravity-agent` | - | `--read-only --format json --effort high`, apenas front-end — **nunca usar para implementar** |
 
 ## Invariante de roteamento
 
@@ -41,7 +41,7 @@ Nao fixe `--model` nos prompts do Codex. Use apenas:
 - `--effort medium` para implementacao, ajustes pontuais e handoffs;
 - `--effort high` para review back-end pos-implementacao.
 
-Codex revisa apenas back-end. O review de front-end e sempre do AGY com `--model gemini-3.1-pro-high`.
+Codex revisa apenas back-end. O review de front-end e sempre do AGY com `--read-only --format json --model pro-high --effort high`.
 
 ## Regra para contratos front-back
 
@@ -89,7 +89,7 @@ Use para:
 - leitura critica de risco arquitetural no back-end;
 - analise de regressao e seguranca no back-end.
 
-### AGY `gemini-3.1-pro-high` (review front-end)
+### AGY `pro-high` (review front-end)
 
 Use para o review front-end pos-implementacao (Fase 9), em modo read-only. O AGY revisa consumo de contrato, estados de UI, tipagem, build/typecheck/lint e regressao visual. Codex nunca revisa front-end.
 

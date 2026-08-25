@@ -62,9 +62,16 @@ const AGY_ADAPTIVE_SOURCE_RE = /agyModelSource\s*[:=]?\s*`?adaptive`?/i;
 const AGY_ADAPTIVE_EVIDENCE_RE = /agyModelEvidence\s*[:=]?\s*`?[^`\n]+`?/i;
 const AGY_SUBAGENT_MODEL_RE = /agySubagentModel\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
 const AGY_PARALLEL_RE = /\bagyParallel\b/i;
+const AGY_EFFORT_RE = /(?:agyEffort|--agy-effort|--effort)\b\s*[:=]?\s*`?([^`\s|,]+)/i;
+const AGY_TIMEOUT_RE = /(?:agyTimeout|--agy-timeout|--timeout)\b\s*[:=]?\s*`?([^`\s|,]+)/i;
+const AGY_FORMAT_RE = /(?:agyFormat|--format)\b\s*[:=]?\s*`?([^`\s|,]+)/i;
 // Identificadores de subagente externo. Task com executor `claude-code` nao pode
-// invocar `codex:codex-rescue` nem subagente do `cc-antigravity-plugin` (Req 7.11).
-const CODEX_SUBAGENT_RE = /\bcodex:codex-rescue\b/i;
+// invocar Codex (direto via codex-companion.mjs, ou via o fallback `codex:codex-rescue`)
+// nem subagente do `cc-antigravity-plugin` (Req 7.11). Cobre os dois caminhos porque o
+// orquestrador despacha para Codex chamando codex-companion.mjs diretamente
+// (references/subagent-prompts.md Secao 1), e cai para codex:codex-rescue apenas quando
+// companionPath nao resolve.
+const CODEX_SUBAGENT_RE = /\bcodex:codex-rescue\b|\bcodex-companion\.mjs\b/i;
 const AGY_PLUGIN_SUBAGENT_RE = /\bcc-antigravity-plugin:[a-z-]+/i;
 // `executor` declarado no bloco. O lookahead descarta `executorSource`, que e o
 // campo de origem da decisao e nunca carrega o nome do executor.
@@ -74,16 +81,22 @@ const EXECUTOR_DECLARATION_RE = /(?:^|[\s|,(])(?:executor(?!source)|--executor)\
 const EXECUTOR_SOURCE_RE = /\bexecutorSource\b[\t ]*[:=]?[\t ]*`?([A-Za-z0-9._-]+)`?/i;
 // Registro do review read-only feito pelo Claude Code (Req 7.10).
 const READ_ONLY_REVIEW_RECORD_RE = /review\/(?:review-final|review-frontend)\.md/i;
-const ALLOWED_AGY_MODELS = new Set([
+const ROUTER_AGY_MODELS = new Set([
+  "flash-low",
+  "flash-medium",
+  "flash-high",
+  "pro-low",
+  "pro-high",
+  "auto",
+]);
+// Artifacts from runs created before 4.2 remain valid on resume. New
+// heuristic/adaptive decisions use the stable aliases above.
+const LEGACY_AGY_MODELS = new Set([
   "gemini-3.5-flash-low",
   "gemini-3.5-flash-medium",
   "gemini-3.5-flash-high",
   "gemini-3.1-pro-low",
   "gemini-3.1-pro-high",
-  "claude-4.6-sonnet-thinking",
-  "claude-4.6-opus-thinking",
-  "gpt-oss-120b-medium",
-  "auto",
 ]);
 
 // Escada de capacidade (SKILL.md): flash-low < flash-medium < flash-high < pro-low < pro-high.
@@ -91,7 +104,12 @@ const ALLOWED_AGY_MODELS = new Set([
 // podem usar os dois tiers mais baixos da escada Gemini — ver regra "Roteamento por
 // fidelidade de design" no SKILL.md. Modelos fora da escada Gemini (claude-*, gpt-oss,
 // auto) nao tem tier conhecido aqui; nao sao bloqueados por esta regra especifica.
-const LOW_TIER_AGY_MODELS = new Set(["gemini-3.5-flash-low", "gemini-3.5-flash-medium"]);
+const LOW_TIER_AGY_MODELS = new Set([
+  "flash-low",
+  "flash-medium",
+  "gemini-3.5-flash-low",
+  "gemini-3.5-flash-medium",
+]);
 const DESIGN_SYSTEM_SIGNAL_RE = /\b(tokens\.css|components\.html|design-systems?\/|DESIGN\.md|design[- ]system)\b/i;
 
 const USAGE = [
@@ -241,6 +259,18 @@ function extractAgyModel(text) {
 
 function hasAgyModelSource(text) {
   return AGY_MODEL_SOURCE_RE.test(text);
+}
+
+function extractAgyModelSource(text) {
+  return text.match(AGY_MODEL_SOURCE_RE)?.[1]?.toLowerCase() ?? null;
+}
+
+function extractParameter(text, pattern) {
+  return text.match(pattern)?.[1] ?? null;
+}
+
+function validModelToken(value) {
+  return typeof value === "string" && value.length <= 200 && /^[a-z0-9][a-z0-9._-]*$/i.test(value);
 }
 
 function extractAgySubagentModel(text) {
@@ -421,6 +451,10 @@ function validateBlock(source, block, categoryByTask) {
     }
 
     const agyModel = extractAgyModel(block.text);
+    const agyModelSource = extractAgyModelSource(block.text);
+    const agyEffort = extractParameter(block.text, AGY_EFFORT_RE);
+    const agyTimeout = extractParameter(block.text, AGY_TIMEOUT_RE);
+    const agyFormat = extractParameter(block.text, AGY_FORMAT_RE);
 
     // Executor `claude-code` nao carrega parametro de AGY: o Orquestrador omite
     // agyModel, agyParallel e agySubagentModel nessas tasks (Req 7.8).
@@ -431,6 +465,9 @@ function validateBlock(source, block, categoryByTask) {
       if (AGY_PARALLEL_RE.test(block.text)) {
         errors.push(`${source}: ${id} tem executor \`claude-code\`, mas registra agyParallel. Omita agyModel, agyParallel e agySubagentModel em task delegada ao Claude Code.`);
       }
+      if (agyEffort || agyTimeout || agyFormat) {
+        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas registra parametro AGY. Omita agyModel, agyParallel e agySubagentModel, alem de agyEffort, agyTimeout e agyFormat.`);
+      }
       const claudeCodeSubagentModel = extractAgySubagentModel(block.text);
       if (claudeCodeSubagentModel) {
         errors.push(`${source}: ${id} tem executor \`claude-code\`, mas registra agySubagentModel (${claudeCodeSubagentModel}). Omita agyModel, agyParallel e agySubagentModel em task delegada ao Claude Code.`);
@@ -440,7 +477,7 @@ function validateBlock(source, block, categoryByTask) {
     // Stack toda `claude-code` nao invoca subagente externo (Req 7.11).
     if (effective.length > 0 && effective.every((value) => value === "claude-code")) {
       if (CODEX_SUBAGENT_RE.test(block.text)) {
-        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas invoca \`codex:codex-rescue\`. Com a Project_Config (${projectConfigLabel}) essa task e implementada por subagente do Claude Code.`);
+        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas invoca Codex (\`codex:codex-rescue\` ou \`codex-companion.mjs\` direto). Com a Project_Config (${projectConfigLabel}) essa task e implementada por subagente do Claude Code.`);
       }
       if (AGY_PLUGIN_SUBAGENT_RE.test(block.text)) {
         errors.push(`${source}: ${id} tem executor \`claude-code\`, mas invoca subagente do \`cc-antigravity-plugin\`. Com a Project_Config (${projectConfigLabel}) essa task e implementada por subagente do Claude Code.`);
@@ -451,17 +488,39 @@ function validateBlock(source, block, categoryByTask) {
       errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModel/--model (alias legado: --agy-model).`);
     }
 
-    if (frontend && agyModel && !ALLOWED_AGY_MODELS.has(agyModel)) {
-      errors.push(`${source}: ${id} usa agyModel invalido (${agyModel}). Use um modelo da allowlist.`);
+    if (frontend && agyModel && !validModelToken(agyModel)) {
+      errors.push(`${source}: ${id} usa agyModel invalido (${agyModel}). Use um alias ou slug aceito pelo bridge.`);
+    }
+
+    if (frontend && agyModel && agyModelSource !== "user" &&
+        !ROUTER_AGY_MODELS.has(agyModel) && !LEGACY_AGY_MODELS.has(agyModel)) {
+      errors.push(`${source}: ${id} usa agyModel ${agyModel} com source ${agyModelSource ?? "ausente"}. Routing heuristic/adaptive deve usar aliases flash-low|flash-medium|flash-high|pro-low|pro-high|auto; slugs dinamicos exigem source user.`);
+    }
+
+    if (frontend && agyModel && LEGACY_AGY_MODELS.has(agyModel)) {
+      warnings.push(`${source}: ${id} preserva slug legado ${agyModel}; novas decisoes devem usar alias familia/tier do bridge 4.0.`);
     }
 
     if (frontend && agyModel && LOW_TIER_AGY_MODELS.has(agyModel) && DESIGN_SYSTEM_SIGNAL_RE.test(block.text)) {
-      errors.push(`${source}: ${id} implementa design system (tokens.css/components.html/DESIGN.md) mas usa agyModel de tier baixo (${agyModel}). Fidelidade visual exige no minimo gemini-3.5-flash-high (ver "Roteamento por fidelidade de design" no SKILL.md).`);
+      errors.push(`${source}: ${id} implementa design system (tokens.css/components.html/DESIGN.md) mas usa agyModel de tier baixo (${agyModel}). Fidelidade visual exige no minimo flash-high (ver "Roteamento por fidelidade de design" no SKILL.md).`);
     }
 
     const agySubagentModel = extractAgySubagentModel(block.text);
-    if (agySubagentModel && agySubagentModel !== "inherit" && !ALLOWED_AGY_MODELS.has(agySubagentModel)) {
-      errors.push(`${source}: ${id} usa agySubagentModel invalido (${agySubagentModel}). Use um modelo da allowlist ou "inherit".`);
+    if (agySubagentModel && agySubagentModel !== "inherit" && !validModelToken(agySubagentModel)) {
+      errors.push(`${source}: ${id} usa agySubagentModel invalido (${agySubagentModel}). Use um alias/slug do bridge ou "inherit".`);
+    }
+
+    if (agyEffort && !["low", "medium", "high"].includes(agyEffort)) {
+      errors.push(`${source}: ${id} usa agyEffort invalido (${agyEffort}). Valores aceitos: low, medium, high.`);
+    }
+    if (agyTimeout && !/^\d+(?:ms|s|m|h)?(?:0s)?$/.test(agyTimeout)) {
+      errors.push(`${source}: ${id} usa agyTimeout invalido (${agyTimeout}). Use uma duracao como 300s ou 5m.`);
+    }
+    if (agyFormat && !["json", "stream-json"].includes(agyFormat)) {
+      errors.push(`${source}: ${id} usa agyFormat invalido (${agyFormat}). Valores aceitos: json, stream-json.`);
+    }
+    if (frontend && /antigravity-coder/i.test(block.text) && agyFormat && agyFormat !== "stream-json") {
+      errors.push(`${source}: ${id} delega implementacao ao antigravity-coder, mas usa agyFormat ${agyFormat}; implementacao AGY 4.0 usa stream-json.`);
     }
 
     if (frontend && !hasAgyModelSource(block.text)) {
