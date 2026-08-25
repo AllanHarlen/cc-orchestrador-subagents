@@ -53,7 +53,7 @@ Ao concluir, o orquestrador grava um `report/handoff.json` em `.orchestration/<s
 
 ## Fase 0 - Preflight, configuracao do projeto e instalacao assistida
 
-A Fase 0 tem quatro etapas, nesta ordem: preflight, resolucao da Project_Config (0.5), instalacao assistida (0.6) e novo preflight. A coleta da configuracao vem **antes** de qualquer oferta de instalacao, porque o conjunto de CLIs obrigatorias (o Required_CLI_Set) depende dos papeis escolhidos. Numa run nova sem `.orchestrator/project-config.md` isso produz ate tres preflights. Quando o skill e carregado a partir de `/orchestrator` ou `/orchestrador`, essas quatro etapas ja foram conduzidas pelo comando (ver `commands/orchestrator.md`, Passo 1) e nao devem ser repetidas aqui.
+A Fase 0 tem quatro etapas, nesta ordem: preflight, resolucao da Project_Config (0.5), instalacao assistida (0.6) e novo preflight. A coleta da configuracao vem **antes** de qualquer oferta de instalacao, porque o conjunto de CLIs obrigatorias (o Required_CLI_Set) depende dos papeis escolhidos. Numa run nova sem `.orchestrator/project-config.md` isso produz ate tres preflights. Quando o skill e carregado a partir de `/orchestrator` ou `/orquestrador`, essas quatro etapas ja foram conduzidas pelo comando (ver `commands/orchestrator.md`, Passo 1) e nao devem ser repetidas aqui.
 
 ### 0.1 - Preflight
 
@@ -83,7 +83,7 @@ Com a Project_Config resolvida, monte a lista de dependencias ausentes (CBM_MCP,
 
 Leia tambem `references/mcp-context.md` para o protocolo do Codebase Memory MCP e do Context7 MCP usados nas fases seguintes.
 
-Se a execucao foi iniciada com `--agy-model <modelo>`, valide a allowlist e preserve a escolha como override do usuario. Caso contrario, calcule primeiro o piso heuristico abaixo e passe o contexto ao router adaptativo. O router nunca reduz esse piso e volta para a heuristica quando nao houver amostra comparavel:
+Se a execucao foi iniciada com `--model <modelo>` (alias legado: `--agy-model`), valide a allowlist e preserve a escolha como override do usuario. Caso contrario, calcule primeiro o piso heuristico abaixo e passe o contexto ao router adaptativo. O router nunca reduz esse piso e volta para a heuristica quando nao houver amostra comparavel:
 
 - `gemini-3.5-flash-medium` por padrao;
 - `gemini-3.5-flash-high` para tasks front-end que implementam design system (precisam de julgamento visual) mas nao sao criticas de marca;
@@ -100,8 +100,8 @@ Para uma decisao adaptativa, registre `agyModelSource: adaptive` e `agyModelEvid
 
 **Heuristica de fan-out (agyParallel):**
 
-- Se a execucao foi iniciada com `--agy-parallel`, registre `agyParallel: yes` e `agyParallelSource: user` em todas as tasks AGY.
-- Se a execucao foi iniciada com `--agy-subagent-model <modelo>`, valide o modelo contra a allowlist, registre `agySubagentModel: <modelo>` e ligue `agyParallel: yes` automaticamente.
+- Se a execucao foi iniciada com `--parallel` (alias legado: `--agy-parallel`), registre `agyParallel: yes` e `agyParallelSource: user` em todas as tasks AGY.
+- Se a execucao foi iniciada com `--subagent-model <modelo>` (alias legado: `--agy-subagent-model`), valide o modelo contra a allowlist, registre `agySubagentModel: <modelo>` e ligue `agyParallel: yes` automaticamente.
 - Caso contrario, avalie por heuristica: se uma task `FRONTEND_ONLY` ou a fatia front-end de `FULLSTACK` lista **dois ou mais entregaveis independentes** nos criterios de aceite — e nenhum deles compartilha arquivo central, depende de contrato pendente ou schema em mudanca —, registre `agyParallel: yes` e `agyParallelSource: heuristic`.
 - `agySubagentModel` padrao: `inherit` (omite `--subagent-model`; subagentes usam o mesmo `agyModel` da sessao principal).
 

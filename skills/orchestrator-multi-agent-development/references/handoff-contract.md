@@ -89,7 +89,7 @@ Cada produtor grava um `report/handoff.json` na raiz da sua pasta de artefatos a
   ],
   "nextStage": {
     "consumer": "cc-orchestrador-subagents",
-    "entrypoint": "/orchestrador",
+    "entrypoint": "/orquestrador",
     "instructions": "Ingerir os artefatos e implementar o plano."
   }
 }

@@ -57,7 +57,7 @@ Coordination artifacts and final reports live under `.orchestration/<name>/`.
 
 - **Usage premise:** the orchestrator only works with a ready PRD/spec. It does not do discovery, planning, or reinterpret the demand.
 - **Codex reviews back-end only;** AGY (`gemini-3.1-pro-high`) reviews front-end only.
-- **AGY Fan-out:** `--agy-parallel` and `--agy-subagent-model` activate native Gemini sub-agents within the AGY task. Requires `cc-antigravity-plugin >= 3.6.0`.
+- **AGY Fan-out:** `--parallel` and `--subagent-model` activate native Gemini sub-agents within the AGY task. Requires `cc-antigravity-plugin >= 3.6.0`.
 - **AGY Model:** the user override and heuristic floor are authoritative; comparable history may only escalate with a minimum sample and `agyModelEvidence`. Review always uses `gemini-3.1-pro-high`.
 - **Verified memory:** only `FILE`, `CONTRACT`, passing `TEST`, durable `RUN_EVENT`, and explicit `USER` sources enter Project Memory; conflicts and stale facts are excluded.
 - **Code for mechanics:** three or more reads/greps, loops, and repeated comparisons use `scripts/intelligence`, producing bounded JSON and an evidence ID.
@@ -109,8 +109,11 @@ The orchestrator does not invent the demand. Provide the PRD/spec in one of thes
 # Spec pasted directly into the argument
 /orchestrator "Implement the reservations flow per: <paste the complete specification here>"
 
-# With AGY model override
-/orchestrator --agy-model gemini-3.1-pro-low @docs/prd-reservations.md
+# With a front-end executor model override
+/orchestrator --model gemini-3.1-pro-low @docs/prd-reservations.md
+
+# Portuguese alias
+/orquestrador @docs/prd-reservations.md
 ```
 
 If no PRD/spec is provided, the orchestrator asks for the specification before continuing.
@@ -172,6 +175,20 @@ node scripts/orchestration-learning.mjs curator-status
 
 The slash command also exposes `/orchestrator knowledge status`, `knowledge search`, `knowledge pin`, `knowledge archive`, `knowledge curate`, `knowledge rollback`, `telemetry report`, and `telemetry compact`. Curator/retention operations are dry-run without `--apply`; OTLP is opt-in and metadata-only.
 
+### Full command surface
+
+| Sub-command | What it does |
+|---|---|
+| `help` | prints the synopsis, sub-commands and flags |
+| `preflight` | validates dependencies and exits |
+| `project-config` (alias `config`) | shows/changes the project agent stack and revalidates |
+| `status [runId]` | run state, read-only (without `runId`, the most recent) |
+| `resume [runId]` | resumes the run without assuming the result of an interrupted task |
+| `knowledge <sub>` | `status`, `search`, `pin`, `archive`, `activate`, `curate`, `rollback`, `render`, `audit`, `backups`, `history-project` |
+| `telemetry <sub>` | `report`, `compact`, `otlp-preview`, `otlp-export` |
+
+`/orquestrador` is the Portuguese alias and accepts exactly the same surface.
+
 The boundary is intentional: the LLM makes novel decisions; deterministic scripts validate mechanics; history/Recipes recover proven decisions; Project Memory supplies stable context; Codex/AGY implement.
 
 ### What to Commit
@@ -225,7 +242,7 @@ Default policy (implementation):
 - `gemini-3.5-flash-medium` for most tasks;
 - `gemini-3.1-pro-low` for complex tasks, multi-route, multi-file, with delicate API/UI contract or high regression risk;
 - `gemini-3.1-pro-high` only in critical cases;
-- manual override available via `/orchestrator --agy-model <model> <demand>`.
+- manual override available via `/orchestrator --model <model> <demand>`.
 
 Without an override, this policy defines the **floor**. The adaptive router may escalate only with enough comparable type/complexity samples, using first-pass success, review failures, regressions, duration, and a Wilson interval. It never downgrades the floor, never randomly explores critical tasks, and records the decision in `agyModelEvidence`.
 
@@ -237,21 +254,24 @@ When a front-end task produces two or more independent deliverables (e.g., three
 
 The mechanism is purely intra-task: it remains 1 task = 1 AGY delegation; `run/monitoring.md`, contracts and `validate-routing.mjs` remain intact.
 
-### New Flags
+### Flags
 
-| Flag | Behavior |
-|---|---|
-| `--agy-parallel` | Forces fan-out on all AGY tasks in the execution. AGY decides the count. |
-| `--agy-subagent-model <model>` | Model of Gemini sub-agents. Implies `--agy-parallel`. Default: `inherit` (inherits `agyModel`). |
+| Flag | Behavior | Legacy alias |
+|---|---|---|
+| `--model <model>` | Model of the front-end executor. | `--agy-model` |
+| `--parallel` | Forces fan-out on all AGY tasks in the execution. AGY decides the count. | `--agy-parallel` |
+| `--subagent-model <model>` | Model of Gemini sub-agents. Implies `--parallel`. Default: `inherit` (inherits the main model). | `--agy-subagent-model` |
+
+Legacy aliases are still accepted silently and behave identically.
 
 ### Examples
 
 ```text
 # Fan-out forced by user
-/orchestrator --agy-parallel "Create three independent React components: Header, Sidebar and Footer"
+/orchestrator --parallel "Create three independent React components: Header, Sidebar and Footer"
 
 # Pro Planner coordinating Flash sub-agents
-/orchestrator --agy-model gemini-3.1-pro-low --agy-subagent-model gemini-3.5-flash-medium \
+/orchestrator --model gemini-3.1-pro-low --subagent-model gemini-3.5-flash-medium \
   "Generate two HTML reports: taxes on electric cars and combustion cars"
 
 # Automatic heuristic (orchestrator decides)
@@ -270,7 +290,7 @@ Dependent deliverables or those sharing state remain in the single AGY sub-agent
 - `agyParallelSource: user|heuristic`
 - `agySubagentModel: <model>|inherit`
 
-Models accepted in `--agy-model` and `--agy-subagent-model`:
+Models accepted in `--model` and `--subagent-model`:
 
 | Model | Tier |
 |---|---|

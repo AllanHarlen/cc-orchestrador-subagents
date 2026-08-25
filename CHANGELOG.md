@@ -2,11 +2,23 @@
 
 ## [Unreleased]
 
+### Superfície de comando unificada e legível
+
+Os três plugins do pipeline (`/pensador` → `/orquestrador` → `/executor`) passam a compartilhar a mesma gramática de subcomandos e o mesmo vocabulário de flags, em inglês. A interface deixou de ficar enterrada sob política: `commands/orchestrator.md` começa por Sinopse, Subcomandos reservados e Flags, e a política de seleção de modelo, cota e sandbox — que estava duplicada do `SKILL.md` e de `references/agent-stack.md` — virou um ponteiro para a fonte única.
+
+- **Renomeado:** o alias em português passou de `/orchestrador` para `/orquestrador` (grafia correta). O nome do plugin permanece `cc-orchestrador-subagents`.
+- **Novos subcomandos:** `help` (imprime a superfície) e `status [runId]` (estado read-only do run, via `orchestration-state.mjs status`). `config` passa a valer como alias de `project-config`.
+- **Flags renomeadas**, com os nomes antigos aceitos em silêncio e com efeito idêntico: `--agy-model` → `--model`, `--agy-parallel` → `--parallel`, `--agy-subagent-model` → `--subagent-model`.
+- `argument-hint` passa a declarar a superfície completa, incluindo os subcomandos que antes só existiam no corpo do arquivo (`knowledge curate|render|audit|backups|history-project`, `telemetry otlp-preview|otlp-export`).
+- O corpo do alias não enumera mais flags: ele delega ao canônico e repassa `$ARGUMENTS` na íntegra. Era essa duplicação que fazia os dois arquivos derivarem a cada renomeação — `tests/docs-subcommands.test.mjs` agora falha se ela voltar.
+- Corrigido `QUOTA_EXAUSTED` → `QUOTA_EXHAUSTED` (o `reasonCode` estava grafado sem o `H` em duas linhas do comando, efeito colateral da duplicação removida).
+- `handoff-contract.md`: o `nextStage.entrypoint` passou de `/orchestrador` para `/orquestrador` nas três cópias byte-idênticas.
+
 ### Stack de agentes configurável (`project-config`)
 
 A stack deixou de ser fixa em Codex/AGY. Quatro papéis — `backendExecutor`, `frontendExecutor`, `backendReviewer`, `frontendReviewer` — cada um `codex`, `agy` ou `claude-code`, formam a Project_Config do projeto, persistida em `.orchestrator/project-config.md` e derivada por `scripts/lib/project-config.mjs`, a única fonte da verdade de perguntas, defaults, CLIs obrigatórias e roteamento. Um projeto com os quatro papéis em `claude-code` roda o workflow inteiro sem Codex nem AGY instalados; o Executor `claude-code` delega implementação a um subagente do próprio Claude Code pela ferramenta `Agent` e roda review em modo somente leitura, gravando em `review/review-final.md`/`review/review-frontend.md`.
 
-- Novo subcomando `/orchestrator project-config` (e alias `/orchestrador project-config`): mostra e altera a configuração vigente e revalida o ambiente, sem iniciar run, criar `.orchestration/<slug>/` nem ler PRD.
+- Novo subcomando `/orchestrator project-config` (e alias `/orquestrador project-config`): mostra e altera a configuração vigente e revalida o ambiente, sem iniciar run, criar `.orchestration/<slug>/` nem ler PRD.
 - Nova CLI `scripts/project-config.mjs` (`show`, `write`, `validate`, `required-clis`).
 - `preflight.mjs` publica o bloco `projectConfig` (papéis efetivos, `path`, `updatedAt`, `requiredCliSet`, `source: file|default`) e um array `warnings` no topo para reprovado opcional/MCP ausente; `failed` só contém reprovado obrigatório, decidido pelo Required_CLI_Set da Project_Config.
 - Preflight agora detecta dois MCPs opcionais — Codebase Memory MCP (`codebase-memory-mcp`) e Context7 — nenhum bloqueante; ver `references/mcp-context.md` para o protocolo de uso de cada um.

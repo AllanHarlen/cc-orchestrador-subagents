@@ -322,7 +322,7 @@ Para Antigravity/AGY (implementacao):
 - registre `agyModelSource: user|heuristic|adaptive`; a opcao `adaptive` exige `agyModelEvidence` completo;
 - quando `agyParallel: yes`, passe tambem `--parallel` ao bridge; quando `agySubagentModel` for diferente de `inherit`, passe `--subagent-model <agySubagentModel>` (implica `--parallel`);
 - por padrao (`agySubagentModel: inherit`), omita `--subagent-model`; os subagentes herdam o modelo da sessao AGY principal;
-- `--agy-subagent-model` informado pelo usuario liga `--parallel` automaticamente;
+- `--subagent-model` (alias legado: `--agy-subagent-model`) informado pelo usuario liga `--parallel` automaticamente;
 - nao trate isso como flag nativa do `agy`, porque o bridge aplica o modelo via `settings.json`.
 
 Cada prompt deve incluir:

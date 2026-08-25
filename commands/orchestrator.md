@@ -1,241 +1,101 @@
 ---
 description: Conduzir, retomar e manter um workflow multiagentico persistente que acumula conhecimento comprovado, com state machine, lifecycle, worktrees, validacao deterministica, telemetria e learning
-argument-hint: "resume [runId] | preflight | project-config | knowledge <status|search|pin|archive|rollback> | telemetry <report|compact> | [flags] <PRD/especificacao>"
+argument-hint: "help | preflight | project-config | status [runId] | resume [runId] | knowledge <sub> | telemetry <sub> | [--model <id>] [--parallel] [--subagent-model <id>] <PRD>"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
 
 # /orchestrator
 
-Inicia o **Orquestrador Multiagentico de Desenvolvimento** a partir de um PRD ou especificacao ja pronta fornecida pelo usuario. O orquestrador **nao faz discovery nem planejamento**: ele ingere a especificacao como fonte da verdade e orquestra os subagentes. O workflow cobre:
+Orquestra um **PRD ou especificacao ja pronta** com subagentes, do preflight ate a entrega auditada. Nao faz discovery nem planejamento: a especificacao fornecida e a fonte da verdade. Para produzir a especificacao, use `/pensador`; para uma resolucao rapida sem cerimonia, use `/executor`.
 
-0. Preflight, resolucao da configuracao de stack do projeto e instalacao assistida das dependencias ausentes
+Alias em portugues: `/orquestrador`.
+
+## Sinopse
+
+```text
+/orchestrator <PRD>                    orquestra uma especificacao pronta
+/orchestrator help                     esta ajuda
+/orchestrator preflight                valida dependencias e encerra
+/orchestrator project-config           mostra/altera a stack de agentes do projeto
+/orchestrator status [runId]           estado consolidado do run
+/orchestrator resume [runId]           retoma o run sem presumir resultado
+/orchestrator knowledge <sub>          memoria, historico e learned recipes
+/orchestrator telemetry <sub>          produtividade/qualidade, metadata-only
+
+flags (antes do PRD, em qualquer ordem):
+  --model <id>           modelo do executor de front-end
+  --parallel             fan-out de subagentes no executor de front-end
+  --subagent-model <id>  modelo dos subagentes (implica --parallel)
+```
+
+## Subcomandos reservados
+
+Interceptam o argumento: se `$ARGUMENTS` comeca com um destes, o PRD **nao** e ingerido.
+
+| Subcomando | O que faz | Executa |
+|---|---|---|
+| `help` | imprime a Sinopse acima e encerra | nada |
+| `preflight` | valida apenas as dependencias | `scripts/preflight.mjs` |
+| `project-config` | mostra/altera a stack de agentes e revalida, sem iniciar run | `project-config.mjs show`/`write` + preflight |
+| `config` | alias de `project-config` | idem |
+| `status [runId]` | estado do run (sem runId, o mais recente) | `orchestration-state.mjs status` |
+| `resume [runId]` | retoma o run exato sem assumir resultado de task interrompida | `orchestration-state.mjs resume` |
+| `knowledge status` | resume memoria, historico, recipes e Curator | `orchestrator-knowledge.mjs` + `orchestration-learning.mjs` |
+| `knowledge search <query>` | busca FTS5 cross-run | `orchestrator-knowledge.mjs history-search` |
+| `knowledge pin\|archive\|activate <recipeId>` | controla uma Learned Recipe explicitamente | `orchestration-learning.mjs recipe-*` |
+| `knowledge curate [--apply]` | lifecycle do Curator; sem `--apply` e dry-run | `orchestration-learning.mjs curate` |
+| `knowledge rollback <backupId> [--apply]` | valida/mostra ou restaura backup; sem `--apply` nao muta | `orchestration-learning.mjs rollback` |
+| `knowledge render\|audit\|backups\|history-project` | mapeiam para os comandos homonimos das CLIs | `orchestrator-knowledge.mjs` |
+| `telemetry report` | agrega produtividade/qualidade metadata-only | `orchestration-telemetry.mjs report` |
+| `telemetry compact [--retention-days N] [--apply]` | preview/aplica retencao recuperavel | `orchestration-telemetry.mjs compact` |
+| `telemetry otlp-preview\|otlp-export` | exporta metadata allowlisted; endpoint explicito, HTTPS por padrao | `orchestration-telemetry.mjs otlp-*` |
+
+`pin`/`archive`/`activate`/`rollback` exigem ID explicito; nunca escolha uma recipe ou backup por inferencia.
+
+## Flags
+
+| Flag | Valores | Default | Alias legado |
+|---|---|---|---|
+| `--model <id>` | allowlist de modelos do executor de front-end | piso por heuristica + router adaptativo | `--agy-model` |
+| `--parallel` | — | heuristica por task (2+ entregaveis independentes) | `--agy-parallel` |
+| `--subagent-model <id>` | mesma allowlist; implica `--parallel` | `inherit` | `--agy-subagent-model` |
+
+Os aliases legados continuam aceitos em silencio e produzem exatamente o mesmo efeito. A allowlist de modelos, o piso por dificuldade e as regras do router adaptativo vivem em `SKILL.md` e `references/agent-stack.md` — nao os reproduza aqui.
+
+## Regra central de execucao
+
+O Claude atua **somente como orquestrador**: mantem contexto, decide proximos passos, atualiza artefatos de coordenacao e delega implementacao. Ele nao implementa codigo diretamente e nao reabre o entendimento da demanda.
+
+Roteamento por categoria da task, respeitando a Project_Config do projeto:
+
+- Toda task `FRONTEND_ONLY` vai para o executor de front-end configurado, inclusive setup Vite/React, rotas, tipos TypeScript, servicos API e componentes simples.
+- `cc-antigravity-plugin:antigravity-agent` e **somente leitura** (analise, planejamento, review). Manda-lo implementar e erro de roteamento.
+- Codex so recebe front-end como fallback operacional registrado, depois de falha/cota do AGY ou decisao explicita do usuario.
+- Review back-end usa Codex com `--effort high`; review front-end usa `gemini-3.1-pro-high`, independente do `--model` de implementacao. Codex nunca revisa front-end.
+
+Politica de cota, de sandbox Codex e de fallback por `reasonCode` (`QUOTA_EXHAUSTED`, `AUTH_REQUIRED`, `AGY_MISSING`, `TIMEOUT`): ver `SKILL.md` e `references/agent-stack.md`. Preserve o status cru devolvido pelo bridge em `reasonCode`; nao normalize nem invente codigo.
+
+## O que o workflow cobre
+
+0. Preflight, resolucao da Project_Config e instalacao assistida das dependencias ausentes
 1. Project Memory comprovada + historico FTS5 + ingestao do PRD/especificacao
 2. Classificacao das tasks com contrato, evidence plan, scope, complexidade e features
 3. Ondas, routing adaptativo conservador e plano de worktrees
 4. Contratos API/UI e programmatic validation para toda troca front-back
-5. Delegacao paralela em worktrees elegiveis:
-   - Back-end -> `codex:codex-rescue` com `--effort medium`
-   - Front-end -> `cc-antigravity-plugin:antigravity-coder` com `--model` escolhido por heuristica ou override do usuario; quando `agyParallel: yes`, passa `--parallel` ao bridge para fan-out nativo de subagentes Gemini; quando `agySubagentModel` for diferente de `inherit`, passa tambem `--subagent-model`
+5. Delegacao paralela em worktrees elegiveis
 6. Lifecycle Manager com probes, leases, heartbeat, stall/grace e reconciliacao
 7. Integracao recuperavel e validacao deterministica de diff/escopo/wire/testes
-8. Review back-end pos-implementacao (`codex:codex-rescue` com `--effort high`; somente back-end)
-9. Review front-end pos-implementacao (`cc-antigravity-plugin:antigravity-agent` com `--model gemini-3.1-pro-high`; ignorar se nao houver front-end)
+8. Review back-end pos-implementacao (somente back-end)
+9. Review front-end pos-implementacao (ignorar se nao houver front-end)
 10. `report/workflow-log.md` + `report/subagents-context.md` + `report/implementation-report.md` + handoff
 11. Entrega duravel ainda nao publicada
 12. `learning/learning-report.md`, candidate lessons, history/telemetry, audit terminal e publicacao
 
 Cada run mantem `.orchestration/<slug>/state.json` e `events.jsonl`; o projeto mantem `.orchestrator/project-memory.md`, `knowledge.db`, `history.db`, `telemetry.jsonl` e `learned/`. Toda transicao terminal e persistida antes de ser anunciada; uma task cujo resultado nao puder ser determinado apos interrupcao fica `UNKNOWN`, nunca `FAILED` por suposicao. Memoria aceita apenas fatos com fonte comprovada, e learning nunca edita a skill automaticamente.
 
-## Regra central de execucao
+---
 
-Durante um workflow iniciado por `/orchestrator`, o Claude atua somente como orquestrador principal: mantem contexto, decide proximos passos, atualiza artefatos de coordenacao e delega implementacao para subagentes. Ele nao implementa codigo diretamente e nao reabre o entendimento da demanda — a especificacao fornecida pelo usuario e a fonte da verdade.
-
-Atividades paralelas de implementacao devem usar subagentes. Para back-end, banco, testes, ajustes pontuais, handoffs e recuperacao de falha operacional, use `codex:codex-rescue` com `--effort medium`. O review back-end usa `codex:codex-rescue` com `--effort high`, sempre deixando o modelo no padrao disponivel na conta. O review front-end usa `cc-antigravity-plugin:antigravity-agent` com `--model gemini-3.1-pro-high`. Codex nunca revisa front-end.
-
-O roteamento de implementacao segue a categoria da task. Toda task `FRONTEND_ONLY` deve ser delegada ao `cc-antigravity-plugin:antigravity-coder`, inclusive setup Vite/React, rotas, tipos TypeScript, servicos API e componentes simples. `antigravity-agent` e **somente leitura** (analise, planejamento, review) e nunca deve receber tasks de implementacao — usar `antigravity-agent` para escrever codigo e um erro de roteamento. Codex so recebe front-end como fallback operacional registrado depois de falha/cota do AGY ou decisao explicita do usuario.
-
-Tasks de front-end devem ser delegadas ao Antigravity/AGY por categoria, chamando o bridge do plugin com `--model <agyModel>`. O bridge aplica o modelo via `~/.gemini/antigravity-cli/settings.json`, sem repassar `--model` como flag nativa do `agy`.
-
-Selecao de modelo AGY:
-
-- se o usuario invocar `/orchestrator --agy-model <modelo> <demanda>`, preserve o override em todo o workflow;
-- se nao houver override, determine o piso por dificuldade e consulte o router adaptativo:
-  - padrao: `gemini-3.5-flash-medium`;
-  - tasks front-end complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou alto risco de regressao: `gemini-3.1-pro-low`;
-  - tasks criticas ou explicitamente pesadas: `gemini-3.1-pro-high`.
-- O router so pode escalar com amostra historica comparavel suficiente (`taskType` + `complexity`), nunca reduz o piso e precisa registrar `agyModelEvidence`. Sem evidencia, use a heuristica.
-- O review front-end (Fase 9) usa sempre `gemini-3.1-pro-high`, independentemente do `agyModel` de implementacao.
-
-Fan-out de subagentes AGY:
-
-- `--agy-parallel`: quando presente em `$ARGUMENTS`, registre `agyParallel: yes` e `agyParallelSource: user` em todas as tasks AGY, independente de heuristica.
-- `--agy-subagent-model <modelo>`: valide contra a allowlist de modelos AGY; registre `agySubagentModel: <modelo>` e ligue `agyParallel: yes` automaticamente (`--agy-subagent-model` implica `--agy-parallel`). Modelo sera passado como `--subagent-model <modelo>` ao bridge.
-- Sem override de usuario, o orquestrador avalia por heuristica: tasks com dois ou mais entregaveis independentes recebem `agyParallel: yes` e `agyParallelSource: heuristic`.
-- Default: `agySubagentModel: inherit` (omite `--subagent-model`; subagentes herdam `agyModel`).
-
-Modelos permitidos para `--agy-model` e `--agy-subagent-model`:
-
-- `gemini-3.5-flash-low`
-- `gemini-3.5-flash-medium`
-- `gemini-3.5-flash-high`
-- `gemini-3.1-pro-low`
-- `gemini-3.1-pro-high`
-- `claude-4.6-sonnet-thinking`
-- `claude-4.6-opus-thinking`
-- `gpt-oss-120b-medium`
-- `auto`
-
-Politica de cota:
-
-- `QUOTA_EXHAUSTED` em implementacao, ajuste pontual ou handoff via Codex: marque `BLOCKED`, registre evidencia e peca decisao ao usuario.
-- `QUOTA_EXHAUSTED` em review back-end Codex: faca fallback de review read-only pelo proprio orquestrador, sem editar codigo produtivo, e salve o resultado em `review/review-final.md`.
-- `QUOTA_EXAUSTED`/`AUTH_REQUIRED`/`AGY_MISSING`/`TIMEOUT` em review front-end AGY: faca fallback de review read-only pelo proprio orquestrador, sem editar codigo produtivo, e salve o resultado em `review/review-frontend.md`.
-- `QUOTA_EXAUSTED` no Antigravity/AGY em implementacao: registre o status cru retornado pelo bridge, o `reason`, o `model` e o retry sugerido `--continue`; avalie fallback para Codex apenas quando for seguro e documente o handoff.
-- `AUTH_REQUIRED` no Antigravity/AGY: marque bloqueio operacional e oriente o usuario a rodar `agy` interativamente uma vez.
-- `AGY_MISSING` no Antigravity/AGY: marque bloqueio operacional e mostre a remediacao de instalacao.
-- `TIMEOUT` no Antigravity/AGY: registre evidencia e decida entre aumentar timeout, reduzir escopo ou quebrar a task.
-
-Politica de sandbox Codex:
-
-- Rede externa bloqueada para pacote/restore, pacote ausente no cache local ou `UnauthorizedAccessException` fora do working directory permitido devem virar `BLOCKED`, com evidencia em `run/monitoring.md`, `report/workflow-log.md` e `report/subagents-context.md`.
-- Nao tente contornar esses limites com retries longos, troca arbitraria de ferramenta ou escrita fora do escopo.
-- Para UI sem dependencia de rede, mantenha Antigravity/AGY como rota primaria; Codex so assume front-end com fallback documentado e escrita permitida.
-
-## Argumento
-
-`$ARGUMENTS` - o PRD/especificacao a orquestrar, fornecido por mencao de arquivo (`@caminho/para/prd.md`), texto colado ou arquivo enviado. Opcionalmente pode comecar com um ou mais dos seguintes overrides (em qualquer ordem):
-
-- `--agy-model <modelo>` — modelo AGY principal de implementacao
-- `--agy-parallel` — forca fan-out de subagentes Gemini em todas as tasks AGY
-- `--agy-subagent-model <modelo>` — modelo dos subagentes Gemini (implica `--agy-parallel`)
-
-Subcomandos reservados:
-
-- `preflight` — valida apenas as dependencias;
-- `project-config` — mostra e altera a stack de agentes do projeto (`.orchestrator/project-config.md`) e revalida o ambiente, sem iniciar run;
-- `resume` — retoma o run ativo mais recentemente atualizado;
-- `resume <runId>` — retoma o run exato sem assumir o resultado de tasks interrompidas;
-- `knowledge status` — resume memoria, historico, recipes e Curator;
-- `knowledge search <query>` — busca FTS5 cross-run;
-- `knowledge pin|archive|activate <recipeId>` — controla uma Learned Recipe explicitamente;
-- `knowledge curate [--apply]` — mostra/aplica o lifecycle do Curator; sem `--apply` e sempre dry-run;
-- `knowledge rollback <backupId> [--apply]` — valida/mostra ou restaura backup; sem `--apply` nao muta;
-- `telemetry report` — agrega produtividade/qualidade metadata-only;
-- `telemetry compact [--retention-days N] [--apply]` — preview/aplica retencao recuperavel.
-
-## Execucao autonoma com `/goal`
-
-Para trabalho independente entre turnos, o modo recomendado e envolver a demanda em `/goal`.
-
-```text
-/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para orquestrar a especificacao: <PRD/spec>. Condicao de conclusao: preflight e SQLite/FTS5 OK; Project Memory auditada; especificacao ingerida; tasks classificadas com evidence plan/scope e roteamento validado; worktrees/lifecycle encerrados ou bloqueios documentados; reviews e E2E aplicaveis executados; reports/handoff e learning/learning-report.md criados; Phase 12 concluida; history/telemetry projetados; audit.complete=true; run DONE e verify OK; so entao resultados e instrucoes publicados; ou pare preservando o estado sem presumir resultado.
-```
-
-## Comportamento
-
-Quando este comando for invocado, siga esta ordem:
-
-### Modo knowledge
-
-Se o primeiro argumento for `knowledge`, este ramo substitui a execucao de PRD. Nao inicialize run nem delegue agentes. Mapeie o segundo argumento:
-
-```bash
-# status consolidado (execute os tres)
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator-knowledge.mjs" status
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator-knowledge.mjs" history-status
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" curator-status
-
-# busca historica
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator-knowledge.mjs" history-search "<query>"
-
-# lifecycle explicito de recipe
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" recipe-pin --id "<id>"
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" recipe-archive --id "<id>"
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" recipe-activate --id "<id>"
-
-# curator/rollback: preview por padrao; mutacao so com --apply do usuario
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" curate [--apply]
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" rollback --backup "<id>" [--apply]
-```
-
-`knowledge render`, `knowledge audit`, `knowledge backups` e `knowledge history-project` mapeiam para os comandos homonimos das CLIs. `pin/archive/activate/rollback` exigem ID explicito; nao escolha uma recipe/backup por inferencia. Mostre contradicoes e `needsReview`; recipe contraditoria nao pode ser aplicada.
-
-### Modo telemetry
-
-Se o primeiro argumento for `telemetry`, nao inicialize run. Mapeie `report`, `compact`, `otlp-preview` e `otlp-export` para `scripts/orchestration-telemetry.mjs`. `compact` e dry-run sem `--apply`; export OTLP exige endpoint fornecido explicitamente, usa HTTPS por padrao e envia somente metadata allowlisted.
-
-### Modo resume
-
-Se o primeiro argumento for `resume`, trate o segundo argumento, quando presente, como `runId`. Antes de qualquer nova delegacao, execute:
-
-```bash
-# Sem runId: seleciona a run ativa mais recente
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-state.mjs" resume
-
-# Com runId/slug explicito
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-state.mjs" resume "operatus-equipamento-20260814-001"
-```
-
-O comando faz replay/reparo do log, muda tasks previamente `RUNNING` para `UNKNOWN`, reconcilia Git/arquivos e retorna `resumeFromPhase`, `currentWave`, `pendingExternalProbes` e `recommendations`.
-
-Para cada `pendingExternalProbes`:
-
-1. consulte `TaskList` e as capacidades de retomada/status do subagente instalado;
-2. para Codex, correlacione pelo `sessionId`/task ID; para AGY, correlacione pelo `conversationId` e pelo retorno persistido do bridge;
-3. se a integracao nao expuser status autoritativo, mantenha `UNKNOWN` e use Git, arquivos e validacoes apenas como evidencia — nunca como prova isolada de sucesso;
-4. grave um `.orchestration/<slug>/reconciliation-probe.json` sem secrets, no formato de `references/persistent-state.md`, e rode:
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-state.mjs" reconcile \
-  --dir ".orchestration/<slug>" \
-  --probe-file ".orchestration/<slug>/reconciliation-probe.json"
-```
-
-Quando `.orchestrator/executor-control.json` existir e validar contra `executor-control-config.schema.json`, prefira a reconciliacao automatizada:
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-lifecycle.mjs" tick \
-  --dir ".orchestration/<slug>" --resume \
-  --adapter-config ".orchestrator/executor-control.json"
-```
-
-O manager persiste o retorno redigido/limitado do executor em `run/executor-results/` antes de atualizar o state. Sem adapter ou status autoritativo, mantenha `UNKNOWN`; Git/arquivos/testes sao corroboracao, nao substitutos de ownership externo.
-
-Nao redelegue task `UNKNOWN` ate confirmar que a sessao/conversation anterior nao segue ativa e avaliar mudancas parciais. Depois da reconciliacao, rode o preflight; se passar, carregue a skill e continue exatamente de `resumeFromPhase`/`currentWave`. Se o state engine retornar `RUN_NOT_FOUND`, informe o erro e encerre sem criar um run novo implicitamente.
-
-Este ramo substitui a ingestao/inicializacao de uma run nova: nao interprete `resume` como PRD, nao execute `init` novamente e nao passe pela validacao de "PRD ausente" do Passo 3. Apos preflight + carregamento da skill, salte diretamente para a fase/wave devolvida pelo state engine.
-
-Leia `references/persistent-state.md` por completo ao entrar neste modo.
-
-### Modo preflight
-
-Se `$ARGUMENTS` for exatamente `preflight`, rode apenas:
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
-```
-
-Mostre o resumo do JSON ao usuario e encerre. O relatorio ja traz o bloco `projectConfig` com os quatro papeis efetivos e o `requiredCliSet` derivado; neste modo nao colete configuracao nem ofereca instalacao.
-
-### Modo project-config
-
-Se o primeiro argumento for `project-config`, este ramo substitui a execucao de PRD. Nao inicialize run, nao crie `.orchestration/<slug>/`, nao ingira PRD nem especificacao e nao delegue agentes. Leia `references/project-config.md` por completo ao entrar neste modo.
-
-Etapa 1 - mostre a configuracao vigente e a origem (`file` = `.orchestrator/project-config.md`; `default` = padrao `codex`/`agy`/`codex`/`agy`):
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/project-config.mjs" show --root "."
-```
-
-`show` devolve `{ config, source, path, exists, requiredCliSet }`. `validate` e `required-clis` existem para checagem isolada e nunca gravam.
-
-Etapa 2 - se `show` retornar `ok: false` com erro do parser (`PROJECT_CONFIG_FIELD_MISSING`, `PROJECT_CONFIG_INVALID_VALUE`, `PROJECT_CONFIG_SCHEMA_UNSUPPORTED`, `PROJECT_CONFIG_UNPARSEABLE`), apresente o erro nomeando campo, valor recebido, conjunto aceito e caminho, e ofereca por `AskUserQuestion` a regravacao do arquivo a partir de novas respostas. Nao sobrescreva o arquivo sem confirmacao explicita.
-
-Etapa 3 - apresente as quatro perguntas de `AskUserQuestion` (`backendExecutor`, `frontendExecutor`, `frontendReviewer`, `backendReviewer`) com o texto, as descricoes de papel e a CLI exigida por opcao de `references/project-config.md`, marcando o **valor vigente** de cada papel como opcao default.
-
-Etapa 4 - grave as respostas. Papel sem resposta entra em `--default-applied` e recebe o default da referencia; omita a flag quando todos os quatro papeis foram respondidos:
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/project-config.mjs" write --root "." \
-  --backend-executor "<codex|agy|claude-code>" \
-  --frontend-executor "<codex|agy|claude-code>" \
-  --backend-reviewer "<codex|agy|claude-code>" \
-  --frontend-reviewer "<codex|agy|claude-code>" \
-  --default-applied "<papel,papel>"
-```
-
-`write` grava `updatedAt` novo e devolve `changed` (papeis alterados) e `previous`. Nunca edite `.orchestrator/project-config.md` a mao: o renderer e a unica rota de gravacao.
-
-Etapa 5 - rode o preflight uma vez, sempre, inclusive quando `changed` vier vazio:
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
-```
-
-- `changed` vazio -> informe que nenhum papel mudou e apresente o resultado da revalidacao.
-- `changed` com papeis -> apresente o novo `status`, o `projectConfig.requiredCliSet` e os itens de `failed` e `warnings`.
-
-Etapa 6 - se o preflight reprovar uma CLI do Required_CLI_Set ou o plugin do Claude Code que a conecta (`openai-codex`/`cc-antigravity-plugin`), acione o Dependency_Installer para o item reprovado, com o mesmo protocolo do Passo 1.3: uma pergunta por dependencia, execucao somente apos `instalar`, tratamento de exit code diferente de zero e novo preflight ao final. Depois disso encerre o comando; nenhuma run e iniciada.
+## Fluxo
 
 ### Passo 1 - Preflight, configuracao do projeto e instalacao assistida
 
@@ -244,8 +104,6 @@ A Fase 0 tem quatro etapas, nesta ordem: preflight, resolucao da Project_Config,
 Leia `references/project-config.md` (perguntas, defaults, roteamento derivado, protocolo do Dependency_Installer) e `references/mcp-context.md` (protocolo do CBM_MCP e do Context7_MCP) antes de conduzir estas etapas.
 
 #### Passo 1.1 - Preflight
-
-Execute:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
@@ -303,13 +161,13 @@ Com `checks.optional.mcp.codebase-memory.ok: true`, o protocolo de grafo de `ref
 
 ### Passo 3 - Validacoes leves antes da ingestao
 
-Antes dessas validacoes, parseie as flags de override no inicio de `$ARGUMENTS` (em qualquer ordem):
+Antes dessas validacoes, parseie as flags no inicio de `$ARGUMENTS` (em qualquer ordem, aceitando tambem os aliases legados da tabela de Flags):
 
-- `--agy-model <modelo>`: valide e registre `agyModelSource: user`.
-- `--agy-parallel`: registre `agyParallelSource: user` para todas as tasks AGY.
-- `--agy-subagent-model <modelo>`: valide contra a allowlist, registre `agySubagentModel: <modelo>`, ligue `agyParallel: yes` automaticamente.
+- `--model <id>`: valide contra a allowlist e registre `agyModelSource: user`.
+- `--parallel`: registre `agyParallel: yes` e `agyParallelSource: user` para todas as tasks AGY.
+- `--subagent-model <id>`: valide contra a allowlist, registre `agySubagentModel: <id>` e ligue `agyParallel: yes` automaticamente.
 
-Remova todos os prefixos reconhecidos do argumento. Se nao houver override de modelo, registre `agyModelSource: heuristic`. Se nao houver override de `--agy-parallel`, o orquestrador avalia por heuristica task a task.
+Remova todos os prefixos reconhecidos do argumento. Sem override de modelo, registre `agyModelSource: heuristic`. Sem `--parallel`, o orquestrador avalia por heuristica task a task.
 
 - Se a demanda e trivial (typo, padding, rename) -> avise que o orquestrador e overkill e ofereca executar direto.
 - Se o usuario nao forneceu um PRD/especificacao (nenhum arquivo mencionado/enviado e nenhuma spec colada) -> use `AskUserQuestion` pedindo o PRD/spec antes de continuar. O orquestrador nao inventa a especificacao.
@@ -388,6 +246,159 @@ Mantenha o usuario informado com mensagens curtas:
 - `lancei <N> subagentes em paralelo para a onda <N>, aviso quando completarem`
 - no fim: caminhos do `report/workflow-log.md`, `report/implementation-report.md`, `report/subagents-context.md` e `learning/learning-report.md` + resumo e instrucoes de negocio
 - no fim: confirme `audit.complete: true`, Phase 12, history/telemetry projetados, `runId` terminal e `verify` aprovado
+
+---
+
+## Modos
+
+Cada ramo abaixo **substitui** a execucao de PRD: nao inicialize run, nao crie `.orchestration/<slug>/`, nao ingira especificacao e nao delegue agentes.
+
+### Modo help
+
+Imprima a Sinopse, a tabela de Subcomandos reservados e a tabela de Flags. Nao rode script nenhum e encerre.
+
+### Modo preflight
+
+Se `$ARGUMENTS` for exatamente `preflight`, rode apenas:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
+```
+
+Mostre o resumo do JSON ao usuario e encerre. O relatorio ja traz o bloco `projectConfig` com os quatro papeis efetivos e o `requiredCliSet` derivado; neste modo nao colete configuracao nem ofereca instalacao.
+
+### Modo status
+
+Se o primeiro argumento for `status`, trate o segundo, quando presente, como `runId`:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-state.mjs" status
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-state.mjs" status "operatus-equipamento-20260814-001"
+```
+
+Apresente fase atual, wave, contagem de tasks por estado e pendencias. Este modo e **read-only**: nao repare log, nao reconcilie e nao mude estado — para isso existe `resume`. Se o state engine retornar `RUN_NOT_FOUND`, informe e encerre.
+
+### Modo project-config
+
+Aceita tambem `config`. Leia `references/project-config.md` por completo ao entrar neste modo.
+
+Etapa 1 - mostre a configuracao vigente e a origem (`file` = `.orchestrator/project-config.md`; `default` = padrao `codex`/`agy`/`codex`/`agy`):
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/project-config.mjs" show --root "."
+```
+
+`show` devolve `{ config, source, path, exists, requiredCliSet }`. `validate` e `required-clis` existem para checagem isolada e nunca gravam.
+
+Etapa 2 - se `show` retornar `ok: false` com erro do parser (`PROJECT_CONFIG_FIELD_MISSING`, `PROJECT_CONFIG_INVALID_VALUE`, `PROJECT_CONFIG_SCHEMA_UNSUPPORTED`, `PROJECT_CONFIG_UNPARSEABLE`), apresente o erro nomeando campo, valor recebido, conjunto aceito e caminho, e ofereca por `AskUserQuestion` a regravacao do arquivo a partir de novas respostas. Nao sobrescreva o arquivo sem confirmacao explicita.
+
+Etapa 3 - apresente as quatro perguntas de `AskUserQuestion` (`backendExecutor`, `frontendExecutor`, `frontendReviewer`, `backendReviewer`) com o texto, as descricoes de papel e a CLI exigida por opcao de `references/project-config.md`, marcando o **valor vigente** de cada papel como opcao default.
+
+Etapa 4 - grave as respostas. Papel sem resposta entra em `--default-applied` e recebe o default da referencia; omita a flag quando todos os quatro papeis foram respondidos:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/project-config.mjs" write --root "." \
+  --backend-executor "<codex|agy|claude-code>" \
+  --frontend-executor "<codex|agy|claude-code>" \
+  --backend-reviewer "<codex|agy|claude-code>" \
+  --frontend-reviewer "<codex|agy|claude-code>" \
+  --default-applied "<papel,papel>"
+```
+
+`write` grava `updatedAt` novo e devolve `changed` (papeis alterados) e `previous`. Nunca edite `.orchestrator/project-config.md` a mao: o renderer e a unica rota de gravacao.
+
+Etapa 5 - rode o preflight uma vez, sempre, inclusive quando `changed` vier vazio:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
+```
+
+- `changed` vazio -> informe que nenhum papel mudou e apresente o resultado da revalidacao.
+- `changed` com papeis -> apresente o novo `status`, o `projectConfig.requiredCliSet` e os itens de `failed` e `warnings`.
+
+Etapa 6 - se o preflight reprovar uma CLI do Required_CLI_Set ou o plugin do Claude Code que a conecta (`openai-codex`/`cc-antigravity-plugin`), acione o Dependency_Installer para o item reprovado, com o mesmo protocolo do Passo 1.3: uma pergunta por dependencia, execucao somente apos `instalar`, tratamento de exit code diferente de zero e novo preflight ao final. Depois disso encerre o comando; nenhuma run e iniciada.
+
+### Modo resume
+
+Se o primeiro argumento for `resume`, trate o segundo argumento, quando presente, como `runId`. Antes de qualquer nova delegacao, execute:
+
+```bash
+# Sem runId: seleciona a run ativa mais recente
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-state.mjs" resume
+
+# Com runId/slug explicito
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-state.mjs" resume "operatus-equipamento-20260814-001"
+```
+
+O comando faz replay/reparo do log, muda tasks previamente `RUNNING` para `UNKNOWN`, reconcilia Git/arquivos e retorna `resumeFromPhase`, `currentWave`, `pendingExternalProbes` e `recommendations`.
+
+Para cada `pendingExternalProbes`:
+
+1. consulte `TaskList` e as capacidades de retomada/status do subagente instalado;
+2. para Codex, correlacione pelo `sessionId`/task ID; para AGY, correlacione pelo `conversationId` e pelo retorno persistido do bridge;
+3. se a integracao nao expuser status autoritativo, mantenha `UNKNOWN` e use Git, arquivos e validacoes apenas como evidencia — nunca como prova isolada de sucesso;
+4. grave um `.orchestration/<slug>/reconciliation-probe.json` sem secrets, no formato de `references/persistent-state.md`, e rode:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-state.mjs" reconcile \
+  --dir ".orchestration/<slug>" \
+  --probe-file ".orchestration/<slug>/reconciliation-probe.json"
+```
+
+Quando `.orchestrator/executor-control.json` existir e validar contra `executor-control-config.schema.json`, prefira a reconciliacao automatizada:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-lifecycle.mjs" tick \
+  --dir ".orchestration/<slug>" --resume \
+  --adapter-config ".orchestrator/executor-control.json"
+```
+
+O manager persiste o retorno redigido/limitado do executor em `run/executor-results/` antes de atualizar o state. Sem adapter ou status autoritativo, mantenha `UNKNOWN`; Git/arquivos/testes sao corroboracao, nao substitutos de ownership externo.
+
+Nao redelegue task `UNKNOWN` ate confirmar que a sessao/conversation anterior nao segue ativa e avaliar mudancas parciais. Depois da reconciliacao, rode o preflight; se passar, carregue a skill e continue exatamente de `resumeFromPhase`/`currentWave`. Se o state engine retornar `RUN_NOT_FOUND`, informe o erro e encerre sem criar um run novo implicitamente.
+
+Este ramo substitui a ingestao/inicializacao de uma run nova: nao interprete `resume` como PRD, nao execute `init` novamente e nao passe pela validacao de "PRD ausente" do Passo 3. Apos preflight + carregamento da skill, salte diretamente para a fase/wave devolvida pelo state engine.
+
+Leia `references/persistent-state.md` por completo ao entrar neste modo.
+
+### Modo knowledge
+
+Mapeie o segundo argumento conforme a tabela de Subcomandos reservados:
+
+```bash
+# status consolidado (execute os tres)
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator-knowledge.mjs" status
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator-knowledge.mjs" history-status
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" curator-status
+
+# busca historica
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator-knowledge.mjs" history-search "<query>"
+
+# lifecycle explicito de recipe
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" recipe-pin --id "<id>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" recipe-archive --id "<id>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" recipe-activate --id "<id>"
+
+# curator/rollback: preview por padrao; mutacao so com --apply do usuario
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" curate [--apply]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration-learning.mjs" rollback --backup "<id>" [--apply]
+```
+
+`render`, `audit`, `backups` e `history-project` mapeiam para os comandos homonimos das CLIs. Mostre contradicoes e `needsReview`; recipe contraditoria nao pode ser aplicada.
+
+### Modo telemetry
+
+Mapeie `report`, `compact`, `otlp-preview` e `otlp-export` para `scripts/orchestration-telemetry.mjs`. `compact` e dry-run sem `--apply`; export OTLP exige endpoint fornecido explicitamente, usa HTTPS por padrao e envia somente metadata allowlisted.
+
+---
+
+## Execucao autonoma com `/goal`
+
+Para trabalho independente entre turnos, o modo recomendado e envolver a demanda em `/goal`.
+
+```text
+/goal Execute a skill cc-orchestrador-subagents:orchestrator-multi-agent-development para orquestrar a especificacao: <PRD/spec>. Condicao de conclusao: preflight e SQLite/FTS5 OK; Project Memory auditada; especificacao ingerida; tasks classificadas com evidence plan/scope e roteamento validado; worktrees/lifecycle encerrados ou bloqueios documentados; reviews e E2E aplicaveis executados; reports/handoff e learning/learning-report.md criados; Phase 12 concluida; history/telemetry projetados; audit.complete=true; run DONE e verify OK; so entao resultados e instrucoes publicados; ou pare preservando o estado sem presumir resultado.
+```
 
 ## Quando o usuario invocar sem argumento
 
