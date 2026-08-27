@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AllanHarlen/cc-orchestrador-subagents/schemas/handoff.schema.json",
+  "title": "Workflow handoff.json (Pensador -> Orchestrador -> Executor)",
+  "description": "Formal shape of handoff.json, handoffVersion 1, per references/handoff-contract.md. This file documents the contract for humans/tooling; the actual runtime validation is hand-rolled in scripts/lib/handoff-validator.mjs (validateHandoff), following the same pattern already used for orchestration-state.schema.json in cc-orchestrador-subagents \u2014 no schema-validation library dependency.",
+  "type": "object",
+  "required": [
+    "handoffVersion",
+    "stage",
+    "slug",
+    "producer",
+    "artifactRoot",
+    "status",
+    "createdAt",
+    "updatedAt",
+    "summary",
+    "upstream",
+    "artifacts",
+    "nextStage"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "handoffVersion": {
+      "const": 1
+    },
+    "stage": {
+      "enum": [
+        "pensador",
+        "orchestrador",
+        "executor"
+      ]
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifactMode": {
+      "description": "Only emitted by stage pensador; propagates prd-vs-spec to downstream consumers.",
+      "enum": [
+        "prd",
+        "spec"
+      ]
+    },
+    "producer": {
+      "type": "object",
+      "required": [
+        "plugin",
+        "version"
+      ],
+      "properties": {
+        "plugin": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "artifactRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "DONE",
+        "PARTIAL",
+        "BLOCKED"
+      ]
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "upstream": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "stage",
+            "handoffPath"
+          ],
+          "properties": {
+            "stage": {
+              "enum": [
+                "pensador",
+                "orchestrador",
+                "executor"
+              ]
+            },
+            "handoffPath": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "role",
+          "path",
+          "required"
+        ],
+        "properties": {
+          "role": {
+            "description": "Valid values depend on `stage` \u2014 see the per-stage tables in references/handoff-contract.md section 5 (HANDOFF_ROLES_BY_STAGE in handoff-validator.mjs).",
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Relative to artifactRoot, except entries explicitly relative to the project (e.g. openspec-change)."
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "verbatim": {
+            "type": "boolean"
+          },
+          "materializeInto": {
+            "type": "string"
+          },
+          "managedBy": {
+            "const": "openspec"
+          },
+          "spec": {
+            "type": "string"
+          },
+          "derivedFrom": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "object",
+            "properties": {
+              "spec": {
+                "type": "string"
+              },
+              "mock": {
+                "type": "string"
+              },
+              "validate": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "nextStage": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "consumer",
+            "entrypoint"
+          ],
+          "properties": {
+            "consumer": {
+              "type": "string",
+              "minLength": 1
+            },
+            "entrypoint": {
+              "type": "string",
+              "minLength": 1
+            },
+            "instructions": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

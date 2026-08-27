@@ -1,5 +1,63 @@
 # Changelog
 
+## [4.7.0] — 2026-08-24
+
+### Gate deterministico de cobertura RF/CA (`validate-requirements-coverage.mjs`)
+
+Achado de auditoria: a premissa central deste estagio — "o Orquestrador e obrigado a atender todos
+os criterios de aceite da spec/PRD vigente" — nao tinha nenhum respaldo deterministico.
+`completionAudit()` verifica tasks, gates, evidencia e artefatos, mas nenhum campo liga uma task ao
+`RF`/`CA` que ela implementa. A matriz de rastreabilidade da secao 13 do `implementation-report.md`
+e prosa, montada pelo mesmo agente que escreveu o codigo (Fase 7) — se a Fase 1.2 perder um `RF` ao
+extrair tasks, toda a pilha deterministica ainda devolve `complete: true` e o handoff fecha `DONE`.
+
+- `skills/orchestrator-multi-agent-development/scripts/lib/requirements-coverage.mjs` (novo):
+  `computeRequirementsCoverage(requirementsIndex, tasksClassificationMarkdown)` — confere que todo
+  `RF` do `requirements.json` do Pensador (role `requirements-index`, novo em `cc-pensador` 2.16.0)
+  esta reivindicado pelo campo `requirementIds` de pelo menos uma task. Degrada para
+  `applicable: false` (nunca falso-positivo) quando nao ha `requirements-index` no upstream — modo
+  Spec, ou handoff de versao anterior a esse role.
+- `skills/orchestrator-multi-agent-development/scripts/validate-requirements-coverage.mjs` (novo,
+  CLI, segue o padrao `executeJsonCli` de `check-prompt-budget.mjs`) + `scripts/validate-requirements-coverage.mjs`
+  (wrapper): `REQUIREMENTS_NOT_COVERED` (exit 1) reporta os `RF-XX` sem cobertura.
+- `references/workflow.md`: novo campo `requirementIds` na Fase 2, gate rodado logo apos
+  `tasks-classification.md` (barato pegar cedo) e de novo na Fase 7 (antes da matriz de
+  rastreabilidade). `SKILL.md`: novo item de checklist.
+- `tests/requirements-coverage.test.mjs` (novo, 16 testes): caminho positivo (cobertura completa,
+  degradacao correta sem `requirements-index`) e negativo (requisito derrubado detectado com o ID
+  exato, sem tasks nenhum requisito coberto, referencia a RF-ID nao relacionado nao conta) + CLI.
+
+## [4.6.0] — 2026-08-24
+
+### Schema + validador do envelope `handoff.json` (`validate-handoff.mjs`)
+
+Achado de auditoria: `handoff.json` e a "ancora unica de descoberta" entre os tres plugins do
+workflow (handoff-contract.md secao 4) — o unico sinal que distingue modo conjunto de modo
+independente — mas nenhum codigo em nenhum dos tres repositorios escrevia, lia ou validava esse
+arquivo (`grep -rn handoffVersion --include=*.mjs --include=*.json` nos tres retornava zero). Um
+produtor podia divergir do contrato em silencio (como ja havia acontecido: `feature-isolation.md`
+do Pensador sem os roles `api-contract`/`openspec-change`) sem nenhum teste pegar ate um consumidor
+falhar a achar um artefato esperado.
+
+- `skills/orchestrator-multi-agent-development/scripts/lib/handoff-validator.mjs` (novo, canonico,
+  byte-identico nos tres plugins): `validateHandoff(handoff)` colige todas as violacoes do envelope
+  numa passada — campos obrigatorios, enums de `stage`/`status`, e o vocabulario de `role` **por
+  stage** (o que teria pego o drift do `feature-isolation.md`), incluindo o caso de um role valido
+  para outro estagio ser reivindicado pelo estagio errado.
+- `skills/orchestrator-multi-agent-development/scripts/validate-handoff.mjs` (novo, CLI) +
+  `scripts/validate-handoff.mjs` (wrapper de compatibilidade): `node validate-handoff.mjs --file
+  <path>`, JSON `{ ok, file, errors[] }`, exit 0 somente com `ok: true`.
+- `skills/orchestrator-multi-agent-development/assets/handoff.schema.json` (novo): schema formal
+  documentando o envelope, mesmo padrao ja usado por `orchestration-state.schema.json` — nenhuma
+  dependencia de biblioteca de JSON Schema, so o validador escrito a mao.
+- `references/handoff-contract.md` (canonico, replicado byte-identico nos tres plugins): nova secao
+  9 documentando o validador e quando roda-lo (produtor antes de `DONE`; consumidor antes de
+  confiar num handoff descoberto).
+- `tests/handoff-validator.test.mjs` (novo, 38 testes): caminho positivo (handoff bem formado por
+  estagio, cada role valido aceito) e negativo (cada violacao especifica com o codigo certo,
+  incluindo o caso do role cruzado entre estagios) + round-trip do CLI + guarda que fixa
+  `HANDOFF_ROLES_BY_STAGE` contra as tabelas de `handoff-contract.md` secao 5.
+
 ## [4.5.0] — 2026-08-24
 
 ### Despacho direto ao Codex, prompt persistido como artefato da run, e `--check-agent-mcp` no caminho padrão

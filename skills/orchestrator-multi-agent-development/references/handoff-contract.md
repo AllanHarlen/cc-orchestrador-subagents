@@ -118,13 +118,15 @@ O consumidor nunca adivinha caminhos: descobre tudo via o `handoff.json` do esta
 |---|---|---|
 | `prd` | `prd.md` | sim (modo PRD) |
 | `userhistory` | `userhistory.md` | sim (modo PRD) |
-| `architecture` | `architecture.md` | quando houver ARCH |
+| `architecture` | `architecture.md` | **sim, sempre** (ambos os modos) — EXPLORE e ARCH rodam sempre, na ordem fixa do `STAGE_ORDER`, independente de `hasBackend`/`hasFrontend`. Carrega os dominios descobertos, decisoes conhecidas e, em brownfield, as convencoes que o consumidor deve preservar (ver `WORKFLOW.md`, regra de precedencia brownfield). |
 | `api-contract` | `openapi.yaml` / `schema.graphql` / `service.proto` / `asyncapi.yaml` | quando `backendConfirmed` — **fonte da verdade** maquina-legivel (formato por `state.apiStyle`). Carrega `validation` (`{ spec, mock, validate }`) para o consumidor subir mock (fluxo paralelo front/back) e validar o codigo contra o contrato no CI ("a spec e lei"). |
 | `communication-contract` | `communication.md` | quando `backendConfirmed` — **visao legivel derivada** do `api-contract` (`derivedFrom` aponta o arquivo fonte). Nao e a fonte da verdade. |
 | `design-system` | `design-system.md` | **somente no fallback** (front-end sem Open Design) — DESIGN.md inline das 9 secoes. Quando o Open Design e usado, o `DESIGN.md` verbatim (role `design-system-files`) substitui este doc. |
 | `design-system-files` | `design-systems/<id>/` | quando `hasFrontend` **e** um system foi selecionado — **uma entrada por `<id>` concreto** (de `state.designSystems`), relativa ao `artifactRoot` (`.pensador/<slug>-vN/`), com os arquivos verbatim (`tokens.css`, `DESIGN.md`, `components.html`, `preview/`, …). Cada entrada carrega `materializeInto` (o alvo em `state.uiPackageDir`, ex.: `packages/ui/design-systems/<id>/`) que o Orchestrador/Executor usa ao materializar os arquivos na arvore de codigo real (secao 6). |
 | `openspec-change` | `openspec/changes/<nome>/` | quando `artifactMode = spec` — change set OpenSpec (`proposal.md`, `design.md`, `tasks.md`, `specs/` — `specs/` omitido quando a mudanca declara `skip_specs: true`). **Caminho relativo ao projeto**, nao ao `artifactRoot` (gerido por `/opsx:propose`; consumidores confirmam o estado via `openspec status --change <nome> --json`, nao varredura de arquivos). Substitui `prd`/`userhistory`/`communication-contract` no modo Spec. |
-| `codebase-memory` | `codebase-memory.md` | opcional |
+| `codebase-memory` | `codebase-memory.md` | **sim, sempre** (ambos os modos) — mesma garantia de `architecture`. Mapa do codigo real (simbolos, cadeias de chamada, raio de impacto) e, em brownfield, o baseline do contrato de API existente descoberto por `contractDiscoveryGlobs()` (EXPLORE). |
+| `project-baseline` | `project-baseline.json` | **sim, sempre** (ambos os modos) — resumo estruturado, maquina-legivel, de `isGreenfield`, `techStack`, `apiStyle`, `uiPackageDir` e `existingApiContractGlobs`. Complementa `architecture`/`codebase-memory` (prosa) com campos que o consumidor pode ler direto, sem parsear Markdown, para decidir roteamento e precedencia brownfield sem re-derivar o sinal. |
+| `requirements-index` | `requirements.json` | **somente no modo PRD** — extraido deterministicamente das tabelas `RF-XX`/`CA-XX` das secoes 6 e 14 do PRD (`scripts/lib/requirements-extractor.mjs`), com o vinculo `CA -> RF` preservado. E a materia-prima do gate de cobertura RF/CA do Orquestrador (secao 5 de `references/handoff-contract.md` do Orquestrador). No modo Spec, o equivalente (`SHALL` + `#### Scenario:`) ja e exposto ao vivo por `openspec status --change <nome> --json`; sem `requirements-index` (Spec, ou handoff de versao anterior), o gate degrada e registra a degradacao — nunca finge cobertura. |
 | `shared-agents` | `shared-agents/` | opcional |
 
 ### Orchestrador (`stage: orchestrador`)
@@ -185,7 +187,7 @@ grava VERBATIM em                     MATERIALIZA em (via materializeInto)
 1. Procure `.pensador/*/handoff.json`. Para multiplos `slug`, confirme com o usuario qual demanda implementar via `AskUserQuestion`.
 2. Para o mesmo `slug` com varias versoes `-vN`, **use a maior versao** (mais recente). Confirme via `AskUserQuestion` se houver duvida.
 3. Sem `handoff.json`: leia `.pensador/<slug>-vN/.pensador-progress.json` (`checkpointVersion: 2`) e o array `artifacts`.
-4. **Modo PRD** — ingira na ordem: `prd` → `userhistory` → `architecture` → `api-contract` → `communication-contract` → `design-system`/`design-system-files`. Use o `api-contract` (maquina-legivel) como **fonte da verdade** dos contratos API/UI da Fase 4 — suba o mock a partir dele e valide contra ele no CI (campo `validation`); o `communication-contract` e apenas a visao legivel. Trate o PRD/spec como **fonte da verdade**: **nao** reabra discovery nem replaneje.
+4. **Modo PRD** — ingira na ordem: `prd` → `userhistory` → `architecture` → `codebase-memory` → `project-baseline` → `requirements-index` → `api-contract` → `communication-contract` → `design-system`/`design-system-files`. Use o `api-contract` (maquina-legivel) como **fonte da verdade** dos contratos API/UI da Fase 4 — suba o mock a partir dele e valide contra ele no CI (campo `validation`); o `communication-contract` e apenas a visao legivel. Use `project-baseline` (`isGreenfield`, `techStack`, `apiStyle`, `uiPackageDir`) em vez de re-derivar esses sinais; quando ausente (handoff de versao anterior a `project-baseline`), re-derive e registre a degradacao. Use `requirements-index` (`requirements.json`) como a lista de `RF`/`CA` que a Fase 2 tem de cobrir integralmente ao classificar tasks — e a materia-prima do gate de cobertura da secao 5 do handoff contract do Orquestrador; sem ele (modo Spec, ou handoff antigo), derive a lista lendo o PRD/spec diretamente e registre a degradacao. Trate o PRD/spec como **fonte da verdade**: **nao** reabra discovery nem replaneje.
 5. **Modo Spec (OpenSpec)** — a `role` `openspec-change` aponta `openspec/changes/<nome>/`. Ingira `proposal.md`, `design.md`, `tasks.md` e `specs/` (quando presente — omitido sob `skip_specs`; pode estar aninhado em `specs/<area>/<capability>/spec.md`); confirme via `openspec status --change <nome> --json` antes de assumir completude. Derive a classificacao de tasks a partir de `tasks.md` preservando IDs/ordem (incluindo subtarefas aninhadas). O contrato de API esta dobrado em `design.md` + `specs/` (nao ha `api-contract` standalone).
 6. **Design (Open Design), quando houver front-end** — materialize os arquivos verbatim de `design-system-files` conforme secao 6 e trate-os como contrato visual do front-end. Se so houver o fallback `design-system.md` (sem Open Design), use-o como referencia inline.
 
@@ -206,3 +208,13 @@ grava VERBATIM em                     MATERIALIZA em (via materializeInto)
 - O consumidor nunca edita artefatos do produtor; ele referencia e produz os seus.
 - Quando `status: BLOCKED` no upstream, o consumidor para e pede decisao do usuario antes de prosseguir.
 - Este arquivo e a fonte da verdade do handoff e deve permanecer **byte-identico** nos tres plugins.
+
+## 9. Validacao estrutural (`validate-handoff.mjs`)
+
+O envelope descrito nas secoes 4-5 tem um schema formal (`assets/handoff.schema.json`) e um validador executavel, byte-identicos nos tres plugins (`scripts/lib/handoff-validator.mjs`, exporta `validateHandoff(handoff)` — colige todas as violacoes numa passada, incluindo `artifacts[].role` fora do vocabulario da `stage` declarada, o modo de falha que este arquivo documentava sem nenhum codigo checar). Rode antes de gravar `status: "DONE"` (produtor) e antes de confiar num handoff descoberto (consumidor):
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/validate-handoff.mjs" --file <caminho/para/handoff.json>
+```
+
+Saida JSON `{ ok, file, errors[] }`; exit code 0 somente quando `ok: true`. Escopo: `handoffVersion: 1` (secao 4) — valida a forma estrutural do envelope (campos obrigatorios, enums de `stage`/`status`, vocabulario de `role` por `stage`, consistencia `upstream`/`nextStage`), nao invariantes de negocio do estagio produtor (essas continuam na state machine de cada plugin).

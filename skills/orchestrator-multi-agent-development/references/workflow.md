@@ -138,7 +138,14 @@ Para cada task extraida do PRD/spec, registre em `.orchestration/<nome>/plan/tas
 - `expectedFiles` e/ou `validationPlan` (ao menos um e obrigatorio para reconciliacao);
 - `allowedPaths` para validar escopo e decidir isolamento;
 - `complexity`, `contractIds` e features de routing;
+- `requirementIds` — a lista de `RF-XX` do `requirements-index` do Pensador que esta task implementa (quando houver `requirements.json` no upstream; formato livre — `requirementIds: RF-01, RF-02` — o gate abaixo so precisa achar os IDs em algum lugar do texto da task);
 - para AGY, `agyModel`, `agyModelSource` e, quando adaptativo, `agyModelEvidence`.
+
+Depois de escrever `plan/tasks-classification.md`, rode o gate de cobertura RF/CA (quando houver `requirements-index` no upstream) **antes** de montar as ondas — pegar um `RF` sem task aqui e mais barato do que descobrir na Fase 7:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/validate-requirements-coverage.mjs"   --requirements ".pensador/<slug>-vN/requirements.json"   --tasks ".orchestration/<nome>/plan/tasks-classification.md"
+```
 
 ### Regra de roteamento por categoria
 
@@ -513,6 +520,14 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-telemetry.mjs" project --dir ".o
 Nao gere projeto de testes automatizados como parte da integracao. A validacao de que cada requisito (`RF`/`CA`) foi implementado corretamente e responsabilidade do review de codigo (Fases 8 e 9), nao de uma suite de testes.
 
 **Monte a matriz de rastreabilidade RF/CA → evidência aqui, nao no relatorio final.** Percorra cada `RF`/`CA` do escopo da especificacao e registre, em `report/implementation-report.md` secao 13, a task que o implementou e o arquivo/trecho de evidencia. Um `RF` sem entrega correspondente (ou com `// TODO`/placeholder/stub no caminho do requisito) e uma lacuna que precisa ser **sinalizada agora** — nao silenciosamente absorvida como "lacuna conhecida" no relatorio final sem passar pelo gate de review. Essa matriz alimenta diretamente as Fases 8 e 9.
+
+**Gate deterministico de cobertura RF/CA.** A matriz acima e prosa, montada pelo mesmo agente que escreveu o codigo — sozinha, ela nao pega um `RF` que a Fase 1.2 perdeu ao extrair tasks. Quando o handoff do Pensador trouxe `requirements-index` (role `requirements-index`, `requirements.json`, modo PRD), rode o gate deterministico antes de fechar esta fase:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/validate-requirements-coverage.mjs"   --requirements ".pensador/<slug>-vN/requirements.json"   --tasks ".orchestration/<nome>/plan/tasks-classification.md"
+```
+
+Ele confere que todo `RF` do `requirements.json` esta reivindicado pelo campo `requirementIds` de pelo menos uma task (Fase 2). Sem `requirements-index` no upstream (modo Spec, ou handoff de versao anterior a esse role), o gate degrada para `applicable: false` e nao bloqueia — a cobertura fica so com a matriz de prosa nesse caso, e isso deve ser registrado em `report/workflow-log.md` como limitacao. `REQUIREMENTS_NOT_COVERED` (exit 1) e um achado de lacuna real: volte a Fase 1.2/2 e adicione a task que falta, nunca ignore o `RF` silenciosamente.
 
 Se precisar ajuste, delegue para Codex com `--effort medium` (back-end) ou AGY (front-end), conforme a categoria.
 

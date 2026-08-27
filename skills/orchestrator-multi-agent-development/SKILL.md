@@ -332,6 +332,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] validacao de wire format e serializacao registrada
 - [ ] politica de quota aplicada corretamente
 - [ ] `report/implementation-report.md` secao 13 (matriz RF/CA -> evidencia) preenchida para **todo** RF/CA do escopo, montada na Fase 7 (nao retroativamente); `// TODO`/placeholder/stub no caminho de um RF do escopo tratado como achado CRITICO nas Fases 8/9, nao como "lacuna conhecida" silenciosa
+- [ ] quando o upstream trouxe `requirements-index` (`requirements.json`, modo PRD): `validate-requirements-coverage.mjs` executado apos a Fase 2 (antes das ondas) e de novo na Fase 7 — todo `RF` reivindicado por `requirementIds` de pelo menos uma task; `REQUIREMENTS_NOT_COVERED` tratado como lacuna real, nunca ignorado. Sem `requirements-index` (Spec, ou handoff antigo), a degradacao (`applicable: false`) esta registrada em `report/workflow-log.md`
 - [ ] `review/review-final.md` criado (review back-end), inclusive em fallback interno; N/A se nao houver back-end
 - [ ] `review/review-frontend.md` criado (review front-end pelo AGY com `--read-only --format json --model pro-high --effort high`), inclusive em fallback interno; N/A se nao houver front-end
 - [ ] quando houver design system: prompts front-end carregam os caminhos de `tokens.css`/`components.html`/`design-system.md` (ou `design.md` + `specs/ui-design-system/` no modo Spec) e o diretorio `preview/`
@@ -389,3 +390,5 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - `scripts/orchestration-router.mjs`
 - `scripts/orchestration-telemetry.mjs`
 - `scripts/orchestration-learning.mjs`
+- `scripts/validate-handoff.mjs`
+- `scripts/validate-requirements-coverage.mjs`
