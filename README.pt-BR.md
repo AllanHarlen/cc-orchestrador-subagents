@@ -59,7 +59,7 @@ Os artefatos de coordenação e relatórios finais ficam em `.orchestration/<nom
 
 - **Premissa de uso:** o orquestrador só atua com PRD/spec já pronta. Ele não faz discovery, não cria plano e não reinterpreta a demanda.
 - **Codex revisa apenas back-end;** AGY (`pro-high`) revisa apenas front-end.
-- **Fan-out AGY:** `--agy-parallel` e `--agy-subagent-model` ativam subagentes Gemini nativos dentro da task AGY. Requer `cc-antigravity-plugin >= 4.0.0`.
+- **Fan-out AGY:** `--parallel` e `--subagent-model` ativam subagentes Gemini nativos dentro da task AGY. Requer `cc-antigravity-plugin >= 4.0.0`.
 - **Modelo AGY:** override do usuário e piso heurístico são soberanos; histórico comparável só pode escalar com amostra mínima e `agyModelEvidence`. O review usa sempre `pro-high`.
 - **Memória comprovada:** somente fontes `FILE`, `CONTRACT`, `TEST` aprovado, `RUN_EVENT` e `USER` entram na Project Memory; conflitos/stale são excluídos.
 - **Código para mecânica:** três ou mais reads/greps, loops e comparações repetitivas usam `scripts/intelligence`, com JSON compacto e evidence ID.
@@ -112,7 +112,10 @@ O orquestrador não inventa a demanda. Forneça o PRD/spec de uma destas formas:
 /orchestrator "Implemente o fluxo de reservas conforme: <cole aqui a especificação completa>"
 
 # Com override de modelo AGY
-/orchestrator --agy-model pro-low @docs/prd-reservas.md
+/orchestrator --model pro-low @docs/prd-reservas.md
+
+# Em português (alias)
+/orquestrador @docs/prd-reservas.md
 ```
 
 Se nenhum PRD/spec for fornecido, o orquestrador pede a especificação antes de continuar.
@@ -174,6 +177,22 @@ node scripts/orchestration-learning.mjs curator-status
 
 Também estão disponíveis no slash command: `/orchestrator knowledge status`, `knowledge search`, `knowledge pin`, `knowledge archive`, `knowledge curate`, `knowledge rollback`, `telemetry report` e `telemetry compact`. Operações de Curator/retention são dry-run sem `--apply`; OTLP é opt-in e metadata-only.
 
+### Superfície completa do comando
+
+| Subcomando | O que faz |
+|---|---|
+| `help` | imprime a sinopse, os subcomandos e as flags |
+| `preflight` | valida dependências e encerra |
+| `project-config` (alias `config`) | mostra/altera a stack de agentes do projeto e revalida |
+| `status [runId]` | estado do run, read-only (sem `runId`, o mais recente) |
+| `resume [runId]` | retoma o run sem presumir resultado de task interrompida |
+| `knowledge <sub>` | `status`, `search`, `pin`, `archive`, `activate`, `curate`, `rollback`, `render`, `audit`, `backups`, `history-project` |
+| `telemetry <sub>` | `report`, `compact`, `otlp-preview`, `otlp-export` |
+
+`/orquestrador` é o alias em português e aceita exatamente a mesma superfície. A grafia anterior `/orchestrador` foi renomeada.
+
+As flags são `--model`, `--parallel`, `--subagent-model`, `--effort` e `--timeout`. Os nomes antigos com prefixo `--agy-` (`--agy-model`, `--agy-parallel`, `--agy-subagent-model`, `--agy-effort`, `--agy-timeout`) continuam aceitos como aliases legados silenciosos, com comportamento idêntico.
+
 A separação é deliberada: o LLM toma decisões novas; scripts determinísticos validam mecânica; history/Recipes recuperam decisões já comprovadas; Project Memory fornece contexto estável; Codex/AGY implementam.
 
 ### O que versionar
@@ -228,7 +247,7 @@ Política padrão (implementação):
 - `flash-medium` para a maioria das tasks;
 - `pro-low` para tasks complexas, multi-rota, multi-arquivo, com contrato API/UI delicado ou risco alto de regressão;
 - `pro-high` apenas em casos críticos;
-- override manual disponível em `/orchestrator --agy-model <modelo> <demanda>`.
+- override manual disponível em `/orchestrator --model <modelo> <demanda>`.
 
 Sem override, essa política define o **piso**. O router adaptativo pode escalar quando há amostra comparável suficiente por tipo/complexidade, usando first-pass success, review failures, regressões, duração e intervalo Wilson. Ele nunca rebaixa o piso, nunca explora aleatoriamente tasks críticas e registra a decisão em `agyModelEvidence`.
 
@@ -244,19 +263,19 @@ O mecanismo é puramente intra-task: continua sendo 1 task = 1 delegação AGY; 
 
 | Flag | Comportamento |
 |---|---|
-| `--agy-parallel` | Força fan-out em todas as tasks AGY da execução. O AGY decide a contagem. |
-| `--agy-subagent-model <modelo>` | Modelo dos subagentes Gemini. Implica `--agy-parallel`. Default: `inherit` (herda `agyModel`). |
-| `--agy-effort <low|medium|high>` | Override opcional de effort na implementação; o review permanece em `high`. |
-| `--agy-timeout <duração>` | Timeout de silêncio de toda delegação AGY, inclusive review, como `300s` ou `5m`. |
+| `--parallel` | Força fan-out em todas as tasks AGY da execução. O AGY decide a contagem. |
+| `--subagent-model <modelo>` | Modelo dos subagentes Gemini. Implica `--parallel`. Default: `inherit` (herda `agyModel`). |
+| `--effort <low|medium|high>` | Override opcional de effort na implementação; o review permanece em `high`. |
+| `--timeout <duração>` | Timeout de silêncio de toda delegação AGY, inclusive review, como `300s` ou `5m`. |
 
 ### Exemplos
 
 ```text
 # Fan-out forçado pelo usuário
-/orchestrator --agy-parallel "Crie três componentes React independentes: Header, Sidebar e Footer"
+/orchestrator --parallel "Crie três componentes React independentes: Header, Sidebar e Footer"
 
 # Planejador Pro coordenando subagentes Flash
-/orchestrator --agy-model pro-low --agy-subagent-model flash-medium \
+/orchestrator --model pro-low --subagent-model flash-medium \
   "Gere dois relatórios HTML: impostos em carros elétricos e em carros a combustão"
 
 # Heurística automática (orquestrador decide)

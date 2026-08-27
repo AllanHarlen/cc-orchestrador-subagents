@@ -95,7 +95,7 @@ Esse arquivo e a **ancora unica de descoberta**: o consumidor le o `handoff.json
   ],
   "nextStage": {
     "consumer": "cc-orchestrador-subagents",
-    "entrypoint": "/orchestrador",
+    "entrypoint": "/orquestrador",
     "instructions": "Ingerir os artefatos e implementar o plano."
   }
 }

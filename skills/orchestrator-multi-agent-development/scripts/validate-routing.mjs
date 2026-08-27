@@ -485,7 +485,7 @@ function validateBlock(source, block, categoryByTask) {
     }
 
     if (frontend && !agyModel) {
-      errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModel/--agy-model/--model.`);
+      errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModel/--model (alias legado: --agy-model).`);
     }
 
     if (frontend && agyModel && !validModelToken(agyModel)) {

@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.8.0] — 2026-08-27
+
+### Reconciliacao da superficie unificada com o contrato Antigravity 4 e cobertura RF/CA
+
+Esta versao integra a linha remota 4.6.0 de comandos com as entregas locais 4.6.0–4.7.0,
+eliminando a colisao de versoes e preservando ambos os conjuntos de mudancas:
+
+- Alias em portugues corrigido de `/orchestrador` para `/orquestrador`.
+- Novos subcomandos `help` e `status [runId]`; `config` tambem funciona como alias de
+  `project-config`.
+- Flags publicas unificadas em `--model`, `--parallel`, `--subagent-model`, `--effort` e
+  `--timeout`, mantendo os nomes `--agy-*` como aliases legados.
+- Mantidos o contrato Antigravity 4, o validador de `handoff.json` e o gate deterministico de
+  cobertura RF/CA da linha local.
+
 ## [4.7.0] — 2026-08-24
 
 ### Gate deterministico de cobertura RF/CA (`validate-requirements-coverage.mjs`)

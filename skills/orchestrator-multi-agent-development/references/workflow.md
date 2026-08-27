@@ -367,7 +367,7 @@ Para Antigravity/AGY (implementacao):
 - registre `agyModelSource: user|heuristic|adaptive`; a opcao `adaptive` exige `agyModelEvidence` completo;
 - quando `agyParallel: yes`, passe tambem `--parallel` ao bridge; quando `agySubagentModel` for diferente de `inherit`, passe `--subagent-model <agySubagentModel>` (implica `--parallel`);
 - por padrao (`agySubagentModel: inherit`), omita `--subagent-model`; os subagentes herdam o modelo da sessao AGY principal;
-- `--agy-subagent-model` informado pelo usuario liga `--parallel` automaticamente;
+- `--subagent-model` (alias legado: `--agy-subagent-model`) informado pelo usuario liga `--parallel` automaticamente;
 - o bridge consulta `agy models`, resolve aliases e encaminha `--model` nativamente; nao leia nem altere `settings.json` do usuario;
 - eventos NDJSON `init`, `step_update` e `result` que chegarem ao adapter renovam heartbeat somente com atividade observavel; persista apenas contadores e metadados seguros.
 
