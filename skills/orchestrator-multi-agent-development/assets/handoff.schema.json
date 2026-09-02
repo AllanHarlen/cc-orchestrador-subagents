@@ -27,6 +27,7 @@
       "enum": [
         "pensador",
         "orchestrador",
+        "testador",
         "executor"
       ]
     },
@@ -97,6 +98,7 @@
               "enum": [
                 "pensador",
                 "orchestrador",
+                "testador",
                 "executor"
               ]
             },

@@ -32,7 +32,7 @@
 /** `HANDOFF_VERSION` this validator understands. A different value degrades — see validateHandoff(). */
 export const SUPPORTED_HANDOFF_VERSION = 1;
 
-export const HANDOFF_STAGES = Object.freeze(["pensador", "orchestrador", "executor"]);
+export const HANDOFF_STAGES = Object.freeze(["pensador", "orchestrador", "testador", "executor"]);
 
 export const HANDOFF_STATUSES = Object.freeze(["DONE", "PARTIAL", "BLOCKED"]);
 
@@ -77,6 +77,23 @@ export const HANDOFF_ROLES_BY_STAGE = Object.freeze({
     "subagents-context",
     "monitoring",
     "screenshots",
+  ]),
+  testador: Object.freeze([
+    "test-plan",
+    "coverage-matrix",
+    "flow-map",
+    "test-report",
+    "a11y-report",
+    "uiux-report",
+    "coverage-report",
+    "design-conformance",
+    "specs",
+    "playwright-report",
+    "screenshots",
+    "monitoring",
+    "workflow-log",
+    "subagents-context",
+    "implementation-report",
   ]),
 });
 

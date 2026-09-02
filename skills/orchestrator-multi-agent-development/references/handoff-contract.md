@@ -1,6 +1,6 @@
-# Handoff Contract — Pensador → Orchestrador → Executor
+# Handoff Contract — Pensador → Orchestrador → Testador → Executor
 
-Contrato de atuacao conjunta entre os tres plugins do workflow de desenvolvimento. Define os papeis de cada estagio, como cada um publica seus artefatos e como o estagio seguinte os descobre, le e confia neles. **Este documento e identico nos tres plugins** (`cc-pensador`, `cc-orchestrador-subagents`, `cc-executor-subagents`) e e a **fonte da verdade** do handoff. Qualquer alteracao aqui deve ser replicada verbatim nos tres repositorios.
+Contrato de atuacao conjunta entre os quatro plugins do workflow de desenvolvimento. Define os papeis de cada estagio, como cada um publica seus artefatos e como o estagio seguinte os descobre, le e confia neles. **Este documento e identico nos quatro plugins** (`cc-pensador`, `cc-orchestrador-subagents`, `cc-testador-subagents`, `cc-executor-subagents`) e e a **fonte da verdade** do handoff. Qualquer alteracao aqui deve ser replicada verbatim nos quatro repositorios.
 
 `HANDOFF_VERSION = 1`.
 
@@ -9,18 +9,19 @@ Contrato de atuacao conjunta entre os tres plugins do workflow de desenvolviment
 ## 1. Cadeia do workflow e papeis
 
 ```text
-Pensador               Orchestrador                   Executor
-(PENSA)         ─────▶  (CONSTROI)             ─────▶  (CORRIGE + AJUSTES FINOS)
-PRD / Spec /            planeja, delega e              review plano-vs-entrega,
-Open Design             implementa em ondas            correcoes e validacao final
-.pensador/              .orchestration/                .executor/
+Pensador               Orchestrador          Testador                  Executor
+(PENSA)         ─────▶  (CONSTROI)    ─────▶  (VALIDA EM NAVEGADOR) ─▶  (CORRIGE)
+PRD / Spec /            planeja, delega       testa E2E, a11y,            corrige o que o
+Open Design             e implementa          UI/UX e rastreabilidade     Testador reprovou
+.pensador/              .orchestration/       .testador/                  .executor/
 ```
 
 | Estagio | Papel | Verbo | Responsabilidade central |
 |---|---|---|---|
 | **Pensador** (`cc-pensador`) | Pensa | Elaborar | Transforma a demanda em PRD ou Spec (OpenSpec) + artefatos de produto, arquitetura, contrato de API e design (Open Design). Nao implementa codigo. |
 | **Orchestrador** (`cc-orchestrador-subagents`) | Constroi | Implementar | Ingere os artefatos do Pensador (ou um PRD/spec avulso), classifica tasks, monta ondas, gera contratos front-back, delega a Codex/AGY em paralelo, integra e revisa. Usado para **desenvolvimento complexo**. |
-| **Executor** (`cc-executor-subagents`) | Corrige e faz os ajustes finos | Refinar/validar | Ingere a entrega do Orchestrador como baseline, faz review plano-vs-entrega (Codex high), aplica correcoes, hotfixes, ajustes finos e validacao. Usado para **features pequenas, hotfix e o polimento final** do que o Orchestrador construiu. |
+| **Testador** (`cc-testador-subagents`) | Valida em navegador real | Validar/homologar | Ingere a entrega do Orchestrador, valida em navegador real via Playwright MCP, confere requisitos rastreaveis (RF/CA, Scenarios do OpenSpec, tokens do Open Design) e devolve um laudo ao Executor. Read-only sobre codigo de producao. |
+| **Executor** (`cc-executor-subagents`) | Corrige e faz os ajustes finos | Refinar/corrigir | Ingere o laudo do Testador (ou a entrega do Orchestrador quando o Testador nao rodou) como baseline, faz review plano-vs-entrega, aplica correcoes, hotfixes, ajustes finos e validacao. |
 
 Cada estagio e **produtor** para o proximo e **consumidor** do anterior. Nenhum estagio reabre o trabalho do anterior: ele **confia**, referencia e produz a sua propria camada.
 
@@ -34,9 +35,10 @@ Cada plugin funciona **isoladamente** (recebendo a demanda direto do usuario) **
 |---|---|---|
 | **Pensador** | `/pensador <demanda>` — sempre a origem da cadeia. `upstream = null`. | — (primeiro estagio, nunca tem upstream) |
 | **Orchestrador** | `/orquestrador "Desenvolva um CRUD de clientes"` — o usuario fornece a demanda/PRD/spec direto (via `@arquivo` ou texto). O orquestrador trata o texto/arquivo como fonte da verdade. | Detecta `.pensador/*/handoff.json` (`stage: pensador`, `status: DONE`) e ingere PRD/Spec + contrato + design como fonte da verdade, sem re-planejar. Ver secao 7. |
-| **Executor** | `/executor <demanda de resolucao rapida>` — feature pequena ou hotfix, com ou sem plano pre-definido no proprio enunciado. | Detecta `.orchestration/<slug>/report/handoff.json` (`stage: orchestrador`) e o adota como **plano pre-definido baseline** para review plano-vs-entrega, correcoes e ajustes finos. Ver secao 7. |
+| **Testador** | `/testador <alvo avulso>` — demanda de validacao independente de entrega especifica. | Detecta `.orchestration/<slug>/report/handoff.json` (`stage: orchestrador`, `status: DONE`) e valida a entrega do Orchestrador. Ver secao 7. |
+| **Executor** | `/executor <demanda de resolucao rapida>` — feature pequena ou hotfix, com ou sem plano pre-definido no proprio enunciado. | Detecta `.testador/<slug>/artefatos/handoff.json` (`stage: testador`) — preferencial. Fallback para `.orchestration/<slug>/report/handoff.json` quando o Testador nao rodou. Ver secao 7. |
 
-Regra de deteccao (consumidor): antes de tratar a demanda como independente, procure o `handoff.json` do estagio anterior no caminho que a secao 7 define para esse estagio especifico. Se existir e estiver `DONE`, entre em **modo conjunto**; se nao existir, siga **independente**. Em duvida (varios slugs/versoes), confirme via `AskUserQuestion`.
+Regra de deteccao (consumidor): antes de tratar a demanda como independente, procure o `handoff.json` do estagio anterior no caminho que a secao 7 define para esse estagio especifico. Se existir e estiver `DONE` (ou `PARTIAL`/`BLOCKED` — ver secao 8), entre em **modo conjunto**; se nao existir, siga **independente**. Em duvida (varios slugs/versoes), confirme via `AskUserQuestion`.
 
 ---
 
@@ -46,17 +48,19 @@ Regra de deteccao (consumidor): antes de tratar a demanda como independente, pro
 |---|---|---|
 | Pensador | `.pensador/<slug>-vN/` | `slug` + versao local `-vN` |
 | Orchestrador | `.orchestration/<slug>/` | `slug` (sem versao) |
-| Executor | `.executor/<demanda_slug>/artefatos/` | `demanda_slug` da demanda de review |
+| Testador | `.testador/<slug>/artefatos/` | `slug` da entrega validada |
+| Executor | `.executor/<demanda_slug>/artefatos/` | `demanda_slug` da demanda de correcao |
 
 Regra absoluta: **nenhum artefato `.md`/`.json` de coordenacao na raiz do projeto**. Tudo vive sob a raiz oculta do estagio. Excecao unica: o change set do OpenSpec (`openspec/changes/<nome>/`), que e gerido por `/opsx:propose` e vive na arvore padrao do OpenSpec (specs podem estar aninhadas: `specs/<area>/<capability>/spec.md`) — o `handoff.json` do produtor o referencia como caminho relativo ao projeto (ver secao 5).
 
 ### Correlacao por `slug`
 
-O `slug` e a chave que liga os tres estagios. Deriva da demanda original (kebab-case, sem acentos). O Pensador acrescenta `-vN`; o Orchestrador e o Executor usam o `slug` base (sem `-vN`). Exemplo real:
+O `slug` e a chave que liga os estagios. Deriva da demanda original (kebab-case, sem acentos). O Pensador acrescenta `-vN`; os demais usam o `slug` base (sem `-vN`). Exemplo real:
 
 ```text
 .pensador/locadora-veiculos-multitenant-v1/   (slug = locadora-veiculos-multitenant, v1)
 .orchestration/locadora-veiculos-multitenant/ (mesmo slug, sem versao)
+.testador/locadora-veiculos-multitenant/artefatos/ (mesmo slug)
 .executor/review-locadora-veiculos-.../        (demanda_slug proprio do review)
 ```
 
@@ -68,16 +72,17 @@ Cada produtor grava um `handoff.json` ao concluir. O nome do arquivo e sempre `h
 
 - **Pensador:** raiz de `artifactRoot` — `.pensador/<slug>-vN/handoff.json`.
 - **Orchestrador:** agrupado sob `report/` (layout v2, que reune todo artefato de categoria "report") — `.orchestration/<slug>/report/handoff.json`. Runs em layout anterior ao v2 tem o arquivo na raiz.
-- **Executor:** raiz de `artefatos_dir` — `.executor/<slug>/artefatos/handoff.json`. Como o Executor e o ultimo estagio, esse arquivo nao tem consumidor a jusante.
+- **Testador:** raiz de `artefatos_dir` — `.testador/<slug>/artefatos/handoff.json`.
+- **Executor:** raiz de `artefatos_dir` — `.executor/<slug>/artefatos/handoff.json`. Como o Executor e o ultimo estagio, esse arquivo nao tem consumidor a jusante quando `nextStage: null`.
 
-Esse arquivo e a **ancora unica de descoberta**: o consumidor le o `handoff.json` do estagio anterior, no caminho que essa lista define para aquele estagio, antes de qualquer outra coisa. Nao existe um caminho unico valido para os tres estagios — nunca assuma que o caminho de um estagio vale para outro.
+Esse arquivo e a **ancora unica de descoberta**: o consumidor le o `handoff.json` do estagio anterior, no caminho que essa lista define para aquele estagio, antes de qualquer outra coisa. Nao existe um caminho unico valido para os quatro estagios — nunca assuma que o caminho de um estagio vale para outro.
 
 ### Envelope comum
 
 ```json
 {
   "handoffVersion": 1,
-  "stage": "pensador | orchestrador | executor",
+  "stage": "pensador | orchestrador | testador | executor",
   "slug": "locadora-veiculos-multitenant",
   "producer": { "plugin": "cc-pensador", "version": "2.9.0" },
   "artifactRoot": ".pensador/locadora-veiculos-multitenant-v1",
@@ -143,6 +148,25 @@ O consumidor nunca adivinha caminhos: descobre tudo via o `handoff.json` do esta
 | `subagents-context` | `report/subagents-context.md` | sim |
 | `openspec-change` | `openspec/changes/<nome>/` | quando OpenSpec for usado (relativo ao projeto; `specs/` opcional sob `skip_specs`) |
 
+### Testador (`stage: testador`)
+| role | arquivo padrao | required |
+|---|---|---|
+| `test-plan` | `plan/test-plan.md` | sim |
+| `coverage-matrix` | `plan/coverage-matrix.json` | sim |
+| `flow-map` | `plan/flow-map.json` | sim |
+| `test-report` | `review/test-report.md` | sim |
+| `a11y-report` | `review/a11y-report.md` | quando houver front-end |
+| `uiux-report` | `review/uiux-report.md` | quando houver front-end |
+| `coverage-report` | `review/coverage-report.md` | quando houver requisito formal |
+| `design-conformance` | `review/design-conformance.json` | quando houver Open Design |
+| `specs` | `run/specs/` | quando specs forem gerados |
+| `playwright-report` | `run/playwright-report/` | quando Playwright rodar |
+| `screenshots` | `review/screenshots/` | quando houver evidencia visual |
+| `monitoring` | `run/monitoring.md` | sim |
+| `workflow-log` | `report/workflow-log.md` | sim |
+| `subagents-context` | `report/subagents-context.md` | sim |
+| `implementation-report` | `report/implementation-report.md` | sim |
+
 ### Executor (`stage: executor`)
 | role | arquivo padrao | required |
 |---|---|---|
@@ -176,6 +200,7 @@ grava VERBATIM em                     MATERIALIZA em (via materializeInto)
 
 - O Pensador **nunca** escreve na arvore de codigo real; persiste os arquivos dentro da pasta da feature. Cada entrada `design-system-files` do `handoff.json` do Pensador (raiz de `.pensador/<slug>-vN/`) carrega `materializeInto` com o alvo real.
 - O **Orchestrador** (modo conjunto ou quando recebe design via PRD/spec) **materializa** os arquivos em `materializeInto`, passa `tokens.css`/`components.html`/`DESIGN.md` (ou `design.md` + `specs/ui-design-system/spec.md` no modo Spec) e o diretorio `preview/` no prompt de toda task front-end, e aplica o **gate de design** no review: `tokens.css` consumido via `var(--*)` (nunca hex literal), accent contido (≤ 2x por pagina), telas-chave conferidas contra `preview/`, anti-padroes da secao 9 do DESIGN.md ausentes. Violacao de requisito explicito e **BLOQUEANTE**.
+- O **Testador** VALIDA a conformidade de token e anti-padroes contra a proposta inicial do Pensador: confere que o codigo materializado usa `var(--*)` (nunca hex literal), que nenhum token foi inventado ("never invent new tokens"), e que as telas-chave correspondem ao `preview/`. Achados sao bloqueantes por violacao de requisito explicito (secao 5 deste documento).
 - O **Executor** consome o mesmo contrato visual ao corrigir/ajustar o front-end: nao reinventa tokens, respeita `tokens.css` e valida a fidelidade contra `preview/`.
 - Regra inviolavel herdada do Open Design: **never invent new tokens.** Divergencia justificada vira override documentado (na secao *Decisions* do `design.md` no modo Spec, ou nota no `handoff.json` do Pensador no modo PRD), nunca um valor solto no `theme.ts`.
 
@@ -191,12 +216,20 @@ grava VERBATIM em                     MATERIALIZA em (via materializeInto)
 5. **Modo Spec (OpenSpec)** — a `role` `openspec-change` aponta `openspec/changes/<nome>/`. Ingira `proposal.md`, `design.md`, `tasks.md` e `specs/` (quando presente — omitido sob `skip_specs`; pode estar aninhado em `specs/<area>/<capability>/spec.md`); confirme via `openspec status --change <nome> --json` antes de assumir completude. Derive a classificacao de tasks a partir de `tasks.md` preservando IDs/ordem (incluindo subtarefas aninhadas). O contrato de API esta dobrado em `design.md` + `specs/` (nao ha `api-contract` standalone).
 6. **Design (Open Design), quando houver front-end** — materialize os arquivos verbatim de `design-system-files` conforme secao 6 e trate-os como contrato visual do front-end. Se so houver o fallback `design-system.md` (sem Open Design), use-o como referencia inline.
 
-### Executor ingere Orchestrador (modo conjunto)
-1. Procure `.orchestration/<slug>/report/handoff.json` — o Orchestrador agrupa `handoff.json` sob `report/` desde o layout v2 (secao 4). Caia para `.orchestration/<slug>/handoff.json` (raiz) apenas em runs anteriores a esse layout.
-2. Adote a entrega do Orchestrador como **plano pre-definido baseline**: registre `plano_predefinido: true`, preserve o conteudo relevante em `{artefatos_dir}/initial-plan-baseline.md` e execute o review plano-vs-entrega (Codex high) comparando o baseline com o estado atual do codigo. As correcoes e ajustes finos derivam desse review.
+### Testador ingere Orchestrador (modo conjunto)
+1. Procure `.orchestration/<slug>/report/handoff.json` — o Orchestrador agrupa `handoff.json` sob `report/` desde o layout v2. Caia para `.orchestration/<slug>/handoff.json` (raiz) apenas em runs anteriores a esse layout.
+2. Adote a entrega do Orchestrador como **baseline de validacao**: preserve o conteudo relevante em `{artefatos_dir}/ingested-baseline.md`.
 3. Sem `handoff.json`: leia `.orchestration/<slug>/report/implementation-report.md` + `.orchestration/<slug>/plan/tasks-classification.md` + `.orchestration/<slug>/plan/waves.md` + `.orchestration/<slug>/contracts/`.
-4. Para rastreabilidade, siga `upstream` ate o `handoff.json` do Pensador (raiz de `.pensador/<slug>-vN/` — nao leva o prefixo `report/`, que e especifico do layout do Orchestrador) e use o `prd`/`api-contract`/`communication-contract` como baseline de referencia do review; use `design-system-files` como criterio visual dos ajustes de front-end.
-5. Registre as fontes em `plano_predefinido_fonte` e `plano_predefinido` no `.executor/checkpoint.json`.
+4. Para rastreabilidade, siga `upstream` ate o `handoff.json` do Pensador (raiz de `.pensador/<slug>-vN/` — nao leva o prefixo `report/`, que e especifico do layout do Orchestrador) e use `prd`/`api-contract`/`requirements-index` como criterio de cobertura e `design-system-files` como criterio visual.
+5. O `test-report.md` do Testador, quando o laudo for `REPROVADO`, serve como plano de correcao para o Executor seguinte: `nextStage.instructions` orienta o Executor a usar `{artefatos_dir}/review/test-report.md` como `plano_predefinido`.
+
+### Executor ingere Testador (modo conjunto — preferencial) ou Orchestrador (fallback quando Testador nao rodou)
+1. **Preferencial:** procure `.testador/<slug>/artefatos/handoff.json` (`stage: testador`).
+2. **Fallback:** se nao existir, procure `.orchestration/<slug>/report/handoff.json` (`stage: orchestrador`). Caia para `.orchestration/<slug>/handoff.json` (raiz) apenas em runs anteriores ao layout v2 do Orchestrador.
+3. Adote o handoff encontrado como **plano pre-definido baseline**: registre `plano_predefinido: true`, preserve o conteudo relevante em `{artefatos_dir}/initial-plan-baseline.md` e execute o review plano-vs-entrega (Codex high) comparando o baseline com o estado atual do codigo. As correcoes e ajustes finos derivam desse review.
+4. Sem `handoff.json` de nenhum dos dois: leia `.orchestration/<slug>/report/implementation-report.md` + `.orchestration/<slug>/plan/tasks-classification.md` + `.orchestration/<slug>/plan/waves.md` + `.orchestration/<slug>/contracts/`.
+5. Para rastreabilidade, siga `upstream` ate o `handoff.json` do Pensador (raiz de `.pensador/<slug>-vN/`) e use o `prd`/`api-contract`/`communication-contract` como baseline de referencia do review; use `design-system-files` como criterio visual dos ajustes de front-end.
+6. Registre as fontes em `plano_predefinido_fonte` e `plano_predefinido` no `.executor/checkpoint.json`.
 
 ---
 
@@ -207,11 +240,11 @@ grava VERBATIM em                     MATERIALIZA em (via materializeInto)
 - O produtor nunca escreve dentro da raiz de outro estagio.
 - O consumidor nunca edita artefatos do produtor; ele referencia e produz os seus.
 - Quando `status: BLOCKED` no upstream, o consumidor para e pede decisao do usuario antes de prosseguir.
-- Este arquivo e a fonte da verdade do handoff e deve permanecer **byte-identico** nos tres plugins.
+- Este arquivo e a fonte da verdade do handoff e deve permanecer **byte-identico** nos quatro plugins.
 
 ## 9. Validacao estrutural (`validate-handoff.mjs`)
 
-O envelope descrito nas secoes 4-5 tem um schema formal (`assets/handoff.schema.json`) e um validador executavel, byte-identicos nos tres plugins (`scripts/lib/handoff-validator.mjs`, exporta `validateHandoff(handoff)` — colige todas as violacoes numa passada, incluindo `artifacts[].role` fora do vocabulario da `stage` declarada, o modo de falha que este arquivo documentava sem nenhum codigo checar). Rode antes de gravar `status: "DONE"` (produtor) e antes de confiar num handoff descoberto (consumidor):
+O envelope descrito nas secoes 4-5 tem um schema formal (`assets/handoff.schema.json`) e um validador executavel, byte-identicos nos quatro plugins (`scripts/lib/handoff-validator.mjs`, exporta `validateHandoff(handoff)` — colige todas as violacoes numa passada, incluindo `artifacts[].role` fora do vocabulario da `stage` declarada, o modo de falha que este arquivo documentava sem nenhum codigo checar). Rode antes de gravar `status: "DONE"` (produtor) e antes de confiar num handoff descoberto (consumidor):
 
 ```bash
 node "${CLAUDE_SKILL_DIR}/scripts/validate-handoff.mjs" --file <caminho/para/handoff.json>
