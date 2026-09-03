@@ -78,6 +78,27 @@ function validOrchestradorHandoff(overrides = {}) {
   };
 }
 
+function validTestadorHandoff(overrides = {}) {
+  return {
+    handoffVersion: 1,
+    stage: "testador",
+    slug: "login-social",
+    producer: { plugin: "cc-testador-subagents", version: "1.0.0" },
+    artifactRoot: ".testador/login-social/artefatos",
+    status: "DONE",
+    createdAt: "2026-06-20T08:00:00.000Z",
+    updatedAt: "2026-06-20T10:00:00.000Z",
+    summary: "Validacao aprovada: 0 achados bloqueantes.",
+    upstream: { stage: "orchestrador", handoffPath: ".orchestration/login-social/report/handoff.json" },
+    artifacts: [
+      { role: "test-report", path: "review/test-report.md", required: true },
+      { role: "monitoring", path: "run/monitoring.md", required: true },
+    ],
+    nextStage: { consumer: "cc-executor-subagents", entrypoint: "/executor" },
+    ...overrides,
+  };
+}
+
 function validExecutorHandoff(overrides = {}) {
   return {
     handoffVersion: 1,
@@ -129,7 +150,13 @@ test("accepts status PARTIAL/BLOCKED when summary actually explains the gap", ()
 test("accepts every role declared for each stage in HANDOFF_ROLES_BY_STAGE", () => {
   for (const stage of HANDOFF_STAGES) {
     for (const role of HANDOFF_ROLES_BY_STAGE[stage]) {
-      const base = stage === "pensador" ? validPensadorHandoff() : stage === "orchestrador" ? validOrchestradorHandoff() : validExecutorHandoff();
+      const base = stage === "pensador"
+        ? validPensadorHandoff()
+        : stage === "orchestrador"
+          ? validOrchestradorHandoff()
+          : stage === "testador"
+            ? validTestadorHandoff()
+            : validExecutorHandoff();
       const result = validateHandoff({ ...base, artifacts: [{ role, path: "x", required: true }] });
       assert.equal(result.ok, true, `role ${role} should be valid for stage ${stage}: ${JSON.stringify(result.errors)}`);
     }
@@ -263,7 +290,7 @@ function extractStageRoles(contractText, stageHeading) {
   const rest = contractText.slice(start);
   const nextHeading = rest.indexOf("\n### ", 1);
   const section = nextHeading === -1 ? rest : rest.slice(0, nextHeading);
-  return new Set([...section.matchAll(/^\|\s*`([a-z-]+)`\s*\|/gm)].map((m) => m[1]));
+  return new Set([...section.matchAll(/^\|\s*`([a-z0-9-]+)`\s*\|/gm)].map((m) => m[1]));
 }
 
 test("HANDOFF_ROLES_BY_STAGE.pensador matches the contract table", () => {
@@ -274,6 +301,11 @@ test("HANDOFF_ROLES_BY_STAGE.pensador matches the contract table", () => {
 test("HANDOFF_ROLES_BY_STAGE.orchestrador matches the contract table", () => {
   const contractText = readFileSync(CONTRACT_PATH, "utf8");
   assert.deepEqual(new Set(HANDOFF_ROLES_BY_STAGE.orchestrador), extractStageRoles(contractText, "### Orchestrador (`stage: orchestrador`)"));
+});
+
+test("HANDOFF_ROLES_BY_STAGE.testador matches the contract table", () => {
+  const contractText = readFileSync(CONTRACT_PATH, "utf8");
+  assert.deepEqual(new Set(HANDOFF_ROLES_BY_STAGE.testador), extractStageRoles(contractText, "### Testador (`stage: testador`)"));
 });
 
 test("HANDOFF_ROLES_BY_STAGE.executor matches the contract table", () => {

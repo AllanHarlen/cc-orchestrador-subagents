@@ -678,7 +678,7 @@ Ao fechar, grave `.orchestration/<slug>/report/handoff.json` com:
 - `handoffVersion: 1`, `stage: "orchestrador"`, `slug` (sem `-vN`), `producer` (plugin + version), `artifactRoot: ".orchestration/<slug>"`, `status` (`DONE`/`PARTIAL`/`BLOCKED`), `summary`, timestamps.
 - `upstream`: em modo conjunto, aponta o `handoff.json` do Pensador (`.pensador/<slug>-vN/handoff.json`); em modo independente, `null`.
 - `artifacts[]`: uma entrada por role do vocabulario Orchestrador (secao 5 do handoff contract) — `implementation-report`, `tasks-classification`, `waves`, `api-contracts`, `review-final`, `review-frontend`, `monitoring`, `workflow-log`, `subagents-context` (+ `openspec-change` quando aplicavel), com `path` relativo ao `artifactRoot`.
-- `nextStage`: `consumer: "cc-executor-subagents"`, `entrypoint: "/executor"`, `instructions` orientando review plano-vs-entrega e ajustes finos.
+- `nextStage`: a cadeia de quatro estagios (`handoff-contract.md` secao 1) tem o Testador entre o Orchestrador e o Executor — aponte para ele por padrao: `consumer: "cc-testador-subagents"`, `entrypoint: "/testador"`, `instructions` orientando a validar a entrega em navegador real via Playwright MCP. Se o plugin `cc-testador-subagents` nao estiver instalado no marketplace do workspace (verifique `.claude-plugin/` ou pergunte ao usuario quando em duvida), degrade para `consumer: "cc-executor-subagents"`, `entrypoint: "/executor"`, `instructions` orientando review plano-vs-entrega e ajustes finos diretamente — e registre essa degradacao no `report/workflow-log.md`.
 
 O relatorio final deve citar:
 

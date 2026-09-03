@@ -27,8 +27,8 @@ test("release and preflight declare the Antigravity 4 compatibility floor", () =
   const plugin = JSON.parse(read(".claude-plugin/plugin.json"));
   const marketplace = JSON.parse(read(".claude-plugin/marketplace.json"));
   const preflight = read("skills/orchestrator-multi-agent-development/scripts/preflight.mjs");
-  assert.equal(plugin.version, "4.8.0");
-  assert.equal(marketplace.plugins[0].version, "4.8.0");
+  assert.equal(plugin.version, "4.8.1");
+  assert.equal(marketplace.plugins[0].version, "4.8.1");
   assert.match(preflight, /MIN_ANTIGRAVITY_PLUGIN_VERSION = "4\.0\.0"/);
   assert.match(preflight, /MIN_AGY_VERSION = "1\.1\.8"/);
   assert.match(preflight, /RECOMMENDED_AGY_VERSION = "1\.1\.16"/);

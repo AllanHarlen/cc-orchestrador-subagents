@@ -244,7 +244,7 @@ grava VERBATIM em                     MATERIALIZA em (via materializeInto)
 
 ## 9. Validacao estrutural (`validate-handoff.mjs`)
 
-O envelope descrito nas secoes 4-5 tem um schema formal (`assets/handoff.schema.json`) e um validador executavel, byte-identicos nos quatro plugins (`scripts/lib/handoff-validator.mjs`, exporta `validateHandoff(handoff)` — colige todas as violacoes numa passada, incluindo `artifacts[].role` fora do vocabulario da `stage` declarada, o modo de falha que este arquivo documentava sem nenhum codigo checar). Rode antes de gravar `status: "DONE"` (produtor) e antes de confiar num handoff descoberto (consumidor):
+O envelope descrito nas secoes 4-5 tem um schema formal (`assets/handoff.schema.json`) e um validador executavel (`scripts/lib/handoff-validator.mjs`, exporta `validateHandoff(handoff)` — colige todas as violacoes numa passada, incluindo `artifacts[].role` fora do vocabulario da `stage` declarada, o modo de falha que este arquivo documentava sem nenhum codigo checar), presentes nos quatro plugins. Diferente deste arquivo (secao 8, byte-identico por exigencia), o schema e o validador **nao** sao byte-identicos entre plugins: cada `HANDOFF_ROLES_BY_STAGE` e coberto por teste proprio contra a tabela de secoes 4-5 deste contrato (garantindo equivalencia semantica), e o validador tem divergencias pontuais documentadas e intencionais por estagio (ex.: regra de `nextStage` do Executor, estagio terminal, difere da regra do Testador). Rode antes de gravar `status: "DONE"` (produtor) e antes de confiar num handoff descoberto (consumidor):
 
 ```bash
 node "${CLAUDE_SKILL_DIR}/scripts/validate-handoff.mjs" --file <caminho/para/handoff.json>

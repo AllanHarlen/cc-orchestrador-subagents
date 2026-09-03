@@ -1,5 +1,26 @@
 # Changelog
 
+## [4.8.1] — 2026-09-03
+
+### `nextStage` roteia para o Testador por padrao; suite do handoff-validator alinhada
+
+Uma sincronizacao anterior trouxe `testador` para `HANDOFF_STAGES`/`HANDOFF_ROLES_BY_STAGE`
+(dados), mas `references/workflow.md` continuava com `nextStage.consumer` fixo em
+`cc-executor-subagents` — a instrucao executiva ignorava o novo estagio que o proprio contrato
+(`handoff-contract.md` secao 1) descreve entre Orquestrador e Executor. `test/handoff-validator.test.mjs`
+tinha a mesma lacuna de cobertura do `cc-pensador` (ver changelog dele na mesma data).
+
+- `skills/orchestrator-multi-agent-development/references/workflow.md` (alterado): Fases 10-12,
+  ao gravar `report/handoff.json`, `nextStage` agora aponta `consumer: "cc-testador-subagents"`,
+  `entrypoint: "/testador"` por padrao; degrada para `cc-executor-subagents`/`/executor` (e
+  registra a degradacao) apenas quando o plugin Testador nao esta instalado no workspace.
+- `tests/handoff-validator.test.mjs` (alterado): mesma correcao de `cc-pensador` — fixture
+  `validTestadorHandoff()`, ternario de 4 ramos, regex `[a-z0-9-]+`, teste de alinhamento com a
+  tabela do contrato para `testador`. `npm test`: 258 passed, 0 failed.
+- `skills/orchestrator-multi-agent-development/references/handoff-contract.md` (alterado,
+  replicado nos quatro plugins): secao 9 corrigida — nao afirma mais byte-identidade de
+  schema/validador entre plugins (ver changelog de `cc-pensador`).
+
 ## [4.8.0] — 2026-08-27
 
 ### Reconciliacao da superficie unificada com o contrato Antigravity 4 e cobertura RF/CA
