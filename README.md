@@ -74,6 +74,30 @@ Coordination artifacts and final reports live under `.orchestration/<name>/`.
 - **Codex Sandbox:** external network blocked for packages/restore, missing package in local cache or write outside allowed working directory becomes `BLOCKED` with evidence.
 - **AGY Limit on Windows:** AGY prompts above 28,000 chars are divided into subtasks by deliverables before delegation to avoid `ENAMETOOLONG`.
 
+## Installation
+
+Local:
+
+```text
+/plugin marketplace add "C:\Users\allan\Desktop\Projetos Pessoais\cc-plugins-allan\cc-orchestrador-subagents"
+/plugin install cc-orchestrador-subagents@cc-orchestrador-subagents
+```
+
+GitHub:
+
+```text
+/plugin marketplace add AllanHarlen/cc-orchestrador-subagents
+/plugin install cc-orchestrador-subagents@cc-orchestrador-subagents
+```
+
+Validate:
+
+```text
+/orchestrator preflight
+```
+
+See "Official Dependencies" below for the optional Codex/AGY CLIs and plugins required only by the roles you configure.
+
 ## Official Dependencies
 
 The minimum runtime is **Node.js 22.13.0**, where `node:sqlite` is available without the experimental CLI flag, plus SQLite FTS5. Preflight blocks execution without this capability **regardless of agent stack configuration**, because `knowledge.db`, `history.db`, Recipes, and adaptive routing depend on it.

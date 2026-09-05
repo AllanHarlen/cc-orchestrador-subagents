@@ -74,6 +74,30 @@ Os artefatos de coordenação e relatórios finais ficam em `.orchestration/<nom
 - **Sandbox Codex:** rede externa bloqueada para pacotes/restore, pacote ausente no cache local ou escrita fora do working directory permitido viram `BLOCKED` com evidência.
 - **Limite AGY no Windows:** prompts AGY acima de 28.000 chars são divididos em subtasks por entregáveis antes da delegação para evitar `ENAMETOOLONG`.
 
+## Instalação
+
+Local:
+
+```text
+/plugin marketplace add "C:\Users\allan\Desktop\Projetos Pessoais\cc-plugins-allan\cc-orchestrador-subagents"
+/plugin install cc-orchestrador-subagents@cc-orchestrador-subagents
+```
+
+GitHub:
+
+```text
+/plugin marketplace add AllanHarlen/cc-orchestrador-subagents
+/plugin install cc-orchestrador-subagents@cc-orchestrador-subagents
+```
+
+Validar:
+
+```text
+/orchestrator preflight
+```
+
+Veja "Dependências oficiais" abaixo para as CLIs/plugins opcionais do Codex/AGY, exigidos apenas pelos papéis que você configurar.
+
 ## Dependências oficiais
 
 O runtime mínimo é **Node.js 22.13.0**, no qual `node:sqlite` está disponível sem a flag experimental de CLI, além de SQLite FTS5. O preflight bloqueia a execução quando essa capacidade não existe, **independente da configuração de stack**, porque `knowledge.db`, `history.db`, Recipes e routing adaptativo dependem dela.
