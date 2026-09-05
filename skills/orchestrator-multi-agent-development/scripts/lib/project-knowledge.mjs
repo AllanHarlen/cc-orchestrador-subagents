@@ -275,21 +275,33 @@ function normalizeDisplayValue(value) {
   return stableJson(value);
 }
 
+const RUN_EVENT_SCAN_SIZE_LIMIT_BYTES = 64 * 1024 * 1024;
+
+// Returns `{ event, skippedOversized }` rather than a bare event so a caller
+// that gets `event: null` can tell "genuinely not found" apart from "an
+// events.jsonl over the size limit was skipped, so this may be a false
+// negative" (N-18) — the two used to be indistinguishable.
 export function findDurableRunEvent(projectRoot, sourceRef, expectedRunId = null) {
   const orchestrationRoot = join(resolve(projectRoot), ".orchestration");
-  if (!existsSync(orchestrationRoot)) return null;
+  if (!existsSync(orchestrationRoot)) return { event: null, skippedOversized: [] };
   const eventId = String(sourceRef)
     .replace(/^event:/i, "")
     .split(/[#:]/)
     .at(-1)
     .trim();
-  if (!eventId) return null;
+  if (!eventId) return { event: null, skippedOversized: [] };
   const directories = readdirSync(orchestrationRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => join(orchestrationRoot, entry.name));
+  const skippedOversized = [];
   for (const directory of directories) {
     const path = join(directory, "events.jsonl");
-    if (!existsSync(path) || statSync(path).size > 64 * 1024 * 1024) continue;
+    if (!existsSync(path)) continue;
+    const size = statSync(path).size;
+    if (size > RUN_EVENT_SCAN_SIZE_LIMIT_BYTES) {
+      skippedOversized.push({ path, size });
+      continue;
+    }
     for (const line of readFileSync(path, "utf8").split(/\r?\n/).filter(Boolean)) {
       try {
         const event = JSON.parse(line);
@@ -297,14 +309,14 @@ export function findDurableRunEvent(projectRoot, sourceRef, expectedRunId = null
           event.eventId === eventId &&
           (!expectedRunId || event.runId === expectedRunId)
         ) {
-          return event;
+          return { event, skippedOversized };
         }
       } catch {
         // A corrupt run is handled by the State Engine; it cannot validate a fact.
       }
     }
   }
-  return null;
+  return { event: null, skippedOversized };
 }
 
 function validateEvidence(projectRoot, input) {
@@ -344,11 +356,14 @@ function validateEvidence(projectRoot, input) {
     }
     sourceHash = sha256(stableJson({ sourceRef, result, payload }));
   } else if (kind === "RUN_EVENT") {
-    const event = findDurableRunEvent(projectRoot, sourceRef, input.runId ?? null);
+    const { event, skippedOversized } = findDurableRunEvent(projectRoot, sourceRef, input.runId ?? null);
     if (!event) {
+      const oversizedNote = skippedOversized.length > 0
+        ? ` (${skippedOversized.length} events.jsonl file(s) over the ${RUN_EVENT_SCAN_SIZE_LIMIT_BYTES / (1024 * 1024)}MB scan limit were skipped and not searched — this may be a false negative: ${skippedOversized.map((s) => s.path).join(", ")})`
+        : "";
       throw new ProjectKnowledgeError(
         "RUN_EVENT_EVIDENCE_NOT_FOUND",
-        `Durable run event was not found: ${sourceRef}`,
+        `Durable run event was not found: ${sourceRef}${oversizedNote}`,
       );
     }
     normalizedRef = `event:${event.runId}:${event.eventId}`;
@@ -637,7 +652,7 @@ export function auditKnowledgeSources(projectRoot, options = {}) {
         let currentHash;
         if (row.kind === "RUN_EVENT") {
           const parts = String(row.source_ref).split(":");
-          const event = findDurableRunEvent(root, row.source_ref, parts.length >= 3 ? parts[1] : null);
+          const { event } = findDurableRunEvent(root, row.source_ref, parts.length >= 3 ? parts[1] : null);
           valid = event != null;
           currentHash = event ? sha256(stableJson(event)) : null;
         } else {

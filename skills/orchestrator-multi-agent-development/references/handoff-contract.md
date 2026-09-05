@@ -102,6 +102,13 @@ Esse arquivo e a **ancora unica de descoberta**: o consumidor le o `handoff.json
     "consumer": "cc-orchestrador-subagents",
     "entrypoint": "/orquestrador",
     "instructions": "Ingerir os artefatos e implementar o plano."
+  },
+  "waiver": {
+    "owner": "Produto",
+    "motivo": "Por que o waiver foi necessario",
+    "impacto": "O que fica sem cobertura por causa dele",
+    "validade": "2026-12-31T00:00:00.000Z",
+    "condicaoDeReabertura": "O que precisa acontecer para reabrir/revalidar"
   }
 }
 ```
@@ -111,6 +118,7 @@ Esse arquivo e a **ancora unica de descoberta**: o consumidor le o `handoff.json
 - `artifacts[].path` e **relativo a `artifactRoot`**, exceto entradas explicitamente marcadas como relativas ao projeto (ex.: `openspec-change`).
 - `artifacts[].role` segue o vocabulario por estagio (secao 5).
 - `status: BLOCKED` ou `PARTIAL` deve trazer `summary` explicando o bloqueio; o consumidor entao pergunta ao usuario antes de prosseguir.
+- `waiver` (WF-010, opcional): so valido quando `status` e `PARTIAL` ou `BLOCKED`. E o registro estruturado de um risco formalmente aceito — distinto de `summary` (uma frase para humano): `owner` (quem aceitou o risco), `motivo`, `impacto`, `validade` (timestamp ISO 8601 ou `null` quando sem prazo) e `condicaoDeReabertura`. Nem todo `PARTIAL`/`BLOCKED` tem um waiver — as vezes e so trabalho em aberto sem uma decisao formal de risco aceito por tras.
 
 O consumidor nunca adivinha caminhos: descobre tudo via o `handoff.json` do estagio anterior, no local que a secao 4 define para aquele estagio. Se estiver ausente (execucao de versao antiga), faz fallback para descoberta por convencao (secao 7) e avisa o usuario.
 

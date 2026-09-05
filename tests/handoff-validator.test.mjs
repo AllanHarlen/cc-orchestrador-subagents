@@ -218,6 +218,53 @@ test("rejects a PARTIAL/BLOCKED status with a near-empty summary", () => {
   assert.ok(result.errors.some((e) => e.code === "SUMMARY_TOO_SHORT_FOR_NON_DONE_STATUS"));
 });
 
+// --- WF-010: structured waiver ---
+
+function validWaiver(overrides = {}) {
+  return {
+    owner: "Produto",
+    motivo: "Achado bloqueante do Testador ainda sem revalidacao",
+    impacto: "Entrega segue sem confirmacao de navegador real neste escopo",
+    validade: "2026-12-31T00:00:00.000Z",
+    condicaoDeReabertura: "Rodar o Testador de novo sobre o mesmo escopo corrigido",
+    ...overrides,
+  };
+}
+
+test("accepts a well-formed waiver on a BLOCKED handoff", () => {
+  const result = validateHandoff(validOrchestradorHandoff({ status: "BLOCKED", waiver: validWaiver() }));
+  assert.equal(result.ok, true);
+});
+
+test("accepts a waiver with validade: null (no deadline)", () => {
+  const result = validateHandoff(validOrchestradorHandoff({ status: "PARTIAL", waiver: validWaiver({ validade: null }) }));
+  assert.equal(result.ok, true);
+});
+
+test("a handoff with no waiver field is still valid (not every PARTIAL/BLOCKED is a formal waiver)", () => {
+  const result = validateHandoff(validOrchestradorHandoff({ status: "PARTIAL" }));
+  assert.equal(result.ok, true);
+});
+
+test("rejects a waiver on a DONE handoff", () => {
+  const result = validateHandoff(validOrchestradorHandoff({ status: "DONE", waiver: validWaiver() }));
+  assert.ok(result.errors.some((e) => e.code === "WAIVER_REQUIRES_NON_DONE_STATUS"));
+});
+
+test("rejects a waiver missing a required field", () => {
+  for (const field of ["owner", "motivo", "impacto", "condicaoDeReabertura"]) {
+    const waiver = validWaiver();
+    delete waiver[field];
+    const result = validateHandoff(validOrchestradorHandoff({ status: "BLOCKED", waiver }));
+    assert.ok(result.errors.some((e) => e.code === "INVALID_WAIVER" && e.path === `waiver.${field}`), `expected INVALID_WAIVER for missing ${field}`);
+  }
+});
+
+test("rejects a waiver with an unparseable validade", () => {
+  const result = validateHandoff(validOrchestradorHandoff({ status: "BLOCKED", waiver: validWaiver({ validade: "not-a-date" }) }));
+  assert.ok(result.errors.some((e) => e.code === "INVALID_WAIVER" && e.path === "waiver.validade"));
+});
+
 test("rejects a Pensador handoff with a non-null upstream", () => {
   const result = validateHandoff(validPensadorHandoff({ upstream: { stage: "orchestrador", handoffPath: "x" } }));
   assert.ok(result.errors.some((e) => e.code === "PENSADOR_CANNOT_HAVE_UPSTREAM"));

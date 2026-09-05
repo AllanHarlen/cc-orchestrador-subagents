@@ -1,0 +1,208 @@
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+import { validateHandoff } from "./handoff-validator.mjs";
+
+/**
+ * Ingestao de upstream do Pensador (WF-011): descobre e le o handoff em
+ * `.pensador/<slug>-vN/handoff.json` para determinar o modo de operacao
+ * (conjunto vs independente).
+ *
+ * Antes desta implementacao, o algoritmo abaixo existia apenas como prosa em
+ * `references/workflow.md` secao 1.0 — nenhum codigo o executava. Porta o
+ * mesmo padrao que `cc-testador-subagents`'s `upstream-ingest.mjs` ja usa:
+ * probe ordenado, deteccao de ambiguidade, fallback legado, degradacao
+ * explicita quando nada valida.
+ *
+ * Ordem de descoberta:
+ * 1. Escaneia `.pensador/` por diretorios `<slug>-vN/`.
+ * 2. Sem slug explicito e mais de um slug distinto -> `mode: "ambiguous"`.
+ * 3. Entre versoes do mesmo slug, usa a maior `-vN`.
+ * 4. `handoff.json` presente e valido -> `mode: "joint"`.
+ * 5. `handoff.json` ausente ou invalido -> fallback para
+ *    `.pensador-progress.json` (`checkpointVersion: 2`) dentro do mesmo
+ *    diretorio versionado.
+ * 6. Nada disso resolve -> `mode: "standalone"` com aviso.
+ *
+ * Regra absoluta: NUNCA escreve em `.pensador/`. Apenas le.
+ */
+
+export class PensadorIngestError extends Error {
+  constructor(code, message, details = undefined) {
+    super(message);
+    this.name = "PensadorIngestError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+function readHandoffSafe(path) {
+  if (!existsSync(path)) return null;
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    return { handoff: null, valid: false, version_mismatch: false, errors: [{ code: "HANDOFF_INVALID_JSON", message: error.message }], path };
+  }
+  const result = validateHandoff(raw);
+  if (!result.ok) {
+    const first = result.errors[0];
+    return {
+      handoff: raw,
+      valid: false,
+      version_mismatch: first?.code === "UNSUPPORTED_HANDOFF_VERSION",
+      errors: result.errors,
+      path,
+    };
+  }
+  return { handoff: raw, valid: true, version_mismatch: false, errors: [], path };
+}
+
+/** Parses a `.pensador/` entry name as `<slug>-vN`, or null if it doesn't match. */
+function parseVersionedSlugDir(name) {
+  const match = name.match(/^(.+)-v(\d+)$/);
+  if (!match) return null;
+  return { slug: match[1], version: Number(match[2]), dirName: name };
+}
+
+/** Lists every `<slug>-vN/` directory under `.pensador/`. */
+function discoverPensadorDirs(projectRoot) {
+  const dir = join(projectRoot, ".pensador");
+  if (!existsSync(dir)) return [];
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => parseVersionedSlugDir(entry.name))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function buildStandaloneResult(warning, extras = {}) {
+  return {
+    mode: "standalone",
+    slug: null,
+    version: null,
+    pensadorHandoff: null,
+    pensadorHandoffPath: null,
+    legacyProgress: null,
+    warning,
+    ...extras,
+  };
+}
+
+/**
+ * Le a versao legada `.pensador-progress.json` (`checkpointVersion: 2`) de
+ * dentro de um diretorio `.pensador/<slug>-vN/`. Retorna `null` se ausente,
+ * malformado, ou de versao incompativel.
+ */
+function readLegacyProgress(versionedDir) {
+  const legacyPath = join(versionedDir, ".pensador-progress.json");
+  if (!existsSync(legacyPath)) return null;
+  let legacy;
+  try {
+    legacy = JSON.parse(readFileSync(legacyPath, "utf8"));
+  } catch {
+    return null;
+  }
+  if (legacy.checkpointVersion !== 2 || !Array.isArray(legacy.artifacts)) return null;
+  return { legacy, path: legacyPath };
+}
+
+/**
+ * Ponto de entrada principal.
+ *
+ * @param {object} options
+ * @param {string} options.projectRoot  Raiz do projeto.
+ * @param {string} [options.slug]       Slug do handoff a ingerir. Sem slug,
+ *                                      varre `.pensador/` e usa o unico
+ *                                      slug distinto disponivel.
+ * @returns {{
+ *   mode: "joint"|"ambiguous"|"standalone",
+ *   slug: string|null,
+ *   version: number|null,
+ *   pensadorHandoff: object|null,
+ *   pensadorHandoffPath: string|null,
+ *   legacyProgress: object|null,
+ *   slugCandidates?: string[],
+ *   warning: string|null,
+ * }}
+ */
+export function ingestPensadorHandoff(options = {}) {
+  const projectRoot = resolve(options.projectRoot ?? process.cwd());
+  const requestedSlug = options.slug ?? null;
+
+  const dirs = discoverPensadorDirs(projectRoot);
+  if (dirs.length === 0) {
+    return buildStandaloneResult("No .pensador/ directory found — running in independent mode.");
+  }
+
+  let candidates = dirs;
+  if (requestedSlug) {
+    candidates = dirs.filter((d) => d.slug === requestedSlug);
+    if (candidates.length === 0) {
+      return buildStandaloneResult(
+        `No .pensador/ handoff found for slug "${requestedSlug}" — running in independent mode.`,
+      );
+    }
+  } else {
+    const distinctSlugs = [...new Set(dirs.map((d) => d.slug))];
+    if (distinctSlugs.length > 1) {
+      return {
+        mode: "ambiguous",
+        slugCandidates: distinctSlugs,
+        warning: `Multiple Pensador slugs found (${distinctSlugs.join(", ")}); pass an explicit slug to select one.`,
+        slug: null,
+        version: null,
+        pensadorHandoff: null,
+        pensadorHandoffPath: null,
+        legacyProgress: null,
+      };
+    }
+  }
+
+  // All remaining candidates share one slug — pick the highest version.
+  candidates = [...candidates].sort((a, b) => b.version - a.version);
+  const chosen = candidates[0];
+  const versionedDir = join(projectRoot, ".pensador", chosen.dirName);
+  const handoffPath = join(versionedDir, "handoff.json");
+
+  const handoffRead = readHandoffSafe(handoffPath);
+  if (handoffRead?.valid) {
+    return {
+      mode: "joint",
+      slug: chosen.slug,
+      version: chosen.version,
+      pensadorHandoff: handoffRead.handoff,
+      pensadorHandoffPath: handoffPath,
+      legacyProgress: null,
+      warning: null,
+    };
+  }
+
+  // handoff.json absent, invalid, or version-mismatched: fall back to the
+  // legacy checkpoint before giving up (mirrors the Testador's N-14 fix —
+  // a broken v2-style artifact must not mask a still-usable legacy one).
+  const legacy = readLegacyProgress(versionedDir);
+  if (legacy) {
+    return {
+      mode: "joint",
+      slug: chosen.slug,
+      version: chosen.version,
+      pensadorHandoff: null,
+      pensadorHandoffPath: null,
+      legacyProgress: legacy.legacy,
+      legacyProgressPath: legacy.path,
+      warning: "Using legacy .pensador-progress.json (checkpointVersion: 2) — no handoff.json found or it failed validation.",
+    };
+  }
+
+  const reason = handoffRead
+    ? (handoffRead.version_mismatch ? "handoff.json version mismatch" : `handoff.json failed validation (${handoffRead.errors[0]?.code})`)
+    : "no handoff.json and no legacy .pensador-progress.json";
+  return buildStandaloneResult(
+    `Could not ingest .pensador/${chosen.dirName}/ (${reason}) — degrading to independent mode.`,
+    { invalidHandoff: handoffRead ?? undefined },
+  );
+}

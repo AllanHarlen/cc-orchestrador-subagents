@@ -380,7 +380,7 @@ function validateLessonEvidence(projectRoot, evidence, sourceRun = null) {
     }
   }
   if (type === "RUN_EVENT") {
-    const event = findDurableRunEvent(projectRoot, evidence.source, evidence.runId ?? null);
+    const { event } = findDurableRunEvent(projectRoot, evidence.source, evidence.runId ?? null);
     if (!event) {
       throw new LearningError(
         "LESSON_RUN_EVENT_NOT_FOUND",

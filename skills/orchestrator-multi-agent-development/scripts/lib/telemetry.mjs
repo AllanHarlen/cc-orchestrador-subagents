@@ -295,12 +295,20 @@ export function readTelemetry(projectRoot) {
   return events;
 }
 
-export function recordTelemetry(projectRoot, input) {
+// `existingIds`, when passed, lets a caller that records many events in a
+// loop (see `projectRunTelemetry`) hoist the dedup Set out of the loop
+// instead of re-reading and re-parsing the entire telemetry log on every
+// single call — without it, N events cost O(N^2) instead of O(N). The Set
+// is mutated in place (the new eventId is added on a successful append) so
+// the next call in the same loop sees it. A single ad hoc call (no
+// `existingIds`) keeps the original behavior: read fresh every time.
+export function recordTelemetry(projectRoot, input, existingIds = null) {
   const event = sanitizeEvent(input);
   const path = projectKnowledgePaths(projectRoot).telemetryFile;
-  const existing = new Set(readTelemetry(projectRoot).map((entry) => entry.eventId));
+  const existing = existingIds ?? new Set(readTelemetry(projectRoot).map((entry) => entry.eventId));
   if (existing.has(event.eventId)) return { created: false, event, path };
   appendDurably(path, event);
+  existing.add(event.eventId);
   return { created: true, event, path };
 }
 
@@ -319,6 +327,9 @@ function validationSummary(task) {
 
 export function projectRunTelemetry(projectRoot, artifactDir) {
   const state = loadRun(resolve(artifactDir), { verifyReplay: true }).state;
+  // Hoisted once instead of recomputed by every recordTelemetry call below —
+  // see the comment on recordTelemetry's `existingIds` parameter.
+  const existingIds = new Set(readTelemetry(projectRoot).map((entry) => entry.eventId));
   const projected = [];
   for (const task of Object.values(state.tasks ?? {})) {
     for (const attempt of task.attemptHistory ?? []) {
@@ -354,7 +365,7 @@ export function projectRunTelemetry(projectRoot, artifactDir) {
           finalAttempt: Number(attempt.attempt) === Number(task.attempt),
           executorSource: attempt.executorSource ?? task.executorSource ?? null,
         },
-      }));
+      }, existingIds));
     }
     const result = task.status;
     const reason = task.reasonCode ?? task.reconciliation?.reason ?? null;
@@ -390,7 +401,7 @@ export function projectRunTelemetry(projectRoot, artifactDir) {
         sourcePresent: task.sourcePresent !== false,
         executorSource: task.executorSource ?? null,
       },
-    }));
+    }, existingIds));
   }
   return {
     runId: state.runId,

@@ -65,14 +65,27 @@ Na primeira run do projeto, confira se o `.gitignore` ja cobre os caminhos que n
 
 ### 1.0 Detectar modo de operacao (conjunto vs independente)
 
-1. Procure `.pensador/*/handoff.json`.
-2. **Modo conjunto (Pensador → Orchestrador):** se houver um handoff `stage: pensador` com `status: DONE`:
-   - Para multiplos `slug`, confirme via `AskUserQuestion` qual demanda implementar.
-   - Para o mesmo `slug` com varias versoes `-vN`, use a maior versao (confirme se houver duvida).
-   - Leia o `report/handoff.json` e trate os artefatos referenciados como fonte da verdade. Correlacione pelo `slug` e grave seus artefatos em `.orchestration/<slug>/` (sem `-vN`).
-   - `status: BLOCKED`/`PARTIAL` no upstream: pare e peca decisao ao usuario.
-   - Sem `handoff.json` mas com `.pensador/<slug>-vN/`: fallback por convencao — leia `.pensador-progress.json` (`checkpointVersion: 2`) e o array `artifacts`; avise o usuario.
-3. **Modo independente:** sem `.pensador/`, o usuario fornece a especificacao via `@arquivo` ou texto no `/orquestrador`. `<nome>`/`<slug>` derivam do PRD.
+Rode a ingestao deterministica em vez de escanear `.pensador/` manualmente — ela ja implementa a
+descoberta ordenada, a escolha de maior versao, a deteccao de ambiguidade e o fallback legado
+(WF-011; `lib/pensador-ingest.mjs`, testado em `tests/pensador-ingest.test.mjs`):
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/ingest-pensador.mjs" --root . [--slug <slug>]
+```
+
+1. `result.mode === "standalone"`: **modo independente** — sem `.pensador/`, ou nada validou (ver
+   `result.warning`/`result.invalidHandoff`). O usuario fornece a especificacao via `@arquivo` ou
+   texto no `/orquestrador`. `<nome>`/`<slug>` derivam do PRD.
+2. `result.mode === "ambiguous"`: varios `slug` distintos em `.pensador/` sem slug explicito —
+   confirme via `AskUserQuestion` usando `result.slugCandidates` e rode de novo com `--slug`.
+3. `result.mode === "joint"` (**Pensador → Orchestrador**): `result.slug`/`result.version` ja
+   resolvem a maior versao `-vN` do slug escolhido.
+   - `result.pensadorHandoff` presente: leia-o e trate os artefatos referenciados como fonte da
+     verdade. Correlacione pelo `slug` e grave seus artefatos em `.orchestration/<slug>/` (sem
+     `-vN`). `status: BLOCKED`/`PARTIAL` no upstream: pare e peca decisao ao usuario.
+   - `result.pensadorHandoff` ausente mas `result.legacyProgress` presente: fallback por convencao
+     ja aplicado (`.pensador-progress.json`, `checkpointVersion: 2`) — leia o array `artifacts` de
+     `result.legacyProgress` e avise o usuario (`result.warning`).
 
 Assim que o slug estiver resolvido, crie `.orchestration/<slug>/` e inicialize o estado **antes** de ler/produzir novos artefatos dessa execucao:
 

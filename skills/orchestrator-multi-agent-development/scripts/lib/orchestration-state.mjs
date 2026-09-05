@@ -3413,22 +3413,42 @@ export function findRunDirectory(options = {}) {
   }
   matching.sort((left, right) => right.modifiedAt - left.modifiedAt);
   const valid = [];
+  const corrupt = [];
   for (const candidate of matching) {
     try {
       const state = loadRun(candidate.directory).state;
       valid.push({ ...candidate, state });
       if (options.runId || ACTIVE_RUN_STATUSES.has(state.status)) return candidate.directory;
     } catch (error) {
-      throw new OrchestrationStateError(
-        "RUN_CORRUPT",
-        `Orchestration run at ${candidate.directory} is corrupt; refusing to fall back to an older run`,
-        {
-          artifactDir: candidate.directory,
-          causeCode: error?.code ?? "INVALID_STATE",
-          cause: error?.message ?? String(error),
-        },
-      );
+      const corruptEntry = {
+        artifactDir: candidate.directory,
+        causeCode: error?.code ?? "INVALID_STATE",
+        cause: error?.message ?? String(error),
+      };
+      // An explicit --runId/slug names one specific run: if that run is
+      // corrupt, silently substituting a different one the caller didn't
+      // ask for would be worse than failing loudly.
+      if (options.runId) {
+        throw new OrchestrationStateError(
+          "RUN_CORRUPT",
+          `Orchestration run at ${candidate.directory} is corrupt; refusing to fall back to an older run`,
+          corruptEntry,
+        );
+      }
+      // A general "resume the most recent run" call has no single target —
+      // one corrupt archived run must not permanently break resume for the
+      // whole project. Skip it and keep looking at older candidates.
+      corrupt.push(corruptEntry);
     }
+  }
+  if (valid.length === 0) {
+    throw new OrchestrationStateError(
+      "RUN_CORRUPT",
+      corrupt.length === 1
+        ? `Orchestration run at ${corrupt[0].artifactDir} is corrupt and no other resumable run was found`
+        : `All ${corrupt.length} candidate orchestration runs are corrupt`,
+      { candidates: corrupt },
+    );
   }
   return valid[0].directory;
 }

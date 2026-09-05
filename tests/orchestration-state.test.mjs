@@ -560,7 +560,7 @@ test("a task removed from classification blocks completion until scope is resolv
   assert.deepEqual(auditRunCompletion(artifactDir).unresolvedScope, []);
 });
 
-test("automatic and targeted lookup surface a corrupt newest run", () => {
+test("a targeted lookup for a corrupt run throws RUN_CORRUPT rather than silently substituting another run", () => {
   const { root, artifactDir } = fixture({ slug: "older-run" });
   initRun({ projectRoot: root, artifactDir, slug: "older-run", runId: "older-run-id" });
   const corruptDir = join(root, ".orchestration", "newest-run");
@@ -570,12 +570,42 @@ test("automatic and targeted lookup surface a corrupt newest run", () => {
   const future = new Date(Date.now() + 60_000);
   utimesSync(corruptState, future, future);
 
-  for (const runId of [undefined, "newest-run"]) {
-    assert.throws(
-      () => findRunDirectory({ projectRoot: root, runId }),
-      (error) => error instanceof OrchestrationStateError && error.code === "RUN_CORRUPT",
-    );
-  }
+  assert.throws(
+    () => findRunDirectory({ projectRoot: root, runId: "newest-run" }),
+    (error) => error instanceof OrchestrationStateError && error.code === "RUN_CORRUPT",
+  );
+});
+
+// N-17: an automatic "resume the most recent run" lookup (no explicit runId)
+// has no single named target — one corrupt archived run must not
+// permanently break `/orchestrator resume` for the whole project. It should
+// skip the corrupt candidate and fall back to the next resumable run.
+test("automatic lookup skips a corrupt newest run and falls back to an older resumable run", () => {
+  const { root, artifactDir } = fixture({ slug: "older-run" });
+  initRun({ projectRoot: root, artifactDir, slug: "older-run", runId: "older-run-id" });
+  const corruptDir = join(root, ".orchestration", "newest-run");
+  mkdirSync(corruptDir, { recursive: true });
+  const corruptState = join(corruptDir, "state.json");
+  writeFileSync(corruptState, "{ not-json\n", "utf8");
+  const future = new Date(Date.now() + 60_000);
+  utimesSync(corruptState, future, future);
+
+  const found = findRunDirectory({ projectRoot: root });
+  assert.equal(found, artifactDir, "must fall back to the older, non-corrupt run");
+});
+
+// When every candidate is corrupt, automatic lookup still fails loudly —
+// there is nothing to fall back to.
+test("automatic lookup throws RUN_CORRUPT when every candidate run is corrupt", () => {
+  const { root } = fixture({ slug: "only-run" });
+  const corruptDir = join(root, ".orchestration", "only-run");
+  mkdirSync(corruptDir, { recursive: true });
+  writeFileSync(join(corruptDir, "state.json"), "{ not-json\n", "utf8");
+
+  assert.throws(
+    () => findRunDirectory({ projectRoot: root }),
+    (error) => error instanceof OrchestrationStateError && error.code === "RUN_CORRUPT",
+  );
 });
 
 test("cancellation must interrupt and reconcile active executors before finalization", () => {

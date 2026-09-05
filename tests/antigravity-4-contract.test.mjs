@@ -24,11 +24,20 @@ const activeDocs = [
 ].map(read).join("\n");
 
 test("release and preflight declare the Antigravity 4 compatibility floor", () => {
+  const pkg = JSON.parse(read("package.json"));
   const plugin = JSON.parse(read(".claude-plugin/plugin.json"));
   const marketplace = JSON.parse(read(".claude-plugin/marketplace.json"));
   const preflight = read("skills/orchestrator-multi-agent-development/scripts/preflight.mjs");
-  assert.equal(plugin.version, "4.8.1");
-  assert.equal(marketplace.plugins[0].version, "4.8.1");
+  // The own-plugin version is derived from package.json, not hardcoded, so a
+  // routine version bump does not require editing this test's literal —
+  // only genuine drift between the three manifests would fail it.
+  assert.equal(plugin.version, pkg.version);
+  assert.equal(marketplace.plugins[0].version, pkg.version);
+  const majorVersion = Number(/^(\d+)\./.exec(pkg.version)?.[1]);
+  assert.ok(
+    Number.isInteger(majorVersion) && majorVersion >= 4,
+    `plugin version ${pkg.version} must stay on the Antigravity 4 compatibility floor (major >= 4)`,
+  );
   assert.match(preflight, /MIN_ANTIGRAVITY_PLUGIN_VERSION = "4\.0\.0"/);
   assert.match(preflight, /MIN_AGY_VERSION = "1\.1\.8"/);
   assert.match(preflight, /RECOMMENDED_AGY_VERSION = "1\.1\.16"/);

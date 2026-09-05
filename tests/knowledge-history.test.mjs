@@ -13,6 +13,7 @@ import {
   ProjectKnowledgeError,
   addValidatedFact,
   auditKnowledgeSources,
+  findDurableRunEvent,
   knowledgeStatus,
   listFacts,
   renderProjectMemory,
@@ -140,6 +141,39 @@ test("RUN_EVENT facts require and continuously audit a real durable event", () =
   writeFileSync(eventsPath, `${JSON.stringify(event)}\n`, "utf8");
   const audit = auditKnowledgeSources(root);
   assert.deepEqual(audit.stale.map((item) => item.factId), [added.fact.id]);
+});
+
+// N-18: an events.jsonl over the scan size limit used to be skipped
+// silently, so a genuine "not found" was indistinguishable from "we didn't
+// even look" — a legitimate event could be reported as missing with no signal.
+test("findDurableRunEvent reports which oversized logs it skipped instead of silently returning not-found", () => {
+  const root = temporaryProject();
+  const artifactDir = runFixture(root, { slug: "huge-run", runId: "huge-run-id" });
+  const eventsPath = join(artifactDir, "events.jsonl");
+  // Pad the existing durable log past the 64MB scan limit.
+  const padding = Buffer.alloc(64 * 1024 * 1024 + 1024, " ");
+  writeFileSync(eventsPath, Buffer.concat([readFileSync(eventsPath), padding]));
+
+  const { event, skippedOversized } = findDurableRunEvent(root, "event:anything", "huge-run-id");
+  assert.equal(event, null);
+  assert.equal(skippedOversized.length, 1);
+  assert.equal(skippedOversized[0].path, eventsPath);
+  assert.ok(skippedOversized[0].size > 64 * 1024 * 1024);
+
+  assert.throws(
+    () => addValidatedFact(root, {
+      section: "Architecture",
+      key: "Run policy",
+      value: "event sourced",
+      sourceType: "RUN_EVENT",
+      sourceRef: "event:anything",
+      runId: "huge-run-id",
+    }),
+    (error) => error instanceof ProjectKnowledgeError &&
+      error.code === "RUN_EVENT_EVIDENCE_NOT_FOUND" &&
+      /skipped and not searched/.test(error.message) &&
+      /false negative/.test(error.message),
+  );
 });
 
 test("conflicting facts are quarantined and excluded from always-on memory", () => {

@@ -200,11 +200,48 @@ export function validateHandoff(handoff) {
     );
   }
 
+  // Optional structured waiver (WF-010): an accepted-risk record for a
+  // PARTIAL/BLOCKED status, distinct from `summary` (a human sentence) —
+  // this is the field automation/audits can key on: who accepted the risk,
+  // why, what it costs, until when, and what reopens it. Only validated
+  // when present; a PARTIAL/BLOCKED handoff without a waiver is still valid
+  // (not every gap is a formally accepted risk — some are just open work).
+  if (handoff.waiver !== undefined && handoff.waiver !== null) {
+    if (!["PARTIAL", "BLOCKED"].includes(handoff.status)) {
+      push("WAIVER_REQUIRES_NON_DONE_STATUS", "waiver is only meaningful when status is PARTIAL or BLOCKED", "waiver");
+    }
+    if (!isPlainObject(handoff.waiver)) {
+      push("INVALID_WAIVER", "waiver must be an object", "waiver");
+    } else {
+      if (!isNonEmptyString(handoff.waiver.owner)) {
+        push("INVALID_WAIVER", "waiver.owner must be a non-empty string (who accepted the risk)", "waiver.owner");
+      }
+      if (!isNonEmptyString(handoff.waiver.motivo)) {
+        push("INVALID_WAIVER", "waiver.motivo must be a non-empty string (why the waiver was necessary)", "waiver.motivo");
+      }
+      if (!isNonEmptyString(handoff.waiver.impacto)) {
+        push("INVALID_WAIVER", "waiver.impacto must be a non-empty string (what stays uncovered because of it)", "waiver.impacto");
+      }
+      if (handoff.waiver.validade !== null && !isNonEmptyString(handoff.waiver.validade)) {
+        push("INVALID_WAIVER", "waiver.validade must be an ISO timestamp string or null (no deadline)", "waiver.validade");
+      } else if (isNonEmptyString(handoff.waiver.validade) && Number.isNaN(Date.parse(handoff.waiver.validade))) {
+        push("INVALID_WAIVER", "waiver.validade must be a valid ISO timestamp string when present", "waiver.validade");
+      }
+      if (!isNonEmptyString(handoff.waiver.condicaoDeReabertura)) {
+        push(
+          "INVALID_WAIVER",
+          "waiver.condicaoDeReabertura must be a non-empty string (what needs to happen to reopen/revalidate)",
+          "waiver.condicaoDeReabertura",
+        );
+      }
+    }
+  }
+
   if (handoff.upstream !== null) {
     if (!isPlainObject(handoff.upstream) || !HANDOFF_STAGES.includes(handoff.upstream.stage) || !isNonEmptyString(handoff.upstream.handoffPath)) {
       push(
         "INVALID_UPSTREAM",
-        "upstream must be null or { stage: one of pensador|orchestrador|executor, handoffPath: string }",
+        "upstream must be null or { stage: one of pensador|orchestrador|testador|executor, handoffPath: string }",
         "upstream",
       );
     } else if (handoff.stage === "pensador") {
