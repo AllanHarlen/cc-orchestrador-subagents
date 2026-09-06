@@ -25,6 +25,48 @@ import { join, resolve } from "node:path";
 export const ARTIFACT_LAYOUT_VERSION = 2;
 export const SUPPORTED_ARTIFACT_LAYOUT_VERSIONS = Object.freeze([1, 2]);
 
+/**
+ * Achado 14 (analise-run-oficina-saas-20260905.md): `.orchestration/<slug>/`
+ * (artefatos de run) e `.orchestrator/` (config/knowledge por projeto)
+ * diferem em tres caracteres, ambos ocultos, ambos na raiz do projeto, e
+ * nada no nome indica qual e qual — `lib/intelligence.mjs` chegou a listar
+ * os dois lado a lado como exclusao, a evidencia mais direta de que a
+ * separacao nunca teve razao semantica. Toda run NOVA passa a nascer em
+ * `.orchestrator/runs/<slug>/`, dentro da mesma raiz de `.orchestrator/`
+ * que ja guarda `project-config.md`, `worktrees/`, `history.db` e
+ * `knowledge.db` — `runs/` evita colidir com esses.
+ *
+ * `.orchestration/<slug>/` continua sendo **lido**: uma run criada antes
+ * desta mudanca nao e migrada, nem precisa ser — ver `runRootCandidates()`.
+ * Nenhuma constante existia para nenhum dos dois nomes antes desta versao;
+ * os dois eram literais repetidos, independentes, em varios modulos.
+ */
+export const ORCHESTRATOR_ROOT_DIRNAME = ".orchestrator";
+export const RUNS_SUBDIRECTORY = "runs";
+export const LEGACY_ORCHESTRATION_DIRNAME = ".orchestration";
+
+/** `.orchestrator/runs/` — raiz de runs do layout atual. */
+export function currentRunsRoot(projectRoot) {
+  return join(resolve(projectRoot), ORCHESTRATOR_ROOT_DIRNAME, RUNS_SUBDIRECTORY);
+}
+
+/** `.orchestration/` — raiz de runs do layout legado (leitura apenas). */
+export function legacyRunsRoot(projectRoot) {
+  return join(resolve(projectRoot), LEGACY_ORCHESTRATION_DIRNAME);
+}
+
+/**
+ * As duas raizes de runs, na ordem de preferencia de leitura — atual
+ * primeiro, legada depois. `existing: true` so nas que de fato existem no
+ * disco; use para varrer sem duplicar candidato quando os dois nomes
+ * apontarem, por acidente, para o mesmo path resolvido (nunca acontece na
+ * pratica, mas o codigo nao presume).
+ */
+export function runRootCandidates(projectRoot) {
+  const roots = [currentRunsRoot(projectRoot), legacyRunsRoot(projectRoot)];
+  return unique(roots).map((root) => ({ root, exists: existsSync(root) }));
+}
+
 const LAYOUT_ROOT_FILES = Object.freeze(["state.json", "events.jsonl", ".state.lock"]);
 
 const LAYOUT_V2_FILE_DIRECTORIES = Object.freeze({

@@ -187,6 +187,14 @@ function parseArgs(argv) {
  */
 function inferProjectRoot(runDir) {
   const parts = runDir.split(sep);
+  // Achado 14: `.orchestrator/runs/<slug>` (layout atual) e
+  // `.orchestration/<slug>` (legado) tem profundidades diferentes ate a
+  // raiz do projeto — a raiz fica dois segmentos acima de `runs` no
+  // primeiro caso, um acima de `.orchestration` no segundo.
+  const runsIndex = parts.lastIndexOf("runs");
+  if (runsIndex > 0 && parts[runsIndex - 1] === ".orchestrator") {
+    return parts.slice(0, runsIndex - 1).join(sep) || sep;
+  }
   const index = parts.lastIndexOf(".orchestration");
   if (index > 0) return parts.slice(0, index).join(sep) || sep;
   return process.cwd();

@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { runRootCandidates } from "./artifact-layout.mjs";
 import {
   applyMigrations,
   databaseHealth,
@@ -282,17 +283,21 @@ const RUN_EVENT_SCAN_SIZE_LIMIT_BYTES = 64 * 1024 * 1024;
 // events.jsonl over the size limit was skipped, so this may be a false
 // negative" (N-18) — the two used to be indistinguishable.
 export function findDurableRunEvent(projectRoot, sourceRef, expectedRunId = null) {
-  const orchestrationRoot = join(resolve(projectRoot), ".orchestration");
-  if (!existsSync(orchestrationRoot)) return { event: null, skippedOversized: [] };
+  // Achado 14: procura o evento em qualquer uma das duas raizes de run —
+  // `.orchestrator/runs/<slug>/` (atual) e `.orchestration/<slug>/` (legado).
+  const roots = runRootCandidates(projectRoot).filter((candidate) => candidate.exists);
+  if (roots.length === 0) return { event: null, skippedOversized: [] };
   const eventId = String(sourceRef)
     .replace(/^event:/i, "")
     .split(/[#:]/)
     .at(-1)
     .trim();
   if (!eventId) return { event: null, skippedOversized: [] };
-  const directories = readdirSync(orchestrationRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => join(orchestrationRoot, entry.name));
+  const directories = roots.flatMap(({ root }) =>
+    readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(root, entry.name)),
+  );
   const skippedOversized = [];
   for (const directory of directories) {
     const path = join(directory, "events.jsonl");

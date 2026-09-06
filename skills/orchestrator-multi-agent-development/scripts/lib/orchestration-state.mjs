@@ -20,8 +20,10 @@ import {
   ARTIFACT_LAYOUT_VERSION,
   SUPPORTED_ARTIFACT_LAYOUT_VERSIONS,
   artifactExists,
+  currentRunsRoot,
   ensureArtifactLayout,
   resolveArtifact,
+  runRootCandidates,
 } from "./artifact-layout.mjs";
 import {
   EXECUTORS,
@@ -1032,13 +1034,16 @@ function nextRunId(projectRoot, slug, now = new Date()) {
     String(date.getUTCDate()).padStart(2, "0"),
   ].join("");
   const prefix = `${slug}-${stamp}-`;
-  const orchestrationRoot = join(resolve(projectRoot), ".orchestration");
   let maximum = 0;
 
-  if (existsSync(orchestrationRoot)) {
-    for (const entry of readdirSync(orchestrationRoot, { withFileTypes: true })) {
+  // Achado 14: numeracao unica precisa varrer as duas raizes — uma run nova
+  // nao pode colidir com o proximo numero de uma run legada em
+  // `.orchestration/`, nem vice-versa.
+  for (const { root, exists } of runRootCandidates(projectRoot)) {
+    if (!exists) continue;
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      const path = join(orchestrationRoot, entry.name, "state.json");
+      const path = join(root, entry.name, "state.json");
       if (!existsSync(path)) continue;
       try {
         const candidate = JSON.parse(readFileSync(path, "utf8"));
@@ -1664,7 +1669,11 @@ function normalizeUpstream(upstream) {
 export function initRun(options) {
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
   const slug = normalizeSlug(options.slug ?? basename(resolve(options.artifactDir ?? "")));
-  const artifactDir = resolve(options.artifactDir ?? join(projectRoot, ".orchestration", slug));
+  // Achado 14: toda run nova nasce em `.orchestrator/runs/<slug>/`, nao mais
+  // em `.orchestration/<slug>/`. Uma run legada com esse mesmo slug
+  // continua sendo encontrada por `findRunDirectory`/`nextRunId` (as duas
+  // raizes) — este default so decide onde uma run **nova** e criada.
+  const artifactDir = resolve(options.artifactDir ?? join(currentRunsRoot(projectRoot), slug));
 
   return withLock(artifactDir, () => {
     if (existsSync(stateFile(artifactDir)) || existsSync(eventsFile(artifactDir))) {
@@ -3689,12 +3698,19 @@ export function updateRunStatus(artifactDir, status, options = {}) {
 export function findRunDirectory(options = {}) {
   if (options.artifactDir) return resolve(options.artifactDir);
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
-  const root = join(projectRoot, ".orchestration");
-  if (!existsSync(root)) {
-    throw new OrchestrationStateError("RUN_NOT_FOUND", `No .orchestration directory in ${projectRoot}`);
+  // Achado 14: uma run pode estar em `.orchestrator/runs/<slug>/` (layout
+  // atual) ou `.orchestration/<slug>/` (legado, ainda lido) — varre as duas
+  // raizes que existirem no disco antes de decidir RUN_NOT_FOUND.
+  const roots = runRootCandidates(projectRoot).filter((candidate) => candidate.exists);
+  if (roots.length === 0) {
+    throw new OrchestrationStateError(
+      "RUN_NOT_FOUND",
+      `No .orchestrator/runs or .orchestration directory in ${projectRoot}`,
+    );
   }
 
   const candidates = [];
+  for (const { root } of roots) {
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const directory = join(root, entry.name);
@@ -3722,6 +3738,7 @@ export function findRunDirectory(options = {}) {
       // instead of silently selecting an older run.
     }
     candidates.push({ directory, identity, modifiedAt });
+  }
   }
 
   const matching = options.runId
