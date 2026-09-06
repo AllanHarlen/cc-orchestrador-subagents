@@ -131,10 +131,10 @@ function help() {
     name: "orchestration-state",
     purpose: "Durable state machine for cc-orchestrador-subagents",
     commands: {
-      init: "init --slug <slug> [--dir .orchestration/<slug>] [--run-id <id>] [--phase 1]",
+      init: "init --slug <slug> [--dir .orchestration/<slug>] [--run-id <id>] [--phase 1] [--upstream-stage pensador --upstream-slug <slug> --upstream-version <n> --upstream-handoff-path <path>]",
       sync: "sync --dir .orchestration/<slug>",
-      phase: "phase --dir <dir> --phase <n> --status RUNNING|DONE|FAILED|BLOCKED|CANCELLED|UNKNOWN",
-      gate: "gate --dir <dir> --gate <id> --status PENDING|RUNNING|DONE|FAILED|BLOCKED|N/A [--evidence <id>] [--required true|false for browserE2E]",
+      phase: "phase --dir <dir> --phase <n> --status RUNNING|DONE|FAILED|BLOCKED|CANCELLED|UNKNOWN|N/A [--reason <text>] (N/A exige --reason e so vale para fase com gate waivable)",
+      gate: "gate --dir <dir> --gate <id> --status PENDING|RUNNING|DONE|FAILED|BLOCKED|N/A [--evidence <id>] [--required true|false for browserE2E] [--delegated-to <plugin>] (--delegated-to so com --status N/A num gate waivable; verificado contra report/handoff.json.nextStage.consumer em completionAudit)",
       task: "task --dir <dir> --task <id> --status <canonical-status> [--executor codex|agy|claude-code] [--executor-source project-config] [session/evidence fields]",
       heartbeat: "heartbeat --dir <dir> --task <id> [--api-calls N] [--tool-calls N] [--current-tool name] [--progress-token value]",
       sweep: "sweep --dir <dir> [--stale-idle-seconds 450] [--stale-in-tool-seconds 1200]",
@@ -176,6 +176,7 @@ function execute(argv) {
       return help();
     case "init": {
       const slug = required(args, "slug", args._[0]);
+      const upstreamStage = args["upstream-stage"];
       return initRun({
         ...common,
         slug,
@@ -183,6 +184,14 @@ function execute(argv) {
         runId: args["run-id"],
         phase: number(args.phase, 1),
         lastSafePhase: number(args["last-safe-phase"]),
+        upstream: upstreamStage
+          ? {
+            stage: upstreamStage,
+            slug: args["upstream-slug"],
+            version: number(args["upstream-version"]),
+            handoffPath: args["upstream-handoff-path"],
+          }
+          : undefined,
       });
     }
     case "sync":
@@ -199,7 +208,13 @@ function execute(argv) {
         artifactDir(args),
         required(args, "gate"),
         required(args, "status"),
-        { ...common, reason: args.reason, evidence: args.evidence, required: bool(args.required) },
+        {
+          ...common,
+          reason: args.reason,
+          evidence: args.evidence,
+          required: bool(args.required),
+          delegatedTo: args["delegated-to"],
+        },
       );
     case "task":
       return updateTaskStatus(

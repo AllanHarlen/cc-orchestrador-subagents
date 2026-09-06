@@ -132,6 +132,7 @@
     "completionGates": {
       "type": "object",
       "required": [
+        "monitoring",
         "backendReview",
         "frontendReview",
         "browserE2E",
@@ -192,6 +193,26 @@
     },
     "cancellation": {
       "$ref": "#/$defs/cancellation"
+    },
+    "upstream": {
+      "type": ["object", "null"],
+      "description": "Resultado de ingestPensadorHandoff() persistido na Fase 1, quando a run e modo conjunto. null em modo independente.",
+      "properties": {
+        "stage": {
+          "type": "string"
+        },
+        "slug": {
+          "type": ["string", "null"]
+        },
+        "version": {
+          "type": ["number", "null"]
+        },
+        "handoffPath": {
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["stage"],
+      "additionalProperties": true
     },
     "revision": {
       "type": "integer",
@@ -302,7 +323,8 @@
         "FAILED",
         "BLOCKED",
         "CANCELLED",
-        "UNKNOWN"
+        "UNKNOWN",
+        "N/A"
       ]
     },
     "gateStatus": {
@@ -721,6 +743,13 @@
             "string",
             "null"
           ]
+        },
+        "delegatedTo": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Plugin consumidor que assume a verificacao deste gate no lugar desta run (ex.: cc-testador-subagents), quando a run e modo conjunto a partir do Pensador. Distinto de um waiver puro: completionAudit reprova a run com DELEGATION_WITHOUT_NEXT_STAGE se report/handoff.json nao apontar nextStage.consumer para o mesmo plugin."
         },
         "evidence": {
           "type": "array",

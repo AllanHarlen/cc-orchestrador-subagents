@@ -30,6 +30,7 @@ import {
 import {
   initRun,
   loadRun,
+  updatePhase,
   updateTaskStatus,
 } from "../skills/orchestrator-multi-agent-development/scripts/lib/orchestration-state.mjs";
 import {
@@ -55,6 +56,12 @@ function fixture() {
   ].join("\n"), "utf8");
   writeFileSync(join(artifactDir, "waves.md"), "# Waves\n\n## Wave 1\n- BE-01\n", "utf8");
   initRun({ projectRoot: root, artifactDir, slug: "learning-run", runId: "learning-run-001" });
+  // assertPhaseTransition (Achado 1) exige todo predecessor fechado antes da
+  // Fase 12 poder abrir RUNNING; runLearningPhase() faz exatamente essa
+  // chamada internamente.
+  for (const phase of [1, 2, 3, 4, 5, 6, 7, 8, 9, 9.5, 10, 11]) {
+    updatePhase(artifactDir, phase, "DONE", { projectRoot: root, evidence: `test:${phase}:DONE` });
+  }
   updateTaskStatus(artifactDir, "BE-01", "RUNNING", {
     projectRoot: root,
     executor: "codex",

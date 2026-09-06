@@ -95,10 +95,12 @@ function completeRun(root, artifactDir) {
     "implementation-report.md",
     "handoff.json",
     "learning-report.md",
+    "monitoring.md",
   ]) {
     writeFileSync(join(artifactDir, name), name === "handoff.json" ? "{}\n" : `# ${name}\n`, "utf8");
   }
   for (const gateId of [
+    "monitoring",
     "backendReview",
     "frontendReview",
     "browserE2E",
@@ -110,6 +112,15 @@ function completeRun(root, artifactDir) {
     updateCompletionGate(artifactDir, gateId, "DONE", {
       projectRoot: root,
       evidence: [`test:${gateId}:PASS`],
+    });
+  }
+  // assertPhaseTransition (Achado 1) exige que todo predecessor esteja fechado
+  // antes de uma fase poder ser marcada DONE — percorra a sequencia inteira em
+  // vez de saltar direto para a fase 12.
+  for (const phase of [1, 2, 3, 4, 5, 6, 7, 8, 9, 9.5, 10, 11]) {
+    updatePhase(artifactDir, phase, "DONE", {
+      projectRoot: root,
+      evidence: `test:phase:${phase}:DONE`,
     });
   }
   updatePhase(artifactDir, 12, "DONE", {
@@ -404,7 +415,10 @@ test("reconciliation never regresses a terminal task", () => {
 test("resume advances past a durably completed phase", () => {
   const { root, artifactDir } = fixture();
   initRun({ projectRoot: root, artifactDir, slug: "demo-run", runId: "run-next-phase" });
-  updatePhase(artifactDir, 6, "DONE", { projectRoot: root });
+  for (const phase of [1, 2, 3, 4, 5]) {
+    updatePhase(artifactDir, phase, "DONE", { projectRoot: root, evidence: `test:${phase}:DONE` });
+  }
+  updatePhase(artifactDir, 6, "DONE", { projectRoot: root, evidence: "test:6:DONE" });
 
   const resumed = resumeRunAtDirectory(artifactDir, { projectRoot: root });
   assert.equal(resumed.report.resumeFromPhase, 7);
@@ -685,6 +699,9 @@ test("executor operational reason codes survive canonical status mapping", () =>
 test("resume follows the explicit phase sequence after browser E2E", () => {
   const { root, artifactDir } = fixture();
   initRun({ projectRoot: root, artifactDir, slug: "demo-run", runId: "run-phase-sequence" });
+  for (const phase of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+    updatePhase(artifactDir, phase, "DONE", { projectRoot: root, evidence: `test:${phase}:DONE` });
+  }
   updatePhase(artifactDir, 9.5, "DONE", {
     projectRoot: root,
     evidence: "browser:e2e:PASS",

@@ -57,6 +57,11 @@ export const PHASE_STATUSES = Object.freeze([
   "BLOCKED",
   "CANCELLED",
   "UNKNOWN",
+  // Fase legitimamente pulada — aceito somente para fases cujo completion gate
+  // e `waivable` (hoje so 9.5/browserE2E), e somente com `reason`. Ver
+  // assertPhaseTransition e updatePhase. Distinto de "nunca rodou" (PENDING):
+  // N/A e uma decisao registrada, nao um estado transitorio.
+  "N/A",
 ]);
 
 export const RUN_STATUSES = Object.freeze([
@@ -106,6 +111,13 @@ const RUN_TRANSITIONS = Object.freeze({
 });
 
 export const COMPLETION_GATE_DEFINITIONS = Object.freeze({
+  // Achado 2: a fase 6 (monitoring) nunca fechava porque nada exigia
+  // evidencia dela — telemetria por task ficou vazia em 33/33 e o sweeper de
+  // stall nunca rodou em 3h30. Este gate torna a fase 6 tao obrigatoria
+  // quanto qualquer outra: fechar a fase 7 sem fechar a 6 e agora impossivel
+  // (assertPhaseTransition), e fechar a 6 sem evidencia tambem
+  // (GATE_DONE_REQUIRES_EVIDENCE em updateCompletionGate).
+  monitoring: { phase: 6, label: "Monitoring telemetry" },
   backendReview: { phase: 8, label: "Back-end review" },
   frontendReview: { phase: 9, label: "Front-end review" },
   browserE2E: { phase: 9.5, label: "Real-browser E2E", waivable: true },
@@ -548,6 +560,85 @@ function assertRunTransition(state, nextStatus) {
       "INVALID_RUN_TRANSITION",
       `Run ${state.runId} cannot transition from ${state.status} to ${nextStatus}`,
     );
+  }
+}
+
+/** True quando o `phaseHistory` registra a fase como fechada (DONE ou N/A). */
+function isPhaseClosed(phaseHistory, phase) {
+  const status = phaseHistory?.[String(phase)]?.status;
+  return status === "DONE" || status === "N/A";
+}
+
+/**
+ * Valida a transicao de uma fase contra `PHASE_SEQUENCE`.
+ *
+ * Corrige o Achado 1 da run oficina-saas-20260905-001: `updatePhase` aceitava
+ * qualquer numero finito e qualquer status, sem checar predecessor. Resultado:
+ * `--phase 7 --status DONE` com a fase 5 ainda RUNNING e a fase 6 inexistente
+ * foi aceito sem reclamacao, e o `phaseHistory` final mostrou fases 2/3/4/7/10/11
+ * fechadas em 0 ms — carimbadas em lote, nao conduzidas.
+ *
+ * Regras:
+ * 1. A fase precisa estar em `PHASE_SEQUENCE`, ou ser `0` (preflight, fora da
+ *    sequencia numerada e sem ordenacao a validar).
+ * 2. Marcar `DONE` exige que todo predecessor em `PHASE_SEQUENCE` esteja
+ *    fechado (`DONE` ou `N/A`) — senao `PHASE_PREDECESSOR_NOT_DONE`.
+ * 3. Marcar `RUNNING` exige que nenhum predecessor esteja `RUNNING` — senao
+ *    `PHASE_PREDECESSOR_RUNNING`. Voltar a uma fase anterior ja fechada
+ *    (o loop de correcao da Fase 7) continua permitido.
+ * 4. Marcar `N/A` exige que a fase tenha ao menos um completion gate
+ *    `waivable` — senao `PHASE_NOT_WAIVABLE`. A exigencia de `reason` fica a
+ *    cargo do chamador (`updatePhase`), que ja aplica a mesma regra ao gate.
+ */
+function assertPhaseTransition(state, numericPhase, normalizedStatus) {
+  if (numericPhase !== 0 && !PHASE_SEQUENCE.includes(numericPhase)) {
+    throw new OrchestrationStateError(
+      "PHASE_NOT_IN_SEQUENCE",
+      `Phase ${numericPhase} is not part of PHASE_SEQUENCE`,
+      { phase: numericPhase, sequence: [...PHASE_SEQUENCE] },
+    );
+  }
+  if (numericPhase === 0) return;
+
+  const index = PHASE_SEQUENCE.indexOf(numericPhase);
+  const predecessors = PHASE_SEQUENCE.slice(0, index);
+  const phaseHistory = state.phaseHistory ?? {};
+
+  if (normalizedStatus === "DONE") {
+    const blockedBy = predecessors.filter((phase) => !isPhaseClosed(phaseHistory, phase));
+    if (blockedBy.length > 0) {
+      throw new OrchestrationStateError(
+        "PHASE_PREDECESSOR_NOT_DONE",
+        `Phase ${numericPhase} cannot be marked DONE while predecessor phase(s) ${blockedBy.join(", ")} are not DONE or N/A`,
+        { phase: numericPhase, blockedBy },
+      );
+    }
+  }
+
+  if (normalizedStatus === "RUNNING") {
+    const runningPredecessors = predecessors.filter(
+      (phase) => phaseHistory?.[String(phase)]?.status === "RUNNING",
+    );
+    if (runningPredecessors.length > 0) {
+      throw new OrchestrationStateError(
+        "PHASE_PREDECESSOR_RUNNING",
+        `Phase ${numericPhase} cannot start RUNNING while predecessor phase(s) ${runningPredecessors.join(", ")} are still RUNNING`,
+        { phase: numericPhase, runningPredecessors },
+      );
+    }
+  }
+
+  if (normalizedStatus === "N/A") {
+    const waivableGates = completionGateForPhase(numericPhase).filter(
+      (gateId) => COMPLETION_GATE_DEFINITIONS[gateId]?.waivable,
+    );
+    if (waivableGates.length === 0) {
+      throw new OrchestrationStateError(
+        "PHASE_NOT_WAIVABLE",
+        `Phase ${numericPhase} has no waivable completion gate and cannot be marked N/A`,
+        { phase: numericPhase },
+      );
+    }
   }
 }
 
@@ -1417,6 +1508,7 @@ function taskCategoryFlags(tasks) {
 function completionGateRequirements(tasks) {
   const { backend, frontend } = taskCategoryFlags(tasks);
   return {
+    monitoring: true,
     backendReview: backend,
     frontendReview: frontend,
     // Todo front-end exige verificacao em navegador real. A parte mecanicamente decidivel
@@ -1457,6 +1549,10 @@ function synchronizeCompletionGates(previous, tasks, now) {
       reason: existing?.reason ?? null,
       startedAt: existing?.startedAt ?? null,
       completedAt: existing?.completedAt ?? null,
+      // So sobrevive ao resync enquanto o gate continuar N/A — se o status
+      // recomputado voltou a PENDING (ex.: required override foi removido),
+      // a delegacao nao vale mais.
+      delegatedTo: status === "N/A" ? existing?.delegatedTo ?? null : null,
       updatedAt: existing?.updatedAt ?? now,
     };
   }
@@ -1517,6 +1613,30 @@ function runSummary(state) {
     counts,
     gates: completionGateSummary(state.completionGates),
     updatedAt: state.updatedAt,
+  };
+}
+
+/**
+ * Normaliza `options.upstream` para `{ stage, slug, version, handoffPath } | null`.
+ * Formato solto (nao um schema estrito): a run so grava o que a Fase 1 ja
+ * resolveu via `ingestPensadorHandoff()`, para consulta posterior — nao e
+ * revalidado contra `.pensador/` aqui, e essa releitura seria uma segunda
+ * fonte da verdade.
+ */
+function normalizeUpstream(upstream) {
+  if (upstream == null) return null;
+  if (typeof upstream !== "object" || Array.isArray(upstream)) {
+    throw new OrchestrationStateError("INVALID_UPSTREAM", "upstream must be an object or null");
+  }
+  const stage = String(upstream.stage ?? "").trim();
+  if (!stage) {
+    throw new OrchestrationStateError("INVALID_UPSTREAM", "upstream.stage is required");
+  }
+  return {
+    stage,
+    slug: upstream.slug != null ? String(upstream.slug) : null,
+    version: upstream.version != null ? Number(upstream.version) : null,
+    handoffPath: upstream.handoffPath != null ? String(upstream.handoffPath) : null,
   };
 }
 
@@ -1611,6 +1731,12 @@ export function initRun(options) {
         pendingExecutorStops: [],
         finalizedAt: null,
       },
+      // Modo conjunto: a Fase 1 ja resolveu ingestPensadorHandoff() antes de
+      // chamar init — grava o resultado aqui para que fases posteriores (a
+      // delegacao da 9.5 acima) e `brain-pensador` (marca de slug consumido)
+      // nao precisem reingerir o Pensador para saber de onde a run veio.
+      // `null` em modo independente.
+      upstream: normalizeUpstream(options.upstream),
       createdAt: now,
       updatedAt: now,
       revision: 0,
@@ -1722,6 +1848,24 @@ export function syncRunFromArtifacts(artifactDir, options = {}) {
   }, options);
 }
 
+/**
+ * Maior fase de `PHASE_SEQUENCE` tal que ela e todas as anteriores estao
+ * fechadas (`DONE` ou `N/A`). Substitui o antigo `Math.max(lastSafePhase,
+ * numericPhase)` (Achado 1): um salto — fase 7 marcada `DONE` com a fase 5
+ * ainda `RUNNING` e a fase 6 inexistente — nao pode mais avancar o ponto de
+ * retomada. Com `assertPhaseTransition` bloqueando o salto em si, esta funcao
+ * e principalmente a defesa em profundidade para estado herdado de runs
+ * anteriores a este fix.
+ */
+function computeLastSafePhase(phaseHistory) {
+  let lastSafe = 0;
+  for (const phase of PHASE_SEQUENCE) {
+    if (!isPhaseClosed(phaseHistory, phase)) break;
+    lastSafe = phase;
+  }
+  return lastSafe;
+}
+
 export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
   const numericPhase = Number(phase);
   const normalizedStatus = String(phaseStatus).toUpperCase();
@@ -1734,10 +1878,17 @@ export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
       `Invalid phase status: ${phaseStatus}`,
     );
   }
+  if (normalizedStatus === "N/A" && !options.reason) {
+    throw new OrchestrationStateError(
+      "PHASE_WAIVER_REQUIRES_REASON",
+      `Phase ${numericPhase} requires a reason when marked N/A`,
+    );
+  }
 
   return withLock(artifactDir, () => {
     const state = loadRun(artifactDir, { repairSnapshot: true }).state;
     assertRunMutable(state, "update a phase");
+    assertPhaseTransition(state, numericPhase, normalizedStatus);
     const now = iso(options.now);
     const history = clone(state.phaseHistory ?? {});
     const previous = history[String(numericPhase)] ?? {};
@@ -1745,13 +1896,10 @@ export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
       name: phaseName(numericPhase),
       status: normalizedStatus,
       startedAt: previous.startedAt ?? now,
-      completedAt: normalizedStatus === "DONE" ? now : previous.completedAt ?? null,
+      completedAt: ["DONE", "N/A"].includes(normalizedStatus) ? now : previous.completedAt ?? null,
       reason: options.reason ?? previous.reason ?? null,
     };
 
-    const lastSafePhase = normalizedStatus === "DONE"
-      ? Math.max(Number(state.lastSafePhase ?? 0), numericPhase)
-      : Number(state.lastSafePhase ?? 0);
     let runStatus = state.status;
     if (normalizedStatus === "RUNNING" || normalizedStatus === "DONE") runStatus = "RUNNING";
     if (["FAILED", "BLOCKED", "UNKNOWN"].includes(normalizedStatus)) runStatus = normalizedStatus;
@@ -1774,12 +1922,20 @@ export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
           ? "RUNNING"
           : normalizedStatus === "FAILED"
             ? "FAILED"
-            : "BLOCKED";
+            : normalizedStatus === "N/A"
+              ? "N/A"
+              : "BLOCKED";
       completionGates[gateId] = {
         ...previousGate,
         status: gateStatus,
+        // N/A so chega aqui quando assertPhaseTransition ja confirmou que o
+        // gate e waivable; marca-lo dispensado explicitamente, salvo quando o
+        // gate ja carrega `delegatedTo` (setado por `updateCompletionGate`
+        // antes desta chamada) — o continue acima ja preserva esse caso.
+        requiredOverride: normalizedStatus === "N/A" ? false : previousGate.requiredOverride,
+        required: normalizedStatus === "N/A" ? false : previousGate.required,
         startedAt: previousGate.startedAt ?? now,
-        completedAt: gateStatus === "DONE" ? now : null,
+        completedAt: ["DONE", "N/A"].includes(gateStatus) ? now : null,
         reason: options.reason ?? previousGate.reason ?? null,
         evidence: [
           ...new Set([
@@ -1790,6 +1946,32 @@ export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
         updatedAt: now,
       };
     }
+
+    // Reabertura em cascata (Achado 5): reentrar numa fase RUNNING reabre toda
+    // fase posterior ja DONE — e o gate correspondente — de volta a PENDING.
+    // E o caminho de volta que faltava: a Fase 9.5 produz task de implementacao
+    // por construcao, mas estava depois das Fases 8/9 sem forma de reabri-las;
+    // 8 tasks da run analisada foram entregues depois dos reviews com os gates
+    // `backendReview`/`frontendReview` carimbados 1h24 depois, durante a
+    // Fase 11. Reentrar na Fase 7 agora reabre 8, 9 e 9.5 automaticamente.
+    if (normalizedStatus === "RUNNING") {
+      for (const laterPhase of PHASE_SEQUENCE) {
+        if (laterPhase <= numericPhase) continue;
+        const laterRecord = history[String(laterPhase)];
+        if (laterRecord?.status === "DONE") {
+          history[String(laterPhase)] = { ...laterRecord, status: "PENDING", completedAt: null };
+          for (const gateId of completionGateForPhase(laterPhase)) {
+            const gate = completionGates[gateId];
+            if (gate?.status === "DONE") {
+              completionGates[gateId] = { ...gate, status: "PENDING", completedAt: null, updatedAt: now };
+            }
+          }
+        }
+      }
+    }
+
+    const lastSafePhase = computeLastSafePhase(history);
+
     const committed = commitEvent(
       artifactDir,
       state,
@@ -1809,6 +1991,7 @@ export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
 }
 
 const GATE_ARTIFACT_CANDIDATES = Object.freeze({
+  monitoring: [["monitoring.md"]],
   backendReview: [["review-final.md"]],
   frontendReview: [["review-frontend.md"]],
   browserE2E: [["browser-e2e-report.md"], ["e2e-report.md"], ["e2e-verification.md"]],
@@ -1875,6 +2058,32 @@ export function updateCompletionGate(artifactDir, gateId, status, options = {}) 
         `Completion gate ${normalizedGateId} requires a reason when marked N/A`,
       );
     }
+    // `delegatedTo`: o gate nao roda aqui porque outro plugin da cadeia assume
+    // a verificacao — distinto de um waiver puro, onde a verificacao nao roda
+    // em lugar nenhum. So faz sentido junto de N/A e de um gate waivable;
+    // `completionAudit` e quem de fato confirma a delegacao contra
+    // `report/handoff.json.nextStage.consumer` antes de deixar a run fechar
+    // DONE (ver Achado 13 do modo conjunto Pensador -> Testador).
+    if (options.delegatedTo != null) {
+      if (typeof options.delegatedTo !== "string" || options.delegatedTo.trim() === "") {
+        throw new OrchestrationStateError(
+          "INVALID_GATE_DELEGATION",
+          "Completion gate delegatedTo must be a non-empty string",
+        );
+      }
+      if (normalizedStatus !== "N/A") {
+        throw new OrchestrationStateError(
+          "INVALID_GATE_DELEGATION",
+          `Completion gate ${normalizedGateId} can only be delegated when marked N/A`,
+        );
+      }
+      if (!definition.waivable) {
+        throw new OrchestrationStateError(
+          "GATE_APPLICABILITY_FIXED",
+          `Completion gate ${normalizedGateId} derives applicability from task categories`,
+        );
+      }
+    }
     let requiredOverride = options.required ?? previous.requiredOverride ?? null;
     if (normalizedStatus === "N/A" && previous.required && definition.waivable) {
       requiredOverride = false;
@@ -1918,6 +2127,10 @@ export function updateCompletionGate(artifactDir, gateId, status, options = {}) 
       completedAt: ["DONE", "N/A"].includes(normalizedStatus) ? now : null,
       reason: options.reason ?? previous.reason ?? null,
       evidence,
+      // Delegacao so sobrevive enquanto o gate estiver N/A; reabrir o gate
+      // (RUNNING/PENDING/DONE) limpa a marca — a proxima delegacao precisa ser
+      // explicita de novo.
+      delegatedTo: normalizedStatus === "N/A" ? (options.delegatedTo ?? previous.delegatedTo ?? null) : null,
       updatedAt: now,
     };
     let runStatus = state.status;
@@ -3258,7 +3471,25 @@ function completionAudit(artifactDir, state) {
   // `required` flag. A run with any waived gate must never self-report `complete:
   // true`: it needs to close as PARTIAL (WORKFLOW.md sec. 14, scenario E), with the
   // waiver surfaced for a human to accept, reject, or unblock instead.
-  const waivedGates = Object.values(completionGates).filter((gate) => gate.requiredOverride === false);
+  // Um gate delegado (`delegatedTo` setado — ver updateCompletionGate) e
+  // distinto de um waiver puro: a verificacao nao deixou de rodar, ela roda
+  // no proximo estagio da cadeia (ex.: Fase 9.5 quando a run e modo conjunto
+  // a partir do Pensador e o Testador esta instalado). So conta como
+  // legitimamente delegada se `report/handoff.json` de fato apontar
+  // `nextStage.consumer` para o mesmo plugin — senao a delegacao e invalida e
+  // volta a se comportar como waiver puro (a run fecha PARTIAL, nao DONE).
+  const delegatedGates = Object.values(completionGates).filter(
+    (gate) => gate.requiredOverride === false && gate.delegatedTo,
+  );
+  const waivedGates = Object.values(completionGates).filter(
+    (gate) => gate.requiredOverride === false && !gate.delegatedTo,
+  );
+  const nextStageConsumer = delegatedGates.length > 0
+    ? readHandoffNextStageConsumer(artifactDir)
+    : null;
+  const invalidDelegations = delegatedGates.filter(
+    (gate) => gate.delegatedTo !== nextStageConsumer,
+  );
   const requiredArtifacts = [
     "workflow-log.md",
     "subagents-context.md",
@@ -3281,6 +3512,18 @@ function completionAudit(artifactDir, state) {
     incompleteGates: incompleteGates.map((gate) => ({ id: gate.id, status: gate.status })),
     gatesWithoutEvidence: gatesWithoutEvidence.map((gate) => gate.id),
     waivedGates: waivedGates.map((gate) => ({ id: gate.id, reason: gate.reason })),
+    delegatedGates: delegatedGates.map((gate) => ({
+      id: gate.id,
+      delegatedTo: gate.delegatedTo,
+      reason: gate.reason,
+      valid: gate.delegatedTo === nextStageConsumer,
+    })),
+    invalidDelegations: invalidDelegations.map((gate) => ({
+      id: gate.id,
+      delegatedTo: gate.delegatedTo,
+      actualNextStageConsumer: nextStageConsumer,
+      code: "DELEGATION_WITHOUT_NEXT_STAGE",
+    })),
     missingArtifacts,
     complete:
       tasks.length > 0 &&
@@ -3291,8 +3534,23 @@ function completionAudit(artifactDir, state) {
       incompleteGates.length === 0 &&
       gatesWithoutEvidence.length === 0 &&
       waivedGates.length === 0 &&
+      invalidDelegations.length === 0 &&
       missingArtifacts.length === 0,
   };
+}
+
+/** Le `nextStage.consumer` de `report/handoff.json`, ou `null` quando o
+ * arquivo nao existe ou nao parseia — nesse caso a delegacao fica sem como
+ * ser confirmada e `invalidDelegations` a rejeita (falha fechada). */
+function readHandoffNextStageConsumer(artifactDir) {
+  const resolved = resolveArtifact(artifactDir, "handoff.json");
+  if (!resolved) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(resolved.path, "utf8"));
+    return parsed?.nextStage?.consumer ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function updateRunStatus(artifactDir, status, options = {}) {

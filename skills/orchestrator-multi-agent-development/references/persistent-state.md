@@ -171,9 +171,10 @@ Os gates persistidos são:
 
 | Gate | Fase | Regra |
 |---|---:|---|
+| `monitoring` | 6 | sempre obrigatório — fecha junto com a Fase 6, exige evidência de telemetria (`run/monitoring.md` ou `--evidence`) |
 | `backendReview` | 8 | obrigatório quando existe back-end |
 | `frontendReview` | 9 | obrigatório quando existe front-end |
-| `browserE2E` | 9.5 | obrigatório sempre que existe front-end; `N/A` é a única waiver de aplicabilidade e exige motivo explícito |
+| `browserE2E` | 9.5 | obrigatório sempre que existe front-end; `N/A` é a única waiver de aplicabilidade e exige motivo explícito — `--delegated-to <plugin>` marca o caso em que outro plugin da cadeia assume a verificação (ver abaixo), sem o qual a `N/A` é um waiver puro |
 | `reports` | 10 | sempre obrigatório |
 | `handoff` | 10 | sempre obrigatório |
 | `delivery` | 11 | sempre obrigatório |
@@ -182,6 +183,20 @@ Os gates persistidos são:
 `DONE` exige evidence ID/arquivo. Um gate não obrigatório pode ser `N/A` somente com motivo.
 
 A aplicabilidade derivada por categoria responde apenas "existe front-end?". Um run só de front-end (SPA consumindo API separada já existente) é exatamente o caso da Fase 9.5 e mantém o gate `PENDING`. Quando front/back não usam origens separadas, registre a decisão arquitetural de forma explícita: `gate --gate browserE2E --status N/A --required false --reason "<topologia comprovada>"`. A topologia é julgamento do orquestrador e precisa ficar no motivo — nunca é inferida silenciosamente da mistura de categorias. Nenhum outro gate obrigatório aceita override.
+
+### Delegação de gate ao Testador (modo conjunto a partir do Pensador)
+
+Quando a run é modo conjunto (Fase 1 detectou `.pensador/<slug>-vN/handoff.json`) e `cc-testador-subagents` está instalado, a Fase 9.5 não roda aqui — o Testador é quem dirige o navegador. Isso **não é um waiver comum**: a verificação vai rodar, só que no próximo estágio da cadeia. Marque explicitamente:
+
+```bash
+node "$STATE" gate --dir .orchestration/<slug> --gate browserE2E \
+  --status N/A --required false --delegated-to cc-testador-subagents \
+  --reason "PENSADOR_CHAIN_DELEGATED_TO_TESTADOR"
+node "$STATE" phase --dir .orchestration/<slug> --phase 9.5 --status N/A \
+  --reason "PENSADOR_CHAIN_DELEGATED_TO_TESTADOR"
+```
+
+`auditRunCompletion`/`completionAudit` confirma a delegação contra `report/handoff.json.nextStage.consumer` — só conta como válida (não bloqueia `complete: true`) se o `nextStage` da run de fato apontar para o mesmo plugin. Se `cc-testador-subagents` não estiver instalado, `nextStage` degrada para `cc-executor-subagents` (regra já documentada na Fase 9.5 de `workflow.md`); nesse caso a delegação fica automaticamente inválida — `invalidDelegations` reprova com `DELEGATION_WITHOUT_NEXT_STAGE` e a run fecha `PARTIAL`, nunca `DONE`. Sem `report/handoff.json` legível, a delegação também fica inválida (falha fechada): não há como confirmar quem assumiu a verificação.
 
 ## CLI do State Engine
 

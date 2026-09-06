@@ -306,7 +306,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] cada fase, dispatch, heartbeat relevante e resultado terminal persistido por `orchestration-state.mjs`
 - [ ] tasks interrompidas/reabertas foram marcadas `UNKNOWN` e reconciliadas antes de qualquer reexecucao
 - [ ] `STALLED` foi decidido por ausencia de progresso, com grace period, nao por duracao total da task
-- [ ] completion gates aplicaveis (`backendReview`, `frontendReview`, `browserE2E`, `reports`, `handoff`, `delivery`, `learning`) estao `DONE` com evidence IDs; gates N/A possuem motivo e nunca substituem gate obrigatorio
+- [ ] completion gates aplicaveis (`monitoring`, `backendReview`, `frontendReview`, `browserE2E`, `reports`, `handoff`, `delivery`, `learning`) estao `DONE` com evidence IDs; gates N/A possuem motivo e nunca substituem gate obrigatorio
 - [ ] cancelamento, quando solicitado, interrompeu/reconciliou executores e terminalizou tasks antes da run; nenhuma run `CANCELLED` preserva executor `RUNNING`
 - [ ] Node.js >= 22.13 e SQLite FTS5 foram confirmados pelo preflight
 - [ ] `.orchestrator/project-memory.md` foi inicializado/auditado e carregado antes da classificacao; contem somente fatos VALIDATED com fonte permitida

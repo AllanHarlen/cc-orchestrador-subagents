@@ -27,6 +27,10 @@ Toda fase e toda task sao transicoes da state machine descrita em `persistent-st
 
 Antes de iniciar uma fase, execute `orchestration-state.mjs phase --status RUNNING`. Ao concluir, persista `DONE`; em bloqueio/interrupcao, persista o estado correspondente antes de parar. Um crash entre fases retoma da proxima entrada segura da sequencia explicita (`... 9, 9.5, 10, 11, 12`). Um crash com executor ativo transforma `RUNNING` em `UNKNOWN` ate a reconciliacao provar o resultado.
 
+**A ordem de fase e validada, nao apenas registrada.** `updatePhase` recusa marcar uma fase `DONE` enquanto qualquer predecessora em `PHASE_SEQUENCE` nao estiver fechada (`DONE` ou `N/A`), e recusa iniciar `RUNNING` enquanto uma predecessora ainda estiver `RUNNING`. Isso existe porque uma run real chegou a `phase: 12, status: DONE` com a Fase 6 nunca tendo existido e a Fase 5 nunca tendo fechado — o `phaseHistory` fechava fases em lote, em 0 ms, sem a maquina de estados ter de fato conduzido a execucao. `N/A` e o unico jeito de pular uma fase, e so vale para fase cujo completion gate correspondente e `waivable` (hoje so a 9.5); exige sempre `--reason`.
+
+**Reentrar numa fase reabre o que vem depois dela.** Se a Fase 9.5 encontrar um defeito de integracao e a correcao voltar pela Fase 7, marcar `--phase 7 --status RUNNING` reabre automaticamente toda fase posterior que ja estava `DONE` (8, 9, 9.5) de volta a `PENDING`, junto com o completion gate correspondente. Isso fecha a lacuna que deixou 8 tasks serem entregues depois dos reviews de codigo na run analisada, com `backendReview`/`frontendReview` carimbados 1h24 depois — um gate carimbado depois do fato nao e um gate.
+
 `/orchestrator resume [runId]` segue o protocolo completo de `persistent-state.md`: replay, reconciliacao conservadora, probes de Codex/AGY, reconstrucao da wave e continuacao da ultima fase segura. Quando existir adapter, rode `orchestration-lifecycle.mjs tick --resume`; o resultado bruto e persistido antes da transicao. Resume nunca e atalho para redelegar trabalho cujo resultado ainda pode chegar.
 
 ## Fase 0 - Preflight
@@ -424,6 +428,8 @@ O orquestrador consolida as skills utilizadas por subagente em `report/subagents
 
 ## Fase 6 - Monitoramento
 
+Esta fase tem completion gate proprio (`monitoring`, sempre obrigatorio) — fechar a Fase 7 sem antes fechar a Fase 6 e recusado por `assertPhaseTransition`. Feche com evidencia real (`run/monitoring.md` atualizado, ou `--evidence` apontando para o que a Fase 6 de fato produziu): `orchestration-state.mjs gate --gate monitoring --status DONE --evidence file:run/monitoring.md`. Isso existe porque, numa run real, a Fase 6 nunca foi executada de fato — o `phaseHistory` mostrou fases fechando em lote e a telemetria por task (conversationId, modelo resolvido, duracao real, retentativa) ficou vazia em todas as tasks, sem que nada tivesse exigido essa evidencia.
+
 Estados canonicos persistidos:
 
 - `PENDING`
@@ -670,6 +676,18 @@ Se houver achados bloqueantes em qualquer das fases de review (8 ou 9):
 > **Por que esta fase existe.** Review de codigo, `dotnet build`, `npm run build`, `tsc` e `curl` sao **cegos** a uma classe inteira de defeitos de integracao runtime. Em um caso real, tres rodadas de review deram "APROVADO" e a vitrine publica inteira estava quebrada no navegador — porque nenhum review tinha aberto um browser de verdade. Ver a regra 17 do `SKILL.md` para os tres defeitos concretos (CORS ausente, tenant nao resolvido a partir do browser, casing de resposta divergente que falha silenciosamente com 200).
 
 **Quando roda:** sempre que houver task `FRONTEND_ONLY` ou fatia front-end de `FULLSTACK` **e** o front-end for servido como deploy/origem separada do back-end (SPA/Next.js/etc. chamando uma API em outra porta/host). Quando nao ha front-end, ou o front e server-rendered sem chamadas cross-origin, registre "N/A" e siga.
+
+**Excecao: modo conjunto a partir do Pensador com Testador instalado.** Quando a Fase 1 detectou `.pensador/<slug>-vN/handoff.json` (`mode: "joint"`) e `cc-testador-subagents` esta instalado no marketplace do workspace, a verificacao em navegador real e responsabilidade do Testador, nao do Orquestrador — ele e quem vai efetivamente dirigir o navegador no proximo estagio da cadeia. Pule esta fase automaticamente, sem pedir confirmacao:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" gate --gate browserE2E \
+  --status N/A --required false --delegated-to cc-testador-subagents \
+  --reason "PENSADOR_CHAIN_DELEGATED_TO_TESTADOR"
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" phase --phase 9.5 --status N/A \
+  --reason "PENSADOR_CHAIN_DELEGATED_TO_TESTADOR"
+```
+
+Isso **nao e o mesmo** que o "N/A" do paragrafo acima (front-end inexistente ou server-rendered): aqui a verificacao vai rodar, so que la na frente. `completionAudit` confirma isso contra `report/handoff.json.nextStage.consumer` na Fase 10 — a delegacao so vale se o `nextStage` da propria run apontar para `cc-testador-subagents`. Se o plugin nao estiver instalado, a regra de degradacao da Fase 10 manda `nextStage` para o Executor, a delegacao fica automaticamente invalida, e esta fase 9.5 **e obrigatoria de novo** — ninguem mais na cadeia vai abrir um navegador.
 
 **Como conduzir (o orquestrador faz diretamente, read-only sobre a app rodando):**
 
