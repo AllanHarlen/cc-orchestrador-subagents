@@ -17,7 +17,7 @@ Codex e Antigravity/AGY entram como subagentes especializados:
 | Papel | Executor | Responsabilidade |
 |---|---|---|
 | Orchestrador de Harness | Claude CLI / Claude Code | Ingere o PRD/spec e coordena o workflow, contratos, ondas, validações, logs e decisões do usuário. |
-| Implementação back-end, banco, testes e ajustes | Codex (despacho direto via `codex-companion.mjs`; fallback `codex:codex-rescue`) | Executa tasks não front-end com `--effort medium --write`, sem fixar `--model`. |
+| Implementação back-end, banco, testes e ajustes | Codex (despacho direto via `codex-companion.mjs`; fallback `codex:codex-rescue`) | Executa tasks não front-end com `--model <gpt-5.6-terra|gpt-5.6-sol|gpt-5.6-luna> --effort <low|medium|high> --write`, os dois derivados da task (papel: implement/review/fix — nunca um default fixo). |
 | Implementação front-end e UX | Antigravity/AGY (`cc-antigravity-plugin:antigravity-coder`) | Executa tasks `FRONTEND_ONLY` e fatias front-end de `FULLSTACK`, incluindo setup Vite/React, rotas e implementação de UI. |
 | Review back-end pós-implementação | Codex (despacho direto via `codex-companion.mjs`, sem `--write`; fallback `codex:codex-rescue`) | Revisa **apenas o back-end** com `--effort high` ou cai para review interno read-only do orquestrador quando faltar quota. |
 | Review front-end pós-implementação | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--read-only --format json --model pro-high --effort high`) | Revisa **apenas o front-end** em modo read-only ou cai para review interno do orquestrador quando o AGY estiver indisponível. |
@@ -43,7 +43,7 @@ Esse check agregado só prova que o servidor está registrado *em algum lugar* d
 - **Fase 2 - Classificação das tasks:** gera categoria, dependências, complexidade, contrato, `expectedFiles`/`validationPlan`, `allowedPaths`, agente e features de routing.
 - **Fase 3 - Ondas, routing e isolamento:** aplica pisos heurísticos, consulta evidência histórica quando suficiente, valida roteamento e separa worktrees isoladas de tasks serializadas por overlap.
 - **Fase 4 - Contratos API/UI:** cria e valida deterministicamente contratos, wire format, casing, exemplos, estados e permissões para toda troca front-back.
-- **Fase 5 - Delegação paralela:** cria worktrees elegíveis, adquire leases e envia tasks conforme `plan/waves.md`; Codex não recebe `--model`, AGY recebe o modelo explicável selecionado.
+- **Fase 5 - Delegação paralela:** cria worktrees elegíveis, adquire leases e envia tasks conforme `plan/waves.md`; Codex e AGY recebem, cada um, o modelo explicável selecionado (Codex: um dos três slugs fixos de papel; AGY: alias/tier de capacidade).
 - **Fase 6 - Lifecycle Manager:** consulta adapters, persiste retornos antes de consumir, renova heartbeat/lease por atividade observável e trata stall/grace/interrupt/retry/cancel sem presumir resultado.
 - **Fase 7 - Integração:** integra worktrees serialmente e usa scripts determinísticos para diff, escopo, API/UI, wire format e resultados de validação antes dos ajustes por categoria.
 - **Fase 8 - Review back-end pós-implementação:** delega review final read-only ao Codex com `--effort high`, **somente do back-end**, e salva `review/review-final.md`. Se Codex ficar sem quota, o próprio Orchestrador faz review interno. Ignorada se não houver back-end.
@@ -53,7 +53,7 @@ Esse check agregado só prova que o servidor está registrado *em algum lugar* d
 - **Fase 11 - Entrega durável:** prepara e persiste o resumo/instruções, sem anunciar sucesso antes dos gates finais.
 - **Fase 12 - Learning e fechamento:** cria `learning/learning-report.md` e candidate lessons sem promoção automática, projeta history/telemetry, exige `audit.complete`, fecha/verifica a run e só então publica a entrega.
 
-Os artefatos de coordenação e relatórios finais ficam em `.orchestration/<nome>/`.
+Os artefatos de coordenação e relatórios finais ficam em `.orchestrator/runs/<nome>/` (runs criadas antes desta versão continuam em `.orchestration/<nome>/`, ainda lidas mas nunca migradas).
 
 ### Regras operacionais principais
 
@@ -146,7 +146,7 @@ Se nenhum PRD/spec for fornecido, o orquestrador pede a especificação antes de
 
 ## Estado persistente e retomada
 
-Cada run possui uma state machine durável em `.orchestration/<nome>/`:
+Cada run possui uma state machine durável em `.orchestrator/runs/<nome>/` (ou `.orchestration/<nome>/` para uma run criada antes desta versão):
 
 - `state.json` é o snapshot materializado atual;
 - `events.jsonl` é o histórico append-only, escrito antes do snapshot e usado para reconstruí-lo após um crash.
@@ -165,7 +165,7 @@ A CLI determinística de estado também pode ser usada para inspeção e integri
 ```bash
 node scripts/orchestration-state.mjs status
 node scripts/orchestration-state.mjs resume <runId>
-node scripts/orchestration-state.mjs verify --dir .orchestration/<nome>
+node scripts/orchestration-state.mjs verify --dir .orchestrator/runs/<nome>
 ```
 
 Uma run só vira `DONE` quando possui task não vazia, evidence plan, escopo resolvido, Fase 12 concluída, artefatos obrigatórios e completion gates com evidência. Runs terminais são imutáveis. Cancelamento interrompe/reconcilia executores antes de fechar.
@@ -221,7 +221,7 @@ A separação é deliberada: o LLM toma decisões novas; scripts determinístico
 
 ### O que versionar
 
-`.orchestration/` e `.orchestrator/` não têm o mesmo destino no Git. Versione `events.jsonl` (fonte de verdade da run), os artefatos Markdown/handoff da run, `project-memory.md` e `learned/` — é isso que torna `resume` e o conhecimento acumulado portáveis entre máquinas. Sempre ignore `.orchestrator/worktrees/` (worktrees Git ativas — limpar ou versionar quebra uma wave em execução), `history.db`, `telemetry.jsonl` (ambos projeções reconstruíveis), `backups/` e os transitórios `*.db-wal`/`*.db-shm` do SQLite:
+Toda run nova vive em `.orchestrator/runs/<nome>/`, ao lado de `project-config.md`, `worktrees/`, `history.db` e `knowledge.db` — uma unica raiz oculta para tudo que este plugin grava no seu projeto. (Runs criadas antes desta versão continuam em `.orchestration/<nome>/`, lidas mas nunca migradas; docs/scripts antigos que voce ainda tenha por ai podem referenciar esse caminho.) Nem tudo dentro de `.orchestrator/` tem o mesmo destino no Git, porem. Versione `events.jsonl` (fonte de verdade da run), os artefatos Markdown/handoff da run, `project-memory.md` e `learned/` — é isso que torna `resume` e o conhecimento acumulado portáveis entre máquinas. Sempre ignore `.orchestrator/worktrees/` (worktrees Git ativas — limpar ou versionar quebra uma wave em execução), `history.db`, `telemetry.jsonl` (ambos projeções reconstruíveis), `backups/` e os transitórios `*.db-wal`/`*.db-shm` do SQLite:
 
 ```gitignore
 .orchestrator/worktrees/
@@ -525,7 +525,7 @@ Em especial para C# + TypeScript:
 node --check skills/orchestrator-multi-agent-development/scripts/preflight.mjs
 node --check skills/orchestrator-multi-agent-development/scripts/orchestration-state.mjs
 node scripts/preflight.mjs
-node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs .orchestration/<nome>
+node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs .orchestrator/runs/<nome>
 node --test tests/*.test.mjs
 rg --line-number --fixed-strings -- 'QUOTA_EXAUSTED' README.md commands skills
 rg --line-number --fixed-strings -- 'agyModelSource' README.md commands skills

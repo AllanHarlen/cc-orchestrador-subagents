@@ -26,7 +26,7 @@ Ao concluir, o orquestrador grava um `report/handoff.json` em `.orchestration/<s
 2. Se o preflight falhar, cancele.
 3. A especificacao fornecida pelo usuario (PRD/spec) e a fonte da verdade. O orquestrador a ingere e dela deriva diretamente a classificacao das tasks; nao cria artefatos de entendimento nem de planejamento.
 4. Implementacao, handoff e ajustes pontuais vao para subagentes. Nem o orquestrador nem os subagentes geram projeto/suite de testes automatizados como entregavel — a validacao de cada requisito (`RF`/`CA`) acontece no review de codigo (Fases 8/9), por inspecao direta.
-5. Codex usa o modelo padrao disponivel na conta; controle apenas `--effort medium` ou `--effort high`.
+5. Codex usa um de **tres papeis fixos de modelo**, nunca o default da conta: `gpt-5.6-sol` (review, exclusivo das Fases 8/9 e de task `REVIEW_ONLY`), `gpt-5.6-terra` (implementacao geral) e `gpt-5.6-luna` (correcao vinda da Fase 9.5 ou de review `REPROVADO`). Passe sempre `--model <papel>` e derive `--effort <low|medium|high>` da complexidade/risco da task — nunca um valor fixo, e nunca omita `--model` (sem ele o Codex cai no default de conta configurado pelo usuario, que pode ser o modelo de review). Ver "Vocabulario de modelo do Codex" na Fase 2 de `references/workflow.md`.
 6. Implementacao AGY usa o bridge 4.x com `--mode accept-edits --format stream-json --model <agyModel>`; o bridge resolve aliases pelo catalogo runtime e encaminha flags nativas sem modificar configuracoes do usuario.
 7. Contrato e obrigatorio sempre que houver troca de dados front-back.
 8. Review back-end e feito pelo Codex (`--effort high`, read-only); sem quota cai para review interno read-only do orquestrador. Codex **nunca** revisa front-end.
@@ -306,7 +306,7 @@ Em stacks C# + TypeScript, destaque explicitamente:
 - [ ] cada fase, dispatch, heartbeat relevante e resultado terminal persistido por `orchestration-state.mjs`
 - [ ] tasks interrompidas/reabertas foram marcadas `UNKNOWN` e reconciliadas antes de qualquer reexecucao
 - [ ] `STALLED` foi decidido por ausencia de progresso, com grace period, nao por duracao total da task
-- [ ] completion gates aplicaveis (`backendReview`, `frontendReview`, `browserE2E`, `reports`, `handoff`, `delivery`, `learning`) estao `DONE` com evidence IDs; gates N/A possuem motivo e nunca substituem gate obrigatorio
+- [ ] completion gates aplicaveis (`monitoring`, `backendReview`, `frontendReview`, `browserE2E`, `reports`, `handoff`, `delivery`, `learning`) estao `DONE` com evidence IDs; gates N/A possuem motivo e nunca substituem gate obrigatorio
 - [ ] cancelamento, quando solicitado, interrompeu/reconciliou executores e terminalizou tasks antes da run; nenhuma run `CANCELLED` preserva executor `RUNNING`
 - [ ] Node.js >= 22.13 e SQLite FTS5 foram confirmados pelo preflight
 - [ ] `.orchestrator/project-memory.md` foi inicializado/auditado e carregado antes da classificacao; contem somente fatos VALIDATED com fonte permitida

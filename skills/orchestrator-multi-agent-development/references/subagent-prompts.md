@@ -4,7 +4,7 @@ Sempre leia este arquivo antes de delegar para Codex ou Antigravity/AGY.
 
 ## Regras comuns
 
-- Para Codex, use o modelo padrao disponivel na conta e controle apenas `--effort medium` ou `--effort high`.
+- Para Codex, passe sempre `--model <papel>` — tres papeis fixos: `gpt-5.6-sol` (review, exclusivo), `gpt-5.6-terra` (implementacao) e `gpt-5.6-luna` (correcao de achado). `--effort <low|medium|high>` e derivado da complexidade/risco da task, nunca fixo. Nunca omita `--model`.
 - A categoria da task decide o agente. `FRONTEND_ONLY` sempre usa Antigravity/AGY como agente primario; Codex so pode receber front-end em fallback operacional registrado.
 - Codex revisa apenas back-end. O review de front-end e sempre do AGY com `--read-only --format json --model pro-high --effort high`.
 - Se aparecer cota, rate limit, billing, resource exhausted, model capacity ou daily limit no Codex, retorne `Status: QUOTA_EXHAUSTED`.
@@ -43,13 +43,17 @@ reescrevendo o prompt sem devolver isolamento em troca. Por isso o despacho e di
 node "<companionPath>" task \
   --cwd "<workspace da task>" \
   --prompt-file ".orchestration/<slug>/run/prompts/<taskId>.md" \
-  --effort medium --write --background --json
+  --model gpt-5.6-terra --effort medium --write --background --json
 # → { jobId, status: "queued", logFile }  —  jobId e o sessionId da task no state
 # resultado grande depois: node "<companionPath>" result <jobId> --json
 ```
 
-`--effort medium` para implementacao/handoff/ajuste; `--effort high` para review (Fase 8). **Omita
-`--write` no review de back-end** — isso torna o `read-only` uma garantia estrutural
+`--model gpt-5.6-terra` (papel implement) para implementacao/handoff/ajuste; `--model gpt-5.6-sol`
+(papel review) para review (Fase 8); `--model gpt-5.6-luna` (papel fix) para correcao vinda da Fase
+9.5 ou de review `REPROVADO`. `--effort` e sempre derivado da complexidade/risco da task —
+`medium` e o piso tipico de implementacao, `high` o de review — nunca um valor fixo, e nunca omita
+`--model`: sem ele o Codex cai no default de conta do usuario, que pode ser o modelo de review.
+**Omita `--write` no review de back-end** — isso torna o `read-only` uma garantia estrutural
 (`handleTask` em `codex-companion.mjs` faz `write = Boolean(options.write)`), nao uma frase de prompt
 que o executor pode ignorar.
 
@@ -310,7 +314,7 @@ impossivel, independente do que o texto do prompt disser.**
 node "<companionPath>" task \
   --cwd "<workspace do review>" \
   --prompt-file ".orchestration/<slug>/run/prompts/<taskId>-review.md" \
-  --effort high --background --json
+  --model gpt-5.6-sol --effort high --background --json
 # SEM --write. Fallback se companionPath nao resolver: codex:codex-rescue, mesmo corpo de prompt,
 # sem pedir escrita — e registre o fallback em report/workflow-log.md.
 ```
@@ -426,10 +430,12 @@ Salve o resultado em `review/review-frontend.md`.
 
 ## 6. Ajustes pontuais - Codex
 
-Use Codex para ajustes pontuais de implementacao back-end, handoff ou sincronizacao:
+Use Codex para ajustes pontuais de implementacao back-end, handoff ou sincronizacao — `--model
+gpt-5.6-terra` (papel implement); quando o ajuste vier de um achado da Fase 9.5 ou de review
+`REPROVADO`, use `--model gpt-5.6-luna` (papel fix) em vez disso:
 
 ```text
---effort medium
+--model gpt-5.6-terra --effort medium
 
 Ajuste pontual na implementacao:
 - arquivo: <PATH>

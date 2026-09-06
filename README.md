@@ -17,7 +17,7 @@ Codex and Antigravity/AGY enter as specialized sub-agents:
 | Role | Executor | Responsibility |
 |---|---|---|
 | Harness Orchestrator | Claude CLI / Claude Code | Ingests the PRD/spec and coordinates workflow, contracts, waves, validations, logs and user decisions. |
-| Back-end implementation, database, tests and adjustments | Codex (direct `codex-companion.mjs` dispatch; fallback `codex:codex-rescue`) | Executes non-front-end tasks with `--effort medium --write`, without fixing `--model`. |
+| Back-end implementation, database, tests and adjustments | Codex (direct `codex-companion.mjs` dispatch; fallback `codex:codex-rescue`) | Executes non-front-end tasks with `--model <gpt-5.6-terra|gpt-5.6-sol|gpt-5.6-luna> --effort <low|medium|high> --write`, both derived from the task (role: implement/review/fix — never a fixed default). |
 | Front-end implementation and UX | Antigravity/AGY (`cc-antigravity-plugin:antigravity-coder`) | Executes `FRONTEND_ONLY` tasks and front-end slices of `FULLSTACK`, including Vite/React setup, routing, and UI implementation. |
 | Back-end post-implementation review | Codex (direct `codex-companion.mjs` dispatch, no `--write`; fallback `codex:codex-rescue`) | Reviews **back-end only** with `--effort high` or falls back to orchestrator's internal read-only review when quota is exhausted. |
 | Front-end post-implementation review | Antigravity/AGY (`cc-antigravity-plugin:antigravity-agent`, `--read-only --format json --model pro-high --effort high`) | Reviews **front-end only** read-only or falls back to orchestrator's internal review when AGY is unavailable. |
@@ -43,7 +43,7 @@ That aggregate check only proves a server is registered *somewhere* on the machi
 - **Phase 2 - Task classification:** records category, dependencies, complexity, contracts, `expectedFiles`/`validationPlan`, `allowedPaths`, executor, and routing features.
 - **Phase 3 - Waves, routing, and isolation:** applies heuristic floors, consults comparable history when sufficient, validates routing, and separates isolated worktrees from scope-overlap serialization.
 - **Phase 4 - API/UI contracts:** creates and deterministically validates contracts, wire format, casing, examples, states, and permissions for every front-back exchange.
-- **Phase 5 - Parallel delegation:** creates eligible worktrees, acquires leases, and dispatches tasks; Codex receives no `--model`, while AGY receives an explainable selected model.
+- **Phase 5 - Parallel delegation:** creates eligible worktrees, acquires leases, and dispatches tasks; both Codex and AGY receive an explainable selected model (Codex: one of three fixed role slugs; AGY: capability alias/tier).
 - **Phase 6 - Lifecycle Manager:** polls adapters, persists results before consuming them, renews heartbeat/lease on observable activity, and handles stall/grace/interrupt/retry/cancel without assuming outcomes.
 - **Phase 7 - Integration:** serially integrates worktrees and uses deterministic scripts for diff, scope, API/UI, wire format, and validation results before category-specific corrections.
 - **Phase 8 - Back-end post-implementation review:** delegates final read-only review to Codex with `--effort high`, **back-end only**, and saves `review/review-final.md`. If Codex runs out of quota, the Orchestrator itself does internal review. Skipped when there is no back-end.
@@ -53,7 +53,7 @@ That aggregate check only proves a server is registered *somewhere* on the machi
 - **Phase 11 - Durable delivery:** prepares and persists the summary/instructions without announcing success before final gates.
 - **Phase 12 - Learning and closure:** creates `learning/learning-report.md` and candidate lessons without automatic promotion, projects history/telemetry, requires `audit.complete`, closes/verifies the run, and only then publishes delivery.
 
-Coordination artifacts and final reports live under `.orchestration/<name>/`.
+Coordination artifacts and final reports live under `.orchestrator/runs/<name>/` (runs created before this version stay at `.orchestration/<name>/`, still read but never migrated).
 
 ### Main Operational Rules
 
@@ -146,7 +146,7 @@ If no PRD/spec is provided, the orchestrator asks for the specification before c
 
 ## Persistent State and Resume
 
-Every run has a durable state machine in `.orchestration/<name>/`:
+Every run has a durable state machine in `.orchestrator/runs/<name>/` (or `.orchestration/<name>/` for a run created before this version):
 
 - `state.json` is the current materialized snapshot;
 - `events.jsonl` is the append-only write-ahead history used to rebuild the snapshot after a crash.
@@ -165,7 +165,7 @@ The deterministic state CLI is also available for inspection and integrity check
 ```bash
 node scripts/orchestration-state.mjs status
 node scripts/orchestration-state.mjs resume <runId>
-node scripts/orchestration-state.mjs verify --dir .orchestration/<name>
+node scripts/orchestration-state.mjs verify --dir .orchestrator/runs/<name>
 ```
 
 A run can become `DONE` only with a non-empty task set, evidence plans, resolved scope, completed Phase 12, required artifacts, and completion gates backed by evidence. Terminal runs are immutable. Cancellation interrupts and reconciles executors before closure.
@@ -221,7 +221,7 @@ The boundary is intentional: the LLM makes novel decisions; deterministic script
 
 ### What to Commit
 
-`.orchestration/` and `.orchestrator/` do not share the same fate in Git. Commit `events.jsonl` (the run's source of truth), the run's Markdown/handoff artifacts, `project-memory.md`, and `learned/` — that is what makes `resume` and accumulated knowledge portable across machines. Always ignore `.orchestrator/worktrees/` (live Git worktrees — cleaning or committing them breaks a running wave), `history.db`, `telemetry.jsonl` (both reconstructible projections), `backups/`, and SQLite's `*.db-wal`/`*.db-shm`:
+Every new run lives under `.orchestrator/runs/<name>/`, alongside `project-config.md`, `worktrees/`, `history.db` and `knowledge.db` — one hidden root for everything this plugin writes to your project. (Runs created before this version stay at `.orchestration/<name>/`, read but never migrated; older docs and scripts you may still have around can reference that path.) Not everything under `.orchestrator/` shares the same fate in Git, though. Commit `events.jsonl` (the run's source of truth), the run's Markdown/handoff artifacts, `project-memory.md`, and `learned/` — that is what makes `resume` and accumulated knowledge portable across machines. Always ignore `.orchestrator/worktrees/` (live Git worktrees — cleaning or committing them breaks a running wave), `history.db`, `telemetry.jsonl` (both reconstructible projections), `backups/`, and SQLite's `*.db-wal`/`*.db-shm`:
 
 ```gitignore
 .orchestrator/worktrees/
@@ -525,7 +525,7 @@ Especially for C# + TypeScript:
 node --check skills/orchestrator-multi-agent-development/scripts/preflight.mjs
 node --check skills/orchestrator-multi-agent-development/scripts/orchestration-state.mjs
 node scripts/preflight.mjs
-node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs .orchestration/<name>
+node skills/orchestrator-multi-agent-development/scripts/validate-routing.mjs .orchestrator/runs/<name>
 node --test tests/*.test.mjs
 rg --line-number --fixed-strings -- 'QUOTA_EXAUSTED' README.md commands skills
 rg --line-number --fixed-strings -- 'agyModelSource' README.md commands skills

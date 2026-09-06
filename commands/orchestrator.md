@@ -1,6 +1,6 @@
 ---
 description: Conduzir, retomar e manter um workflow multiagentico persistente que acumula conhecimento comprovado, com state machine, lifecycle, worktrees, validacao deterministica, telemetria e learning
-argument-hint: "help | preflight | project-config | status [runId] | resume [runId] | knowledge <sub> | telemetry <sub> | [--model <id>] [--parallel] [--subagent-model <id>] [--effort <nivel>] [--timeout <duracao>] <PRD>"
+argument-hint: "help | preflight | project-config | brain-pensador [--limit N] [--all] | status [runId] | resume [runId] | knowledge <sub> | telemetry <sub> | [--model <id>] [--parallel] [--subagent-model <id>] [--effort <nivel>] [--timeout <duracao>] <PRD>"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node:*), AskUserQuestion, Agent, TaskCreate, TaskUpdate, TaskList, Skill
 ---
 
@@ -40,6 +40,7 @@ Interceptam o argumento: se `$ARGUMENTS` comeca com um destes, o PRD **nao** e i
 | `preflight` | valida apenas as dependencias | `scripts/preflight.mjs` |
 | `project-config` | mostra/altera a stack de agentes e revalida, sem iniciar run | `project-config.mjs show`/`write` + preflight |
 | `config` | alias de `project-config` | idem |
+| `brain-pensador [--limit N] [--all]` | lista os handoffs do Pensador em `.pensador/` para o usuario escolher um e entrar em modo conjunto | `brain-pensador.mjs` |
 | `status [runId]` | estado do run (sem runId, o mais recente) | `orchestration-state.mjs status` |
 | `resume [runId]` | retoma o run exato sem assumir resultado de task interrompida | `orchestration-state.mjs resume` |
 | `knowledge status` | resume memoria, historico, recipes e Curator | `orchestrator-knowledge.mjs` + `orchestration-learning.mjs` |
@@ -275,6 +276,18 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/preflight.mjs"
 ```
 
 Mostre o resumo do JSON ao usuario e encerre. O relatorio ja traz o bloco `projectConfig` com os quatro papeis efetivos e o `requiredCliSet` derivado; neste modo nao colete configuracao nem ofereca instalacao.
+
+### Modo brain-pensador
+
+Descobre e lista os handoffs do Pensador em `.pensador/` — um por slug (a maior `-vN`), ordenados por recencia — para o usuario escolher qual implementar em modo conjunto, sem precisar saber o slug de cabeca. Fecha a lacuna de `ingestPensadorHandoff()` na Fase 1: com mais de um slug distinto e nenhum `--slug` explicito, ela devolve `mode: "ambiguous"` com uma lista de nomes crus e para ali.
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-multi-agent-development/scripts/brain-pensador.mjs" --root "." [--limit 10] [--all]
+```
+
+Read-only, nunca escreve em `.pensador/`. Sem `--limit`/`--all`, lista os 10 mais recentes; `--all` remove o corte. Cada linha traz `slug`, `latestVersion`, `versions`, `status`, `summary`, `deliverable` (`prd`\|`spec`), `hasDesignSystem`, `updatedAt` e `consumedBy` (o `runId` que ja ingeriu aquele handoff, via `state.upstream.handoffPath`, ou `null`).
+
+Apresente a lista ao usuario por `AskUserQuestion` — priorize os que `consumedBy` for `null` — e, com o slug escolhido, prossiga exatamente como o modo conjunto normal da Fase 1 prossegue com um slug explicito (`ingestPensadorHandoff({ slug })`, ver `references/workflow.md` Fase 1). Um slug com `consumedBy` preenchido ja foi implementado; confirme explicitamente antes de reprocessa-lo.
 
 ### Modo status
 

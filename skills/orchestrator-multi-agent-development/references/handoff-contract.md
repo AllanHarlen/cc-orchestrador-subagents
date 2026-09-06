@@ -13,7 +13,7 @@ Pensador               Orchestrador          Testador                  Executor
 (PENSA)         ─────▶  (CONSTROI)    ─────▶  (VALIDA EM NAVEGADOR) ─▶  (CORRIGE)
 PRD / Spec /            planeja, delega       testa E2E, a11y,            corrige o que o
 Open Design             e implementa          UI/UX e rastreabilidade     Testador reprovou
-.pensador/              .orchestration/       .testador/                  .executor/
+.pensador/              .orchestrator/runs/   .testador/                  .executor/
 ```
 
 | Estagio | Papel | Verbo | Responsabilidade central |
@@ -35,8 +35,8 @@ Cada plugin funciona **isoladamente** (recebendo a demanda direto do usuario) **
 |---|---|---|
 | **Pensador** | `/pensador <demanda>` — sempre a origem da cadeia. `upstream = null`. | — (primeiro estagio, nunca tem upstream) |
 | **Orchestrador** | `/orquestrador "Desenvolva um CRUD de clientes"` — o usuario fornece a demanda/PRD/spec direto (via `@arquivo` ou texto). O orquestrador trata o texto/arquivo como fonte da verdade. | Detecta `.pensador/*/handoff.json` (`stage: pensador`, `status: DONE`) e ingere PRD/Spec + contrato + design como fonte da verdade, sem re-planejar. Ver secao 7. |
-| **Testador** | `/testador <alvo avulso>` — demanda de validacao independente de entrega especifica. | Detecta `.orchestration/<slug>/report/handoff.json` (`stage: orchestrador`, `status: DONE`) e valida a entrega do Orchestrador. Ver secao 7. |
-| **Executor** | `/executor <demanda de resolucao rapida>` — feature pequena ou hotfix, com ou sem plano pre-definido no proprio enunciado. | Detecta `.testador/<slug>/artefatos/handoff.json` (`stage: testador`) — preferencial. Fallback para `.orchestration/<slug>/report/handoff.json` quando o Testador nao rodou. Ver secao 7. |
+| **Testador** | `/testador <alvo avulso>` — demanda de validacao independente de entrega especifica. | Detecta `.orchestrator/runs/<slug>/report/handoff.json` (`stage: orchestrador`, `status: DONE`; cai para `.orchestration/<slug>/report/handoff.json` em runs do Orchestrador anteriores a esta raiz — secao 3) e valida a entrega do Orchestrador. Ver secao 7. |
+| **Executor** | `/executor <demanda de resolucao rapida>` — feature pequena ou hotfix, com ou sem plano pre-definido no proprio enunciado. | Detecta `.testador/<slug>/artefatos/handoff.json` (`stage: testador`) — preferencial. Fallback para `.orchestrator/runs/<slug>/report/handoff.json` (ou `.orchestration/<slug>/report/handoff.json` em runs anteriores) quando o Testador nao rodou. Ver secao 7. |
 
 Regra de deteccao (consumidor): antes de tratar a demanda como independente, procure o `handoff.json` do estagio anterior no caminho que a secao 7 define para esse estagio especifico. Se existir e estiver `DONE` (ou `PARTIAL`/`BLOCKED` — ver secao 8), entre em **modo conjunto**; se nao existir, siga **independente**. Em duvida (varios slugs/versoes), confirme via `AskUserQuestion`.
 
@@ -47,21 +47,23 @@ Regra de deteccao (consumidor): antes de tratar a demanda como independente, pro
 | Estagio | Raiz | Identidade |
 |---|---|---|
 | Pensador | `.pensador/<slug>-vN/` | `slug` + versao local `-vN` |
-| Orchestrador | `.orchestration/<slug>/` | `slug` (sem versao) |
+| Orchestrador | `.orchestrator/runs/<slug>/` | `slug` (sem versao) |
 | Testador | `.testador/<slug>/artefatos/` | `slug` da entrega validada |
 | Executor | `.executor/<demanda_slug>/artefatos/` | `demanda_slug` da demanda de correcao |
 
 Regra absoluta: **nenhum artefato `.md`/`.json` de coordenacao na raiz do projeto**. Tudo vive sob a raiz oculta do estagio. Excecao unica: o change set do OpenSpec (`openspec/changes/<nome>/`), que e gerido por `/opsx:propose` e vive na arvore padrao do OpenSpec (specs podem estar aninhadas: `specs/<area>/<capability>/spec.md`) — o `handoff.json` do produtor o referencia como caminho relativo ao projeto (ver secao 5).
+
+> ⚠️ **Raiz do Orchestrador migrada de `.orchestration/<slug>/` para `.orchestrator/runs/<slug>/`.** Os dois nomes diferiam em tres caracteres, ambos ocultos, ambos na raiz do projeto, e nada no nome indicava qual era qual — `.orchestrator/` (config/knowledge por projeto: `project-config.md`, `worktrees/`, `history.db`, `knowledge.db`) e `.orchestration/` (artefatos por run) nunca tiveram razao semantica para serem nomes distintos. Toda run **nova** do Orchestrador nasce em `.orchestrator/runs/<slug>/`; uma run criada antes desta versao **nao e migrada automaticamente** e continua sendo descoberta em `.orchestration/<slug>/` — todo consumidor deste contrato (Testador, Executor) tenta a raiz atual primeiro e cai para a legada quando a run referenciada e anterior a esta mudanca.
 
 ### Correlacao por `slug`
 
 O `slug` e a chave que liga os estagios. Deriva da demanda original (kebab-case, sem acentos). O Pensador acrescenta `-vN`; os demais usam o `slug` base (sem `-vN`). Exemplo real:
 
 ```text
-.pensador/locadora-veiculos-multitenant-v1/   (slug = locadora-veiculos-multitenant, v1)
-.orchestration/locadora-veiculos-multitenant/ (mesmo slug, sem versao)
+.pensador/locadora-veiculos-multitenant-v1/       (slug = locadora-veiculos-multitenant, v1)
+.orchestrator/runs/locadora-veiculos-multitenant/ (mesmo slug, sem versao)
 .testador/locadora-veiculos-multitenant/artefatos/ (mesmo slug)
-.executor/review-locadora-veiculos-.../        (demanda_slug proprio do review)
+.executor/review-locadora-veiculos-.../            (demanda_slug proprio do review)
 ```
 
 ---
@@ -71,7 +73,7 @@ O `slug` e a chave que liga os estagios. Deriva da demanda original (kebab-case,
 Cada produtor grava um `handoff.json` ao concluir. O nome do arquivo e sempre `handoff.json`; **onde** ele fica dentro da pasta de artefatos e especifico de cada estagio, porque cada um usa seu proprio layout (secao 5 detalha por estagio):
 
 - **Pensador:** raiz de `artifactRoot` — `.pensador/<slug>-vN/handoff.json`.
-- **Orchestrador:** agrupado sob `report/` (layout v2, que reune todo artefato de categoria "report") — `.orchestration/<slug>/report/handoff.json`. Runs em layout anterior ao v2 tem o arquivo na raiz.
+- **Orchestrador:** agrupado sob `report/` (layout v2, que reune todo artefato de categoria "report") — `.orchestrator/runs/<slug>/report/handoff.json`. Runs anteriores a esta raiz usam `.orchestration/<slug>/report/handoff.json` (ou a raiz do slug, em layout anterior ao v2 — secao 7).
 - **Testador:** raiz de `artefatos_dir` — `.testador/<slug>/artefatos/handoff.json`.
 - **Executor:** raiz de `artefatos_dir` — `.executor/<slug>/artefatos/handoff.json`. Como o Executor e o ultimo estagio, esse arquivo nao tem consumidor a jusante quando `nextStage: null`.
 
@@ -225,17 +227,17 @@ grava VERBATIM em                     MATERIALIZA em (via materializeInto)
 6. **Design (Open Design), quando houver front-end** — materialize os arquivos verbatim de `design-system-files` conforme secao 6 e trate-os como contrato visual do front-end. Se so houver o fallback `design-system.md` (sem Open Design), use-o como referencia inline.
 
 ### Testador ingere Orchestrador (modo conjunto)
-1. Procure `.orchestration/<slug>/report/handoff.json` — o Orchestrador agrupa `handoff.json` sob `report/` desde o layout v2. Caia para `.orchestration/<slug>/handoff.json` (raiz) apenas em runs anteriores a esse layout.
+1. Procure `.orchestrator/runs/<slug>/report/handoff.json` — a raiz atual do Orchestrador, com `handoff.json` agrupado sob `report/` desde o layout v2. Sem ela, procure `.orchestration/<slug>/report/handoff.json` (raiz legada, runs anteriores a esta migracao — secao 3). Caia para `<raiz-encontrada>/<slug>/handoff.json` (sem `report/`) apenas em runs anteriores ao layout v2.
 2. Adote a entrega do Orchestrador como **baseline de validacao**: preserve o conteudo relevante em `{artefatos_dir}/ingested-baseline.md`.
-3. Sem `handoff.json`: leia `.orchestration/<slug>/report/implementation-report.md` + `.orchestration/<slug>/plan/tasks-classification.md` + `.orchestration/<slug>/plan/waves.md` + `.orchestration/<slug>/contracts/`.
+3. Sem `handoff.json`: leia `<raiz>/<slug>/report/implementation-report.md` + `<raiz>/<slug>/plan/tasks-classification.md` + `<raiz>/<slug>/plan/waves.md` + `<raiz>/<slug>/contracts/`, onde `<raiz>` e `.orchestrator/runs` ou, na ausencia dela, `.orchestration`.
 4. Para rastreabilidade, siga `upstream` ate o `handoff.json` do Pensador (raiz de `.pensador/<slug>-vN/` — nao leva o prefixo `report/`, que e especifico do layout do Orchestrador) e use `prd`/`api-contract`/`requirements-index` como criterio de cobertura e `design-system-files` como criterio visual.
 5. O `test-report.md` do Testador, quando o laudo for `REPROVADO`, serve como plano de correcao para o Executor seguinte: `nextStage.instructions` orienta o Executor a usar `{artefatos_dir}/review/test-report.md` como `plano_predefinido`.
 
 ### Executor ingere Testador (modo conjunto — preferencial) ou Orchestrador (fallback quando Testador nao rodou)
 1. **Preferencial:** procure `.testador/<slug>/artefatos/handoff.json` (`stage: testador`).
-2. **Fallback:** se nao existir, procure `.orchestration/<slug>/report/handoff.json` (`stage: orchestrador`). Caia para `.orchestration/<slug>/handoff.json` (raiz) apenas em runs anteriores ao layout v2 do Orchestrador.
+2. **Fallback:** se nao existir, procure `.orchestrator/runs/<slug>/report/handoff.json` (`stage: orchestrador`, raiz atual); sem ela, `.orchestration/<slug>/report/handoff.json` (raiz legada — secao 3). Caia para `<raiz-encontrada>/<slug>/handoff.json` (sem `report/`) apenas em runs anteriores ao layout v2 do Orchestrador.
 3. Adote o handoff encontrado como **plano pre-definido baseline**: registre `plano_predefinido: true`, preserve o conteudo relevante em `{artefatos_dir}/initial-plan-baseline.md` e execute o review plano-vs-entrega (Codex high) comparando o baseline com o estado atual do codigo. As correcoes e ajustes finos derivam desse review.
-4. Sem `handoff.json` de nenhum dos dois: leia `.orchestration/<slug>/report/implementation-report.md` + `.orchestration/<slug>/plan/tasks-classification.md` + `.orchestration/<slug>/plan/waves.md` + `.orchestration/<slug>/contracts/`.
+4. Sem `handoff.json` de nenhum dos dois: leia `<raiz>/<slug>/report/implementation-report.md` + `<raiz>/<slug>/plan/tasks-classification.md` + `<raiz>/<slug>/plan/waves.md` + `<raiz>/<slug>/contracts/`, onde `<raiz>` e `.orchestrator/runs` ou, na ausencia dela, `.orchestration`.
 5. Para rastreabilidade, siga `upstream` ate o `handoff.json` do Pensador (raiz de `.pensador/<slug>-vN/`) e use o `prd`/`api-contract`/`communication-contract` como baseline de referencia do review; use `design-system-files` como criterio visual dos ajustes de front-end.
 6. Registre as fontes em `plano_predefinido_fonte` e `plano_predefinido` no `.executor/checkpoint.json`.
 

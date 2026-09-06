@@ -20,8 +20,10 @@ import {
   ARTIFACT_LAYOUT_VERSION,
   SUPPORTED_ARTIFACT_LAYOUT_VERSIONS,
   artifactExists,
+  currentRunsRoot,
   ensureArtifactLayout,
   resolveArtifact,
+  runRootCandidates,
 } from "./artifact-layout.mjs";
 import {
   EXECUTORS,
@@ -57,6 +59,11 @@ export const PHASE_STATUSES = Object.freeze([
   "BLOCKED",
   "CANCELLED",
   "UNKNOWN",
+  // Fase legitimamente pulada — aceito somente para fases cujo completion gate
+  // e `waivable` (hoje so 9.5/browserE2E), e somente com `reason`. Ver
+  // assertPhaseTransition e updatePhase. Distinto de "nunca rodou" (PENDING):
+  // N/A e uma decisao registrada, nao um estado transitorio.
+  "N/A",
 ]);
 
 export const RUN_STATUSES = Object.freeze([
@@ -106,6 +113,13 @@ const RUN_TRANSITIONS = Object.freeze({
 });
 
 export const COMPLETION_GATE_DEFINITIONS = Object.freeze({
+  // Achado 2: a fase 6 (monitoring) nunca fechava porque nada exigia
+  // evidencia dela — telemetria por task ficou vazia em 33/33 e o sweeper de
+  // stall nunca rodou em 3h30. Este gate torna a fase 6 tao obrigatoria
+  // quanto qualquer outra: fechar a fase 7 sem fechar a 6 e agora impossivel
+  // (assertPhaseTransition), e fechar a 6 sem evidencia tambem
+  // (GATE_DONE_REQUIRES_EVIDENCE em updateCompletionGate).
+  monitoring: { phase: 6, label: "Monitoring telemetry" },
   backendReview: { phase: 8, label: "Back-end review" },
   frontendReview: { phase: 9, label: "Front-end review" },
   browserE2E: { phase: 9.5, label: "Real-browser E2E", waivable: true },
@@ -141,6 +155,14 @@ const CATEGORY_VALUES = [
 const TASK_ID_SOURCE = "(?:[A-Z]{1,8}-\\d{1,4}(?!\\.\\d)(?:-[A-Z0-9]+)?|T\\d+(?:-[A-Z0-9]+)?)";
 const TASK_ID_RE = new RegExp(`\\b${TASK_ID_SOURCE}\\b`, "gi");
 const TASK_ID_EXACT_RE = new RegExp(`^${TASK_ID_SOURCE}$`, "i");
+// Achado 11: `CT-08` (identificador de contrato, secao "Contratos" da Fase 4
+// — `contracts/CT-01.md` .. `CT-NN.md`) casa com a mesma gramatica de task ID
+// (`[A-Z]{1,8}-\d{1,4}`) e acabava virando entrada fantasma no namespace de
+// `tasks`, com `executor: "agy"` e status `CANCELLED`, reportada em
+// `sync.missingFromSource` a cada sync. Prefixos aqui nunca sao lidos como
+// task ID, mesmo quando aparecem em `tasks-classification.md`/`waves.md`
+// (ex.: numa tabela de rastreamento task -> contrato).
+const RESERVED_TASK_ID_PREFIXES = new Set(["CT"]);
 const PHASE_NAMES = Object.freeze({
   0: "preflight",
   1: "specification-ingestion",
@@ -551,6 +573,85 @@ function assertRunTransition(state, nextStatus) {
   }
 }
 
+/** True quando o `phaseHistory` registra a fase como fechada (DONE ou N/A). */
+function isPhaseClosed(phaseHistory, phase) {
+  const status = phaseHistory?.[String(phase)]?.status;
+  return status === "DONE" || status === "N/A";
+}
+
+/**
+ * Valida a transicao de uma fase contra `PHASE_SEQUENCE`.
+ *
+ * Corrige o Achado 1 da run oficina-saas-20260905-001: `updatePhase` aceitava
+ * qualquer numero finito e qualquer status, sem checar predecessor. Resultado:
+ * `--phase 7 --status DONE` com a fase 5 ainda RUNNING e a fase 6 inexistente
+ * foi aceito sem reclamacao, e o `phaseHistory` final mostrou fases 2/3/4/7/10/11
+ * fechadas em 0 ms — carimbadas em lote, nao conduzidas.
+ *
+ * Regras:
+ * 1. A fase precisa estar em `PHASE_SEQUENCE`, ou ser `0` (preflight, fora da
+ *    sequencia numerada e sem ordenacao a validar).
+ * 2. Marcar `DONE` exige que todo predecessor em `PHASE_SEQUENCE` esteja
+ *    fechado (`DONE` ou `N/A`) — senao `PHASE_PREDECESSOR_NOT_DONE`.
+ * 3. Marcar `RUNNING` exige que nenhum predecessor esteja `RUNNING` — senao
+ *    `PHASE_PREDECESSOR_RUNNING`. Voltar a uma fase anterior ja fechada
+ *    (o loop de correcao da Fase 7) continua permitido.
+ * 4. Marcar `N/A` exige que a fase tenha ao menos um completion gate
+ *    `waivable` — senao `PHASE_NOT_WAIVABLE`. A exigencia de `reason` fica a
+ *    cargo do chamador (`updatePhase`), que ja aplica a mesma regra ao gate.
+ */
+function assertPhaseTransition(state, numericPhase, normalizedStatus) {
+  if (numericPhase !== 0 && !PHASE_SEQUENCE.includes(numericPhase)) {
+    throw new OrchestrationStateError(
+      "PHASE_NOT_IN_SEQUENCE",
+      `Phase ${numericPhase} is not part of PHASE_SEQUENCE`,
+      { phase: numericPhase, sequence: [...PHASE_SEQUENCE] },
+    );
+  }
+  if (numericPhase === 0) return;
+
+  const index = PHASE_SEQUENCE.indexOf(numericPhase);
+  const predecessors = PHASE_SEQUENCE.slice(0, index);
+  const phaseHistory = state.phaseHistory ?? {};
+
+  if (normalizedStatus === "DONE") {
+    const blockedBy = predecessors.filter((phase) => !isPhaseClosed(phaseHistory, phase));
+    if (blockedBy.length > 0) {
+      throw new OrchestrationStateError(
+        "PHASE_PREDECESSOR_NOT_DONE",
+        `Phase ${numericPhase} cannot be marked DONE while predecessor phase(s) ${blockedBy.join(", ")} are not DONE or N/A`,
+        { phase: numericPhase, blockedBy },
+      );
+    }
+  }
+
+  if (normalizedStatus === "RUNNING") {
+    const runningPredecessors = predecessors.filter(
+      (phase) => phaseHistory?.[String(phase)]?.status === "RUNNING",
+    );
+    if (runningPredecessors.length > 0) {
+      throw new OrchestrationStateError(
+        "PHASE_PREDECESSOR_RUNNING",
+        `Phase ${numericPhase} cannot start RUNNING while predecessor phase(s) ${runningPredecessors.join(", ")} are still RUNNING`,
+        { phase: numericPhase, runningPredecessors },
+      );
+    }
+  }
+
+  if (normalizedStatus === "N/A") {
+    const waivableGates = completionGateForPhase(numericPhase).filter(
+      (gateId) => COMPLETION_GATE_DEFINITIONS[gateId]?.waivable,
+    );
+    if (waivableGates.length === 0) {
+      throw new OrchestrationStateError(
+        "PHASE_NOT_WAIVABLE",
+        `Phase ${numericPhase} has no waivable completion gate and cannot be marked N/A`,
+        { phase: numericPhase },
+      );
+    }
+  }
+}
+
 export function validateState(state) {
   if (!state || state.schemaVersion !== STATE_SCHEMA_VERSION) {
     throw new OrchestrationStateError(
@@ -933,13 +1034,16 @@ function nextRunId(projectRoot, slug, now = new Date()) {
     String(date.getUTCDate()).padStart(2, "0"),
   ].join("");
   const prefix = `${slug}-${stamp}-`;
-  const orchestrationRoot = join(resolve(projectRoot), ".orchestration");
   let maximum = 0;
 
-  if (existsSync(orchestrationRoot)) {
-    for (const entry of readdirSync(orchestrationRoot, { withFileTypes: true })) {
+  // Achado 14: numeracao unica precisa varrer as duas raizes — uma run nova
+  // nao pode colidir com o proximo numero de uma run legada em
+  // `.orchestration/`, nem vice-versa.
+  for (const { root, exists } of runRootCandidates(projectRoot)) {
+    if (!exists) continue;
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      const path = join(orchestrationRoot, entry.name, "state.json");
+      const path = join(root, entry.name, "state.json");
       if (!existsSync(path)) continue;
       try {
         const candidate = JSON.parse(readFileSync(path, "utf8"));
@@ -956,7 +1060,9 @@ function nextRunId(projectRoot, slug, now = new Date()) {
 }
 
 function uniqueTaskIds(text) {
-  return [...new Set((text.match(TASK_ID_RE) ?? []).map((id) => id.toUpperCase()))];
+  const ids = (text.match(TASK_ID_RE) ?? []).map((id) => id.toUpperCase());
+  const filtered = ids.filter((id) => !RESERVED_TASK_ID_PREFIXES.has(id.split("-")[0]));
+  return [...new Set(filtered)];
 }
 
 function extractTaskBlocks(content) {
@@ -1353,7 +1459,13 @@ export function parseTaskArtifacts(artifactDir) {
       if (!waveByTask.has(taskId)) waveByTask.set(taskId, wave.id);
     }
   }
-  for (const task of Object.values(tasks)) task.wave = waveByTask.get(task.id) ?? null;
+  // Achado 9: uma task descoberta depois que as ondas ja foram montadas (gap
+  // achado na Fase 7, endpoint faltando etc.) ficava com `wave: null` — igual
+  // a uma task legitimamente sem onda por falha de classificacao, quando na
+  // verdade e um caso bem distinto: ela existe, so nao foi prevista no plano
+  // original. `"adhoc"` torna essa origem visivel em vez de indistinguivel
+  // de uma lacuna de dados.
+  for (const task of Object.values(tasks)) task.wave = waveByTask.get(task.id) ?? "adhoc";
 
   return {
     tasks,
@@ -1375,6 +1487,11 @@ function initialTask(metadata, now) {
     sessionId: null,
     conversationId: null,
     resolvedModel: null,
+    // Effort de Codex efetivamente usado (Achado 13), distinto do `agyEffort`
+    // planejado que a Fase 2 grava em `plan/tasks-classification.md`. Espelha
+    // `resolvedModel` vs `model`: um e a decisao, o outro e o que a CLI de
+    // fato reportou ter usado.
+    codexEffort: null,
     retryDirective: null,
     usage: null,
     durationSeconds: null,
@@ -1417,6 +1534,7 @@ function taskCategoryFlags(tasks) {
 function completionGateRequirements(tasks) {
   const { backend, frontend } = taskCategoryFlags(tasks);
   return {
+    monitoring: true,
     backendReview: backend,
     frontendReview: frontend,
     // Todo front-end exige verificacao em navegador real. A parte mecanicamente decidivel
@@ -1457,6 +1575,10 @@ function synchronizeCompletionGates(previous, tasks, now) {
       reason: existing?.reason ?? null,
       startedAt: existing?.startedAt ?? null,
       completedAt: existing?.completedAt ?? null,
+      // So sobrevive ao resync enquanto o gate continuar N/A — se o status
+      // recomputado voltou a PENDING (ex.: required override foi removido),
+      // a delegacao nao vale mais.
+      delegatedTo: status === "N/A" ? existing?.delegatedTo ?? null : null,
       updatedAt: existing?.updatedAt ?? now,
     };
   }
@@ -1520,10 +1642,38 @@ function runSummary(state) {
   };
 }
 
+/**
+ * Normaliza `options.upstream` para `{ stage, slug, version, handoffPath } | null`.
+ * Formato solto (nao um schema estrito): a run so grava o que a Fase 1 ja
+ * resolveu via `ingestPensadorHandoff()`, para consulta posterior — nao e
+ * revalidado contra `.pensador/` aqui, e essa releitura seria uma segunda
+ * fonte da verdade.
+ */
+function normalizeUpstream(upstream) {
+  if (upstream == null) return null;
+  if (typeof upstream !== "object" || Array.isArray(upstream)) {
+    throw new OrchestrationStateError("INVALID_UPSTREAM", "upstream must be an object or null");
+  }
+  const stage = String(upstream.stage ?? "").trim();
+  if (!stage) {
+    throw new OrchestrationStateError("INVALID_UPSTREAM", "upstream.stage is required");
+  }
+  return {
+    stage,
+    slug: upstream.slug != null ? String(upstream.slug) : null,
+    version: upstream.version != null ? Number(upstream.version) : null,
+    handoffPath: upstream.handoffPath != null ? String(upstream.handoffPath) : null,
+  };
+}
+
 export function initRun(options) {
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
   const slug = normalizeSlug(options.slug ?? basename(resolve(options.artifactDir ?? "")));
-  const artifactDir = resolve(options.artifactDir ?? join(projectRoot, ".orchestration", slug));
+  // Achado 14: toda run nova nasce em `.orchestrator/runs/<slug>/`, nao mais
+  // em `.orchestration/<slug>/`. Uma run legada com esse mesmo slug
+  // continua sendo encontrada por `findRunDirectory`/`nextRunId` (as duas
+  // raizes) — este default so decide onde uma run **nova** e criada.
+  const artifactDir = resolve(options.artifactDir ?? join(currentRunsRoot(projectRoot), slug));
 
   return withLock(artifactDir, () => {
     if (existsSync(stateFile(artifactDir)) || existsSync(eventsFile(artifactDir))) {
@@ -1611,6 +1761,12 @@ export function initRun(options) {
         pendingExecutorStops: [],
         finalizedAt: null,
       },
+      // Modo conjunto: a Fase 1 ja resolveu ingestPensadorHandoff() antes de
+      // chamar init — grava o resultado aqui para que fases posteriores (a
+      // delegacao da 9.5 acima) e `brain-pensador` (marca de slug consumido)
+      // nao precisem reingerir o Pensador para saber de onde a run veio.
+      // `null` em modo independente.
+      upstream: normalizeUpstream(options.upstream),
       createdAt: now,
       updatedAt: now,
       revision: 0,
@@ -1722,6 +1878,24 @@ export function syncRunFromArtifacts(artifactDir, options = {}) {
   }, options);
 }
 
+/**
+ * Maior fase de `PHASE_SEQUENCE` tal que ela e todas as anteriores estao
+ * fechadas (`DONE` ou `N/A`). Substitui o antigo `Math.max(lastSafePhase,
+ * numericPhase)` (Achado 1): um salto — fase 7 marcada `DONE` com a fase 5
+ * ainda `RUNNING` e a fase 6 inexistente — nao pode mais avancar o ponto de
+ * retomada. Com `assertPhaseTransition` bloqueando o salto em si, esta funcao
+ * e principalmente a defesa em profundidade para estado herdado de runs
+ * anteriores a este fix.
+ */
+function computeLastSafePhase(phaseHistory) {
+  let lastSafe = 0;
+  for (const phase of PHASE_SEQUENCE) {
+    if (!isPhaseClosed(phaseHistory, phase)) break;
+    lastSafe = phase;
+  }
+  return lastSafe;
+}
+
 export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
   const numericPhase = Number(phase);
   const normalizedStatus = String(phaseStatus).toUpperCase();
@@ -1734,10 +1908,17 @@ export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
       `Invalid phase status: ${phaseStatus}`,
     );
   }
+  if (normalizedStatus === "N/A" && !options.reason) {
+    throw new OrchestrationStateError(
+      "PHASE_WAIVER_REQUIRES_REASON",
+      `Phase ${numericPhase} requires a reason when marked N/A`,
+    );
+  }
 
   return withLock(artifactDir, () => {
     const state = loadRun(artifactDir, { repairSnapshot: true }).state;
     assertRunMutable(state, "update a phase");
+    assertPhaseTransition(state, numericPhase, normalizedStatus);
     const now = iso(options.now);
     const history = clone(state.phaseHistory ?? {});
     const previous = history[String(numericPhase)] ?? {};
@@ -1745,13 +1926,10 @@ export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
       name: phaseName(numericPhase),
       status: normalizedStatus,
       startedAt: previous.startedAt ?? now,
-      completedAt: normalizedStatus === "DONE" ? now : previous.completedAt ?? null,
+      completedAt: ["DONE", "N/A"].includes(normalizedStatus) ? now : previous.completedAt ?? null,
       reason: options.reason ?? previous.reason ?? null,
     };
 
-    const lastSafePhase = normalizedStatus === "DONE"
-      ? Math.max(Number(state.lastSafePhase ?? 0), numericPhase)
-      : Number(state.lastSafePhase ?? 0);
     let runStatus = state.status;
     if (normalizedStatus === "RUNNING" || normalizedStatus === "DONE") runStatus = "RUNNING";
     if (["FAILED", "BLOCKED", "UNKNOWN"].includes(normalizedStatus)) runStatus = normalizedStatus;
@@ -1774,12 +1952,20 @@ export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
           ? "RUNNING"
           : normalizedStatus === "FAILED"
             ? "FAILED"
-            : "BLOCKED";
+            : normalizedStatus === "N/A"
+              ? "N/A"
+              : "BLOCKED";
       completionGates[gateId] = {
         ...previousGate,
         status: gateStatus,
+        // N/A so chega aqui quando assertPhaseTransition ja confirmou que o
+        // gate e waivable; marca-lo dispensado explicitamente, salvo quando o
+        // gate ja carrega `delegatedTo` (setado por `updateCompletionGate`
+        // antes desta chamada) — o continue acima ja preserva esse caso.
+        requiredOverride: normalizedStatus === "N/A" ? false : previousGate.requiredOverride,
+        required: normalizedStatus === "N/A" ? false : previousGate.required,
         startedAt: previousGate.startedAt ?? now,
-        completedAt: gateStatus === "DONE" ? now : null,
+        completedAt: ["DONE", "N/A"].includes(gateStatus) ? now : null,
         reason: options.reason ?? previousGate.reason ?? null,
         evidence: [
           ...new Set([
@@ -1790,6 +1976,32 @@ export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
         updatedAt: now,
       };
     }
+
+    // Reabertura em cascata (Achado 5): reentrar numa fase RUNNING reabre toda
+    // fase posterior ja DONE — e o gate correspondente — de volta a PENDING.
+    // E o caminho de volta que faltava: a Fase 9.5 produz task de implementacao
+    // por construcao, mas estava depois das Fases 8/9 sem forma de reabri-las;
+    // 8 tasks da run analisada foram entregues depois dos reviews com os gates
+    // `backendReview`/`frontendReview` carimbados 1h24 depois, durante a
+    // Fase 11. Reentrar na Fase 7 agora reabre 8, 9 e 9.5 automaticamente.
+    if (normalizedStatus === "RUNNING") {
+      for (const laterPhase of PHASE_SEQUENCE) {
+        if (laterPhase <= numericPhase) continue;
+        const laterRecord = history[String(laterPhase)];
+        if (laterRecord?.status === "DONE") {
+          history[String(laterPhase)] = { ...laterRecord, status: "PENDING", completedAt: null };
+          for (const gateId of completionGateForPhase(laterPhase)) {
+            const gate = completionGates[gateId];
+            if (gate?.status === "DONE") {
+              completionGates[gateId] = { ...gate, status: "PENDING", completedAt: null, updatedAt: now };
+            }
+          }
+        }
+      }
+    }
+
+    const lastSafePhase = computeLastSafePhase(history);
+
     const committed = commitEvent(
       artifactDir,
       state,
@@ -1809,6 +2021,7 @@ export function updatePhase(artifactDir, phase, phaseStatus, options = {}) {
 }
 
 const GATE_ARTIFACT_CANDIDATES = Object.freeze({
+  monitoring: [["monitoring.md"]],
   backendReview: [["review-final.md"]],
   frontendReview: [["review-frontend.md"]],
   browserE2E: [["browser-e2e-report.md"], ["e2e-report.md"], ["e2e-verification.md"]],
@@ -1875,6 +2088,32 @@ export function updateCompletionGate(artifactDir, gateId, status, options = {}) 
         `Completion gate ${normalizedGateId} requires a reason when marked N/A`,
       );
     }
+    // `delegatedTo`: o gate nao roda aqui porque outro plugin da cadeia assume
+    // a verificacao — distinto de um waiver puro, onde a verificacao nao roda
+    // em lugar nenhum. So faz sentido junto de N/A e de um gate waivable;
+    // `completionAudit` e quem de fato confirma a delegacao contra
+    // `report/handoff.json.nextStage.consumer` antes de deixar a run fechar
+    // DONE (ver Achado 13 do modo conjunto Pensador -> Testador).
+    if (options.delegatedTo != null) {
+      if (typeof options.delegatedTo !== "string" || options.delegatedTo.trim() === "") {
+        throw new OrchestrationStateError(
+          "INVALID_GATE_DELEGATION",
+          "Completion gate delegatedTo must be a non-empty string",
+        );
+      }
+      if (normalizedStatus !== "N/A") {
+        throw new OrchestrationStateError(
+          "INVALID_GATE_DELEGATION",
+          `Completion gate ${normalizedGateId} can only be delegated when marked N/A`,
+        );
+      }
+      if (!definition.waivable) {
+        throw new OrchestrationStateError(
+          "GATE_APPLICABILITY_FIXED",
+          `Completion gate ${normalizedGateId} derives applicability from task categories`,
+        );
+      }
+    }
     let requiredOverride = options.required ?? previous.requiredOverride ?? null;
     if (normalizedStatus === "N/A" && previous.required && definition.waivable) {
       requiredOverride = false;
@@ -1918,6 +2157,10 @@ export function updateCompletionGate(artifactDir, gateId, status, options = {}) 
       completedAt: ["DONE", "N/A"].includes(normalizedStatus) ? now : null,
       reason: options.reason ?? previous.reason ?? null,
       evidence,
+      // Delegacao so sobrevive enquanto o gate estiver N/A; reabrir o gate
+      // (RUNNING/PENDING/DONE) limpa a marca — a proxima delegacao precisa ser
+      // explicita de novo.
+      delegatedTo: normalizedStatus === "N/A" ? (options.delegatedTo ?? previous.delegatedTo ?? null) : null,
       updatedAt: now,
     };
     let runStatus = state.status;
@@ -1978,6 +2221,7 @@ function mergeTaskFields(previous, status, options, now, git) {
   if (options.sessionId !== undefined) task.sessionId = options.sessionId || null;
   if (options.conversationId !== undefined) task.conversationId = options.conversationId || null;
   if (options.resolvedModel !== undefined) task.resolvedModel = options.resolvedModel || null;
+  if (options.codexEffort !== undefined) task.codexEffort = options.codexEffort || null;
   if (options.retryDirective !== undefined) task.retryDirective = options.retryDirective || null;
   if (options.usage !== undefined) task.usage = options.usage ? clone(options.usage) : null;
   if (options.durationSeconds !== undefined) task.durationSeconds = options.durationSeconds ?? null;
@@ -2001,9 +2245,52 @@ function mergeTaskFields(previous, status, options, now, git) {
 
   if (!Array.isArray(task.attemptHistory)) task.attemptHistory = [];
   if (status === "RUNNING") {
+    // Achado 4: um redispatch de verdade — retomada AGY via `--conversation`,
+    // troca de executor por cota — chegava como RUNNING -> RUNNING
+    // (`sameStatus`), que nunca incrementava `attempt` nem abria uma entrada
+    // nova em `attemptHistory`; a run analisada registrou `attempt: 1` em
+    // 33/33 tasks com 9 redispatches reais. Uma atualizacao RUNNING que muda
+    // executor, sessionId ou conversationId em relacao ao que ja estava
+    // gravado so e aceita com `--new-attempt` — sem isso, e um redispatch nao
+    // declarado.
+    if (sameStatus && options.newAttempt !== true) {
+      // So conta como mudanca quando o campo ja tinha um valor gravado e o
+      // novo valor diverge — preencher um campo que ainda estava vazio (o
+      // caso de `import-executor-telemetry.mjs`, que descobre depois do fato
+      // um conversationId/sessionId que o dispatch original nao capturou)
+      // e um backfill legitimo, nao um redispatch.
+      const executorChanged = options.executor !== undefined && previous.executor != null &&
+        options.executor !== previous.executor;
+      const sessionChanged = options.sessionId !== undefined && previous.sessionId != null &&
+        options.sessionId !== previous.sessionId;
+      const conversationChanged = options.conversationId !== undefined && previous.conversationId != null &&
+        options.conversationId !== previous.conversationId;
+      if (executorChanged || sessionChanged || conversationChanged) {
+        throw new OrchestrationStateError(
+          "ATTEMPT_NOT_DECLARED",
+          `Task ${task.id} received a RUNNING update with a different ${
+            executorChanged ? "executor" : sessionChanged ? "sessionId" : "conversationId"
+          } than the current attempt, without --new-attempt`,
+          {
+            taskId: task.id,
+            previousExecutor: previous.executor ?? null,
+            newExecutor: options.executor ?? null,
+            previousSessionId: previous.sessionId ?? null,
+            newSessionId: options.sessionId ?? null,
+            previousConversationId: previous.conversationId ?? null,
+            newConversationId: options.conversationId ?? null,
+          },
+        );
+      }
+    }
     const recoveringSameAttempt = ["STALLED", "UNKNOWN"].includes(previousStatus) &&
       Number(task.attempt ?? 0) > 0 && options.newAttempt !== true;
-    const newAttempt = !sameStatus && !recoveringSameAttempt;
+    // Um redispatch RUNNING -> RUNNING so incrementa quando declarado
+    // explicitamente com --new-attempt (a checagem ATTEMPT_NOT_DECLARED acima
+    // ja barra o caso nao declarado). Sem essa clausula, `!sameStatus` sempre
+    // seria falso aqui e o attempt nunca avancaria mesmo com --new-attempt.
+    const declaredSameStatusAttempt = sameStatus && options.newAttempt === true;
+    const newAttempt = declaredSameStatusAttempt || (!sameStatus && !recoveringSameAttempt);
     if (newAttempt) task.attempt = Number(task.attempt ?? 0) + 1;
     if (newAttempt) {
       if (options.resolvedModel === undefined) task.resolvedModel = null;
@@ -2011,7 +2298,12 @@ function mergeTaskFields(previous, status, options, now, git) {
       if (options.durationSeconds === undefined) task.durationSeconds = null;
       if (options.numTurns === undefined) task.numTurns = null;
     }
-    task.startedAt = sameStatus || recoveringSameAttempt ? task.startedAt ?? now : now;
+    // Achado 3: `--started-at` deixa o orquestrador corrigir o extremo
+    // inicial de `durationMs` para o timestamp real que a CLI (AGY/Codex)
+    // reportou, em vez do momento em que o orquestrador processou um lote de
+    // dispatches — que e o que produziu durationMs identicos (2-3 ms de
+    // diferenca) entre tasks distintas na run analisada.
+    task.startedAt = options.startedAt ?? (newAttempt ? now : task.startedAt ?? now);
     task.completedAt = null;
     task.lastActivityAt = now;
     task.commitBefore = options.commitBefore ?? task.commitBefore ?? git.head ?? null;
@@ -2037,6 +2329,7 @@ function mergeTaskFields(previous, status, options, now, git) {
       sessionId: task.sessionId ?? null,
       conversationId: task.conversationId ?? null,
       resolvedModel: task.resolvedModel ?? null,
+      codexEffort: task.codexEffort ?? null,
       retryDirective: task.retryDirective ?? null,
       usage: task.usage ? clone(task.usage) : null,
       durationSeconds: task.durationSeconds ?? null,
@@ -2047,7 +2340,7 @@ function mergeTaskFields(previous, status, options, now, git) {
     if (attemptIndex >= 0) task.attemptHistory[attemptIndex] = attemptRecord;
     else task.attemptHistory.push(attemptRecord);
   } else if (status === "DONE") {
-    task.completedAt = now;
+    task.completedAt = options.completedAt ?? now;
     task.lastActivityAt = now;
     task.commitAfter = options.commitAfter ?? git.head ?? task.commitAfter ?? null;
   } else if (status === "STALLED") {
@@ -2059,7 +2352,7 @@ function mergeTaskFields(previous, status, options, now, git) {
   } else if (status === "UNKNOWN") {
     task.unknownAt = now;
   } else if (["FAILED", "BLOCKED", "CANCELLED"].includes(status)) {
-    task.completedAt = status === "BLOCKED" ? null : now;
+    task.completedAt = status === "BLOCKED" ? null : (options.completedAt ?? now);
   }
 
   if (["DONE", "FAILED", "BLOCKED", "CANCELLED"].includes(status) && Number(task.attempt ?? 0) > 0) {
@@ -2079,6 +2372,7 @@ function mergeTaskFields(previous, status, options, now, git) {
       executorSource: task.executorSource ?? previousAttempt.executorSource ?? null,
       model: task.model ?? previousAttempt.model ?? null,
       resolvedModel: task.resolvedModel ?? previousAttempt.resolvedModel ?? null,
+      codexEffort: task.codexEffort ?? previousAttempt.codexEffort ?? null,
       status,
       completedAt,
       durationMs: Number.isFinite(startedMs) && Number.isFinite(completedMs)
@@ -2297,17 +2591,13 @@ export function sweepStalledTasks(artifactDir, options = {}) {
       }
     }
 
+    // Achado 2: o sweeper so persistia `lifecycle.lastSweepAt` quando algo
+    // mudava — o early-return abaixo (removido) deixava o campo `null` para
+    // sempre numa run onde nenhuma task chegou a estagnar, mascarando o fato
+    // de que o sweep nunca rodou de nenhuma stall real tambem nao ter
+    // acontecido. `lastSweepAt` agora e evidencia de que a Fase 6 de fato
+    // varreu tasks — commitEvent roda sempre, mudando task ou nao.
     const changed = stalled.length > 0 || graceExpired.length > 0;
-    if (!changed) {
-      return {
-        changed: false,
-        state,
-        stalled,
-        graceExpired,
-        summary: runSummary(state),
-      };
-    }
-
     const draft = { ...state, tasks };
     const runStatus = deriveRunStatus(tasks, state.status);
     const currentWave = computeCurrentWave(draft);
@@ -2325,7 +2615,7 @@ export function sweepStalledTasks(artifactDir, options = {}) {
       options,
     );
     return {
-      changed: true,
+      changed,
       state: committed.state,
       event: committed.event,
       stalled,
@@ -3258,7 +3548,25 @@ function completionAudit(artifactDir, state) {
   // `required` flag. A run with any waived gate must never self-report `complete:
   // true`: it needs to close as PARTIAL (WORKFLOW.md sec. 14, scenario E), with the
   // waiver surfaced for a human to accept, reject, or unblock instead.
-  const waivedGates = Object.values(completionGates).filter((gate) => gate.requiredOverride === false);
+  // Um gate delegado (`delegatedTo` setado — ver updateCompletionGate) e
+  // distinto de um waiver puro: a verificacao nao deixou de rodar, ela roda
+  // no proximo estagio da cadeia (ex.: Fase 9.5 quando a run e modo conjunto
+  // a partir do Pensador e o Testador esta instalado). So conta como
+  // legitimamente delegada se `report/handoff.json` de fato apontar
+  // `nextStage.consumer` para o mesmo plugin — senao a delegacao e invalida e
+  // volta a se comportar como waiver puro (a run fecha PARTIAL, nao DONE).
+  const delegatedGates = Object.values(completionGates).filter(
+    (gate) => gate.requiredOverride === false && gate.delegatedTo,
+  );
+  const waivedGates = Object.values(completionGates).filter(
+    (gate) => gate.requiredOverride === false && !gate.delegatedTo,
+  );
+  const nextStageConsumer = delegatedGates.length > 0
+    ? readHandoffNextStageConsumer(artifactDir)
+    : null;
+  const invalidDelegations = delegatedGates.filter(
+    (gate) => gate.delegatedTo !== nextStageConsumer,
+  );
   const requiredArtifacts = [
     "workflow-log.md",
     "subagents-context.md",
@@ -3281,6 +3589,18 @@ function completionAudit(artifactDir, state) {
     incompleteGates: incompleteGates.map((gate) => ({ id: gate.id, status: gate.status })),
     gatesWithoutEvidence: gatesWithoutEvidence.map((gate) => gate.id),
     waivedGates: waivedGates.map((gate) => ({ id: gate.id, reason: gate.reason })),
+    delegatedGates: delegatedGates.map((gate) => ({
+      id: gate.id,
+      delegatedTo: gate.delegatedTo,
+      reason: gate.reason,
+      valid: gate.delegatedTo === nextStageConsumer,
+    })),
+    invalidDelegations: invalidDelegations.map((gate) => ({
+      id: gate.id,
+      delegatedTo: gate.delegatedTo,
+      actualNextStageConsumer: nextStageConsumer,
+      code: "DELEGATION_WITHOUT_NEXT_STAGE",
+    })),
     missingArtifacts,
     complete:
       tasks.length > 0 &&
@@ -3291,8 +3611,23 @@ function completionAudit(artifactDir, state) {
       incompleteGates.length === 0 &&
       gatesWithoutEvidence.length === 0 &&
       waivedGates.length === 0 &&
+      invalidDelegations.length === 0 &&
       missingArtifacts.length === 0,
   };
+}
+
+/** Le `nextStage.consumer` de `report/handoff.json`, ou `null` quando o
+ * arquivo nao existe ou nao parseia — nesse caso a delegacao fica sem como
+ * ser confirmada e `invalidDelegations` a rejeita (falha fechada). */
+function readHandoffNextStageConsumer(artifactDir) {
+  const resolved = resolveArtifact(artifactDir, "handoff.json");
+  if (!resolved) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(resolved.path, "utf8"));
+    return parsed?.nextStage?.consumer ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function updateRunStatus(artifactDir, status, options = {}) {
@@ -3363,12 +3698,19 @@ export function updateRunStatus(artifactDir, status, options = {}) {
 export function findRunDirectory(options = {}) {
   if (options.artifactDir) return resolve(options.artifactDir);
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
-  const root = join(projectRoot, ".orchestration");
-  if (!existsSync(root)) {
-    throw new OrchestrationStateError("RUN_NOT_FOUND", `No .orchestration directory in ${projectRoot}`);
+  // Achado 14: uma run pode estar em `.orchestrator/runs/<slug>/` (layout
+  // atual) ou `.orchestration/<slug>/` (legado, ainda lido) — varre as duas
+  // raizes que existirem no disco antes de decidir RUN_NOT_FOUND.
+  const roots = runRootCandidates(projectRoot).filter((candidate) => candidate.exists);
+  if (roots.length === 0) {
+    throw new OrchestrationStateError(
+      "RUN_NOT_FOUND",
+      `No .orchestrator/runs or .orchestration directory in ${projectRoot}`,
+    );
   }
 
   const candidates = [];
+  for (const { root } of roots) {
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const directory = join(root, entry.name);
@@ -3396,6 +3738,7 @@ export function findRunDirectory(options = {}) {
       // instead of silently selecting an older run.
     }
     candidates.push({ directory, identity, modifiedAt });
+  }
   }
 
   const matching = options.runId

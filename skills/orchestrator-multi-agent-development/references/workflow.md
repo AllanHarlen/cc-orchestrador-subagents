@@ -27,6 +27,10 @@ Toda fase e toda task sao transicoes da state machine descrita em `persistent-st
 
 Antes de iniciar uma fase, execute `orchestration-state.mjs phase --status RUNNING`. Ao concluir, persista `DONE`; em bloqueio/interrupcao, persista o estado correspondente antes de parar. Um crash entre fases retoma da proxima entrada segura da sequencia explicita (`... 9, 9.5, 10, 11, 12`). Um crash com executor ativo transforma `RUNNING` em `UNKNOWN` ate a reconciliacao provar o resultado.
 
+**A ordem de fase e validada, nao apenas registrada.** `updatePhase` recusa marcar uma fase `DONE` enquanto qualquer predecessora em `PHASE_SEQUENCE` nao estiver fechada (`DONE` ou `N/A`), e recusa iniciar `RUNNING` enquanto uma predecessora ainda estiver `RUNNING`. Isso existe porque uma run real chegou a `phase: 12, status: DONE` com a Fase 6 nunca tendo existido e a Fase 5 nunca tendo fechado — o `phaseHistory` fechava fases em lote, em 0 ms, sem a maquina de estados ter de fato conduzido a execucao. `N/A` e o unico jeito de pular uma fase, e so vale para fase cujo completion gate correspondente e `waivable` (hoje so a 9.5); exige sempre `--reason`.
+
+**Reentrar numa fase reabre o que vem depois dela.** Se a Fase 9.5 encontrar um defeito de integracao e a correcao voltar pela Fase 7, marcar `--phase 7 --status RUNNING` reabre automaticamente toda fase posterior que ja estava `DONE` (8, 9, 9.5) de volta a `PENDING`, junto com o completion gate correspondente. Isso fecha a lacuna que deixou 8 tasks serem entregues depois dos reviews de codigo na run analisada, com `backendReview`/`frontendReview` carimbados 1h24 depois — um gate carimbado depois do fato nao e um gate.
+
 `/orchestrator resume [runId]` segue o protocolo completo de `persistent-state.md`: replay, reconciliacao conservadora, probes de Codex/AGY, reconstrucao da wave e continuacao da ultima fase segura. Quando existir adapter, rode `orchestration-lifecycle.mjs tick --resume`; o resultado bruto e persistido antes da transicao. Resume nunca e atalho para redelegar trabalho cujo resultado ainda pode chegar.
 
 ## Fase 0 - Preflight
@@ -77,7 +81,11 @@ node "${CLAUDE_SKILL_DIR}/scripts/ingest-pensador.mjs" --root . [--slug <slug>]
    `result.warning`/`result.invalidHandoff`). O usuario fornece a especificacao via `@arquivo` ou
    texto no `/orquestrador`. `<nome>`/`<slug>` derivam do PRD.
 2. `result.mode === "ambiguous"`: varios `slug` distintos em `.pensador/` sem slug explicito —
-   confirme via `AskUserQuestion` usando `result.slugCandidates` e rode de novo com `--slug`.
+   confirme via `AskUserQuestion` usando `result.slugCandidates` e rode de novo com `--slug`. Para
+   apresentar mais do que o nome cru do slug (status, feature, deliverable, se ja foi consumido por
+   outra run), rode `brain-pensador.mjs` em vez de `AskUserQuestion` direto sobre
+   `slugCandidates` (ver Modo `brain-pensador` em `commands/orchestrator.md`) — e o mesmo caminho
+   que `/orquestrador brain-pensador` usa quando o usuario invoca o subcomando explicitamente.
 3. `result.mode === "joint"` (**Pensador → Orchestrador**): `result.slug`/`result.version` ja
    resolvem a maior versao `-vN` do slug escolhido.
    - `result.pensadorHandoff` presente: leia-o e trate os artefatos referenciados como fonte da
@@ -92,6 +100,15 @@ Assim que o slug estiver resolvido, crie `.orchestration/<slug>/` e inicialize o
 ```bash
 node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" init \
   --slug "<slug>" --dir ".orchestration/<slug>" --phase 1
+```
+
+Em **modo conjunto** (`result.mode === "joint"`), passe tambem a origem — e o que permite a fase 9.5 se auto-delegar ao Testador mais adiante (secao correspondente da Fase 9.5) e o que `/orquestrador brain-pensador` usa para marcar um slug como ja consumido (`consumedBy`):
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" init \
+  --slug "<slug>" --dir ".orchestration/<slug>" --phase 1 \
+  --upstream-stage pensador --upstream-slug "<slug>" --upstream-version <result.version> \
+  --upstream-handoff-path ".pensador/<slug>-v<result.version>/handoff.json"
 ```
 
 ### 1.1 Ler a especificacao fornecida
@@ -152,7 +169,12 @@ Para cada task extraida do PRD/spec, registre em `.orchestration/<nome>/plan/tas
 - `allowedPaths` para validar escopo e decidir isolamento;
 - `complexity`, `contractIds` e features de routing;
 - `requirementIds` — a lista de `RF-XX` do `requirements-index` do Pensador que esta task implementa (quando houver `requirements.json` no upstream; formato livre — `requirementIds: RF-01, RF-02` — o gate abaixo so precisa achar os IDs em algum lugar do texto da task);
-- para AGY, `agyModel`, `agyModelSource` e, quando adaptativo, `agyModelEvidence`.
+- para AGY, `agyModel`, `agyModelSource` e, quando adaptativo, `agyModelEvidence`;
+- para Codex, `codexModel`, `codexModelSource` e `codexEffort` — ver "Vocabulario de modelo do Codex" abaixo. Assim como no AGY, `codexModel` nao e escolha livre: e um dos tres papeis fixos (`gpt-5.6-sol` para review, `gpt-5.6-terra` para implementacao, `gpt-5.6-luna` para correcao), e `validate-routing.mjs` reprova task de implementacao usando o modelo de review ou vice-versa.
+
+**Cobertura de autenticacao.** Para cada area/rota declarada como autenticada na especificacao, confirme que existe uma task cobrindo o endpoint de autenticacao correspondente (`POST /api/auth/login` ou equivalente) — nao assuma que ele ja existe. Numa run real, uma aplicacao cuja area administrativa inteira era autenticada nao tinha task nenhuma para o endpoint de login; so foi descoberta por acaso, ao checar se o endpoint existia antes de despachar a tela de login, ja na Fase 5. Trate a lacuna como um gap bloqueante desta fase, nao como algo a descobrir mais adiante.
+
+**Titulo de task nunca cita numero de fase.** Uma task ad-hoc criada durante a execucao (gap descoberto, correcao da Fase 9.5) registra o motivo em prosa (`routingReason`), nunca "gap descoberto na Fase N" — a numeracao de fase da maquina de estados e do texto do artefato podem divergir (a fase que estava de fato `RUNNING` no `state.json` no momento da criacao da task raramente e a mesma que a prosa do artefato menciona, porque o registro em texto costuma ficar atrasado em relacao ao avanco real da state machine). Se precisar referenciar quando a task foi criada, cite o timestamp ou o evento (ex.: "gap descoberto ao validar contrato antes do dispatch da tela de login"), nunca "Fase N".
 
 Depois de escrever `plan/tasks-classification.md`, rode o gate de cobertura RF/CA (quando houver `requirements-index` no upstream) **antes** de montar as ondas — pegar um `RF` sem task aqui e mais barato do que descobrir na Fase 7:
 
@@ -166,11 +188,23 @@ O Executor de cada task vem da categoria combinada com a Project_Config (`refere
 
 | Categoria | Papel da Project_Config | Execucao sob os defaults (`codex`/`agy`) |
 |---|---|---|
-| `BACKEND_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --effort medium --write` (chamada direta; fallback `codex:codex-rescue`) |
-| `DATABASE_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --effort medium --write` (chamada direta; fallback `codex:codex-rescue`) |
-| `REVIEW_ONLY` | `backendReviewer` | Codex via `codex-companion.mjs task --effort high` **sem `--write`** (chamada direta; fallback `codex:codex-rescue`) |
+| `BACKEND_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --model <codexModel> --effort <codexEffort> --write` (chamada direta; fallback `codex:codex-rescue`) |
+| `DATABASE_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --model <codexModel> --effort <codexEffort> --write` (chamada direta; fallback `codex:codex-rescue`) |
+| `REVIEW_ONLY` | `backendReviewer` | Codex via `codex-companion.mjs task --model gpt-5.6-sol --effort high` **sem `--write`** (chamada direta; fallback `codex:codex-rescue`) |
 | `FRONTEND_ONLY` | `frontendExecutor` | AGY (`cc-antigravity-plugin:antigravity-coder`) com `--mode accept-edits --format stream-json --model <agyModel>` |
-| `FULLSTACK` | `backendExecutor` + `frontendExecutor` | Codex para back-end; AGY com `--mode accept-edits --format stream-json --model <agyModel>` para front-end |
+| `FULLSTACK` | `backendExecutor` + `frontendExecutor` | Codex com `--model <codexModel> --effort <codexEffort>` para back-end; AGY com `--mode accept-edits --format stream-json --model <agyModel>` para front-end |
+
+#### Vocabulario de modelo do Codex
+
+Assim como o AGY tem uma escada de capacidade (ver "Roteamento por fidelidade de design" abaixo), o Codex tem **tres papeis fixos**, nunca escolha livre:
+
+| Papel | Modelo | Quando usar |
+|---|---|---|
+| `review` | `gpt-5.6-sol` | Fases 8/9 (review de codigo) e task `REVIEW_ONLY`. **Somente review** — nunca implementacao. |
+| `implement` | `gpt-5.6-terra` | `BACKEND_ONLY`, `DATABASE_ONLY`, `DOCS_ONLY`, fatia back-end de `FULLSTACK`. Desenvolvimento geral. |
+| `fix` | `gpt-5.6-luna` | Correcao originada da Fase 9.5 (browser-e2e) ou de review `REPROVADO`. |
+
+Registre `codexModel` e `codexModelSource: user\|heuristic\|adaptive` (mesma semantica de `agyModelSource`) em toda task cujo Executor efetivo seja `codex`. `codexEffort` (`low\|medium\|high`) e sempre derivado da complexidade/risco da task na classificacao — nunca um valor fixo, e nunca um rebaixamento silencioso do `model_reasoning_effort` que o usuario configurou em `~/.codex/config.toml`. `validate-routing.mjs` reprova: task de implementacao usando `gpt-5.6-sol`; task `REVIEW_ONLY` usando qualquer modelo que nao seja `gpt-5.6-sol`; `codexModel`/`codexEffort` ausentes numa task apontando para Codex; e `codexModel`/`codexEffort` presentes numa task `claude-code`.
 
 Quando o papel resolvido e `claude-code`, o `executor` da task e `claude-code`: delegue pela ferramenta `Agent` a um subagente do proprio Claude Code (implementacao) ou rode a task em modo read-only gravando em `review/review-final.md`/`review/review-frontend.md` (review). Uma task com `executor: claude-code` nunca registra `agyModel`, `agyModelSource`, `agyParallel` nem `agySubagentModel` — o validador reprova o bloco se algum desses campos aparecer. Artefato legado sem o campo `executor` continua validado pela heuristica antiga de mencao de agente (`assignedAgent`).
 
@@ -366,9 +400,9 @@ Se o prompt montado **exceder 28.000 chars**:
 
 Para Codex:
 
-- implementacao, handoff e ajuste -> `--effort medium`;
-- review -> `--effort high`;
-- nao fixe `--model`.
+- passe `--model <codexModel>` sempre — os tres papeis fixos sao `gpt-5.6-sol` (review), `gpt-5.6-terra` (implementacao) e `gpt-5.6-luna` (correcao), ver "Vocabulario de modelo do Codex" na Fase 2. Nunca omita `--model`: sem ele, o Codex cai no `model = "gpt-5.6-sol"` do `~/.codex/config.toml` do usuario, que e o modelo de review, para qualquer task;
+- `--effort <codexEffort>`, derivado de complexidade/risco na classificacao (nunca um valor fixo) — tipicamente `medium` para implementacao/handoff/ajuste, `high` para review e para task de risco alto de regressao;
+- registre `codexModelSource: user|heuristic|adaptive`, mesma semantica de `agyModelSource`;
 - antes de executar instalacao/restore de pacotes, verifique se a task depende de rede externa ou de cache local; se falhar por rede bloqueada ou pacote ausente, pare como `BLOCKED`.
 - se houver erro de permissao ao escrever fora do working directory permitido, pare como `BLOCKED` e reporte o caminho alvo.
 
@@ -411,6 +445,8 @@ O orquestrador consolida as skills utilizadas por subagente em `report/subagents
 
 ## Fase 6 - Monitoramento
 
+Esta fase tem completion gate proprio (`monitoring`, sempre obrigatorio) — fechar a Fase 7 sem antes fechar a Fase 6 e recusado por `assertPhaseTransition`. Feche com evidencia real (`run/monitoring.md` atualizado, ou `--evidence` apontando para o que a Fase 6 de fato produziu): `orchestration-state.mjs gate --gate monitoring --status DONE --evidence file:run/monitoring.md`. Isso existe porque, numa run real, a Fase 6 nunca foi executada de fato — o `phaseHistory` mostrou fases fechando em lote e a telemetria por task (conversationId, modelo resolvido, duracao real, retentativa) ficou vazia em todas as tasks, sem que nada tivesse exigido essa evidencia.
+
 Estados canonicos persistidos:
 
 - `PENDING`
@@ -449,6 +485,18 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-lifecycle.mjs" watch \
 ```
 
 O adapter recebe apenas placeholders allowlisted e roda sem shell. Cada probe bruto redigido e limitado e salvo em `run/executor-results/` antes de atualizar task, heartbeat, lease, history e telemetry. Para AGY, preserve `conversationId`, modelo resolvido, `usage`, duracao, turnos e a diretiva de retry validada. `interrupt`, `retry` e `cancel` exigem adapter ou `--external-confirmed`; nunca simule sucesso da acao externa. Retry confirmado usa exatamente `--conversation <id>` quando houver ID e `--continue` apenas quando nao houver. Veja `lifecycle-telemetry.md` e `assets/executor-control-config.schema.json`.
+
+**Ler de volta o que as CLIs ja publicaram.** AGY grava `conversationId`/modelo resolvido no log JSONL do bridge (`bridge.exit`, `%LOCALAPPDATA%/agy/cc-plugin-logs/` ou `CC_ANTIGRAVITY_LOG_PATH`); Codex grava o thread id no sidecar de job e o **modelo efetivamente resolvido** no rollout de sessao (`~/.codex/sessions/YYYY/MM/DD/*.jsonl`, evento `thread_settings_applied` — a unica fonte que revela quando o modelo pedido e o que de fato rodou divergem, ver Achado 13 da run oficina-saas-20260905-001). Depois de cada dispatch, ou em lote ao fechar a fase, rode:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/import-executor-telemetry.mjs" --dir ".orchestration/<nome>" --task <ID> --root "." \
+  --agy-log "<path do log do bridge>" --agy-pid <pid> \
+  --codex-job "<path do sidecar de job>" --codex-rollout "<path do rollout>"
+```
+
+Grava `conversationId`/`sessionId`, `resolvedModel`, `codexEffort` efetivo, `startedAt`/`completedAt` reais (corrigindo `durationMs` para o tempo real da task, nao do lote de dispatch — Achado 3) e `producedFiles` via `git diff --name-only` entre `commitBefore`/`commitAfter`. `--dry-run` mostra o que seria capturado sem gravar. So faz backfill de campo vazio — mudar `conversationId`/`sessionId`/`executor` que ja tinham valor exige `--new-attempt`, senao `updateTaskStatus` recusa com `ATTEMPT_NOT_DECLARED`.
+
+**Todo redispatch declara `--new-attempt`.** Um retorno AGY via `--conversation <id>` depois de truncamento, ou uma troca de executor por cota (Codex -> `claude-code`), e uma retentativa de verdade mesmo quando o status externo continua `RUNNING` de ponta a ponta. Sem `--new-attempt`, `task --status RUNNING` com `executor`/`sessionId`/`conversationId` diferente do que ja estava gravado e recusado (`ATTEMPT_NOT_DECLARED`) — a run analisada tinha 9 redispatches reais e registrou `attempt: 1` em 33/33 tasks porque nada distinguia "funcionou" de "funcionou na segunda". Use `orchestration-lifecycle.mjs retry` (que ja passa `newAttempt: true` internamente) ou `task --status RUNNING --new-attempt` diretamente.
 
 ### Politica de quota
 
@@ -656,7 +704,21 @@ Se houver achados bloqueantes em qualquer das fases de review (8 ou 9):
 
 > **Por que esta fase existe.** Review de codigo, `dotnet build`, `npm run build`, `tsc` e `curl` sao **cegos** a uma classe inteira de defeitos de integracao runtime. Em um caso real, tres rodadas de review deram "APROVADO" e a vitrine publica inteira estava quebrada no navegador — porque nenhum review tinha aberto um browser de verdade. Ver a regra 17 do `SKILL.md` para os tres defeitos concretos (CORS ausente, tenant nao resolvido a partir do browser, casing de resposta divergente que falha silenciosamente com 200).
 
+> **Esta fase verifica funcao, nao design.** Ela dirige fluxos de usuario — login, CRUD, checkout — e confirma que o efeito final aconteceu de fato; nao abre uma viewport de celular para medir layout, nao compara uma cor computada contra a paleta do contrato, nao confere se a fonte declarada realmente carrega. Numa run real isso deixou passar uma fonte nunca entregue (renderizava so porque estava instalada na maquina), uma sidebar mobile ocupando 39% da pagina antes do conteudo comecar, e um header sem gutter — os tres invisiveis a build, `curl`, review de codigo **e** a este E2E funcional. Quando o projeto tem Open Design e `cc-testador-subagents` esta instalado, essa conformidade de design em runtime e responsabilidade dele (gate `design-runtime` da Fase 8 do Testador, `lib/runtime-design-probe.mjs`) — nao desta fase.
+
 **Quando roda:** sempre que houver task `FRONTEND_ONLY` ou fatia front-end de `FULLSTACK` **e** o front-end for servido como deploy/origem separada do back-end (SPA/Next.js/etc. chamando uma API em outra porta/host). Quando nao ha front-end, ou o front e server-rendered sem chamadas cross-origin, registre "N/A" e siga.
+
+**Excecao: modo conjunto a partir do Pensador com Testador instalado.** Quando a Fase 1 detectou `.pensador/<slug>-vN/handoff.json` (`mode: "joint"`) e `cc-testador-subagents` esta instalado no marketplace do workspace, a verificacao em navegador real e responsabilidade do Testador, nao do Orquestrador — ele e quem vai efetivamente dirigir o navegador no proximo estagio da cadeia. Pule esta fase automaticamente, sem pedir confirmacao:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" gate --gate browserE2E \
+  --status N/A --required false --delegated-to cc-testador-subagents \
+  --reason "PENSADOR_CHAIN_DELEGATED_TO_TESTADOR"
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" phase --phase 9.5 --status N/A \
+  --reason "PENSADOR_CHAIN_DELEGATED_TO_TESTADOR"
+```
+
+Isso **nao e o mesmo** que o "N/A" do paragrafo acima (front-end inexistente ou server-rendered): aqui a verificacao vai rodar, so que la na frente. `completionAudit` confirma isso contra `report/handoff.json.nextStage.consumer` na Fase 10 — a delegacao so vale se o `nextStage` da propria run apontar para `cc-testador-subagents`. Se o plugin nao estiver instalado, a regra de degradacao da Fase 10 manda `nextStage` para o Executor, a delegacao fica automaticamente invalida, e esta fase 9.5 **e obrigatoria de novo** — ninguem mais na cadeia vai abrir um navegador.
 
 **Como conduzir (o orquestrador faz diretamente, read-only sobre a app rodando):**
 

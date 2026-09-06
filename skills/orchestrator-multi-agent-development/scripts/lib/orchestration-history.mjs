@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
-import { resolveArtifact } from "./artifact-layout.mjs";
+import { resolveArtifact, runRootCandidates } from "./artifact-layout.mjs";
 import { loadRun } from "./orchestration-state.mjs";
 import { projectKnowledgePaths } from "./project-knowledge.mjs";
 import {
@@ -511,11 +511,16 @@ export function projectRunHistory(projectRoot, artifactDir, options = {}) {
 }
 
 function orchestrationDirectories(projectRoot) {
-  const root = join(resolve(projectRoot), ".orchestration");
-  if (!existsSync(root)) return [];
-  return readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => join(root, entry.name))
+  // Achado 14: projeta historico sobre runs em qualquer uma das duas raizes
+  // — `.orchestrator/runs/<slug>/` (atual) e `.orchestration/<slug>/`
+  // (legado, ainda lido).
+  return runRootCandidates(projectRoot)
+    .filter((candidate) => candidate.exists)
+    .flatMap(({ root }) =>
+      readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => join(root, entry.name)),
+    )
     .filter((directory) =>
       existsSync(join(directory, "state.json")) || existsSync(join(directory, "events.jsonl")),
     );

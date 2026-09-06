@@ -14,6 +14,10 @@ import {
   writeProjectConfig,
 } from "../skills/orchestrator-multi-agent-development/scripts/lib/project-config.mjs";
 import { arbProjectConfig, arbRoles } from "./helpers/project-config-arbitraries.mjs";
+import {
+  codexModelForRole,
+  codexRoleForTask,
+} from "../skills/orchestrator-multi-agent-development/scripts/lib/codex-router.mjs";
 
 /**
  * Testes de propriedade do roteamento derivado da Project_Config.
@@ -146,6 +150,15 @@ function requiredExtraLines(category, executor) {
     lines.push("- agyModel: `pro-low`");
     lines.push("- agyModelSource: `heuristic`");
   }
+  if (executor === "codex") {
+    // codexModel/codexModelSource sao exigidos sempre que o executor efetivo e
+    // Codex, mesmo em categorias sem papel Codex conhecido (ex.: FRONTEND_ONLY
+    // com frontendExecutor: codex — combinacao fora do fluxo normal de
+    // AskUserQuestion, mas aceita pelo parser do Project_Config_File).
+    const role = codexRoleForTask({ category }) ?? "implement";
+    lines.push(`- codexModel: \`${codexModelForRole(role)}\``);
+    lines.push("- codexModelSource: `heuristic`");
+  }
   if (category === "REVIEW_ONLY" && executor === "codex") {
     lines.push("- assignedAgent: `codex:codex-rescue` --effort high");
   }
@@ -178,6 +191,10 @@ function fullstackBlock(id, config) {
   if (backend === "agy" || frontend === "agy") {
     lines.push("- agyModel: `pro-low`");
     lines.push("- agyModelSource: `heuristic`");
+  }
+  if (backend === "codex" || frontend === "codex") {
+    lines.push(`- codexModel: \`${codexModelForRole(codexRoleForTask({ category: "FULLSTACK" }))}\``);
+    lines.push("- codexModelSource: `heuristic`");
   }
   return { text: lines.join("\n"), backend, frontend };
 }
