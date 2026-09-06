@@ -8,12 +8,16 @@
  * `references/workflow.md` secao 1.0 — nenhum codigo o executava.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 
-import { ingestPensadorHandoff } from "../skills/orchestrator-multi-agent-development/scripts/lib/pensador-ingest.mjs";
+import {
+  ingestPensadorHandoff,
+  listPensadorHandoffs,
+} from "../skills/orchestrator-multi-agent-development/scripts/lib/pensador-ingest.mjs";
+import { initRun } from "../skills/orchestrator-multi-agent-development/scripts/lib/orchestration-state.mjs";
 
 const roots = [];
 function fixture() {
@@ -152,4 +156,122 @@ test("degrades to standalone when handoff has an unsupported handoffVersion and 
 
   const result = ingestPensadorHandoff({ projectRoot: root, slug: "login-social" });
   assert.equal(result.mode, "standalone");
+});
+
+/* -------------------------------------------------------------------------- */
+/* listPensadorHandoffs (subcomando /orquestrador brain-pensador)              */
+/* -------------------------------------------------------------------------- */
+
+test("listPensadorHandoffs: empty when .pensador/ does not exist", () => {
+  const root = fixture();
+  assert.deepEqual(listPensadorHandoffs({ projectRoot: root }), []);
+});
+
+test("listPensadorHandoffs: one row per slug, using the highest -vN", () => {
+  const root = fixture();
+  writeJson(join(root, ".pensador/oficina-v1/handoff.json"), baseHandoff("oficina", "DONE"));
+  writeJson(join(root, ".pensador/oficina-v2/handoff.json"), {
+    ...baseHandoff("oficina", "DONE"),
+    artifactRoot: ".pensador/oficina-v2",
+  });
+
+  const rows = listPensadorHandoffs({ projectRoot: root });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].slug, "oficina");
+  assert.equal(rows[0].latestVersion, 2);
+  assert.deepEqual(rows[0].versions, [2, 1]);
+  assert.equal(rows[0].artifactRoot, ".pensador/oficina-v2");
+  assert.equal(rows[0].handoffPath, ".pensador/oficina-v2/handoff.json");
+  assert.equal(rows[0].handoffValid, true);
+});
+
+test("listPensadorHandoffs: exposes status, summary, deliverable and design-system presence", () => {
+  const root = fixture();
+  const handoff = {
+    ...baseHandoff("locadora", "PARTIAL"),
+    artifactMode: "spec",
+    summary: "US-13 (checkout publico) nao gera venda real.",
+    artifacts: [
+      { role: "prd", path: "prd.md", required: true },
+      { role: "design-system-files", path: "design-systems/professional/", required: false },
+    ],
+  };
+  writeJson(join(root, ".pensador/locadora-v1/handoff.json"), handoff);
+
+  const [row] = listPensadorHandoffs({ projectRoot: root });
+  assert.equal(row.status, "PARTIAL");
+  assert.equal(row.summary, "US-13 (checkout publico) nao gera venda real.");
+  assert.equal(row.deliverable, "spec");
+  assert.equal(row.hasDesignSystem, true);
+});
+
+test("listPensadorHandoffs: a slug with an invalid handoff.json still lists, with handoffValid: false", () => {
+  const root = fixture();
+  writeJson(join(root, ".pensador/quebrado-v1/handoff.json"), "{ not valid json");
+
+  const [row] = listPensadorHandoffs({ projectRoot: root });
+  assert.equal(row.slug, "quebrado");
+  assert.equal(row.handoffValid, false);
+  assert.equal(row.status, null);
+});
+
+test("listPensadorHandoffs: orders by recency (mtime of the chosen versioned dir), most recent first", () => {
+  const root = fixture();
+  writeJson(join(root, ".pensador/antigo-v1/handoff.json"), baseHandoff("antigo"));
+  writeJson(join(root, ".pensador/recente-v1/handoff.json"), baseHandoff("recente"));
+
+  const old = new Date("2020-01-01T00:00:00Z");
+  const recent = new Date("2026-01-01T00:00:00Z");
+  utimesSync(join(root, ".pensador/antigo-v1"), old, old);
+  utimesSync(join(root, ".pensador/recente-v1"), recent, recent);
+
+  const rows = listPensadorHandoffs({ projectRoot: root });
+  assert.deepEqual(rows.map((r) => r.slug), ["recente", "antigo"]);
+});
+
+test("listPensadorHandoffs: --limit caps the result, --all removes the cap", () => {
+  const root = fixture();
+  for (let i = 0; i < 3; i += 1) {
+    writeJson(join(root, `.pensador/slug-${i}-v1/handoff.json`), baseHandoff(`slug-${i}`));
+  }
+  assert.equal(listPensadorHandoffs({ projectRoot: root, limit: 2 }).length, 2);
+  assert.equal(listPensadorHandoffs({ projectRoot: root, all: true }).length, 3);
+});
+
+test("listPensadorHandoffs: consumedBy is null until a run's state.upstream.handoffPath matches it", () => {
+  const root = fixture();
+  writeJson(join(root, ".pensador/oficina-v1/handoff.json"), baseHandoff("oficina"));
+
+  const before = listPensadorHandoffs({ projectRoot: root });
+  assert.equal(before[0].consumedBy, null);
+
+  const artifactDir = join(root, ".orchestration", "oficina");
+  mkdirSync(artifactDir, { recursive: true });
+  writeFileSync(join(artifactDir, "tasks-classification.md"), "# Tasks\n\n## BE-01\n- category: BACKEND_ONLY\n", "utf8");
+  writeFileSync(join(artifactDir, "waves.md"), "# Waves\n\n## Wave 1\n- BE-01\n", "utf8");
+  initRun({
+    projectRoot: root,
+    artifactDir,
+    slug: "oficina",
+    runId: "oficina-001",
+    upstream: {
+      stage: "pensador",
+      slug: "oficina",
+      version: 1,
+      handoffPath: ".pensador/oficina-v1/handoff.json",
+    },
+  });
+
+  const after = listPensadorHandoffs({ projectRoot: root });
+  assert.equal(after[0].consumedBy, "oficina-001");
+});
+
+test("listPensadorHandoffs never touches .pensador/ (read-only)", () => {
+  const root = fixture();
+  const handoffPath = join(root, ".pensador/oficina-v1/handoff.json");
+  writeJson(handoffPath, baseHandoff("oficina"));
+  const before = readFileSync(handoffPath, "utf8");
+  listPensadorHandoffs({ projectRoot: root });
+  const after = readFileSync(handoffPath, "utf8");
+  assert.equal(before, after);
 });

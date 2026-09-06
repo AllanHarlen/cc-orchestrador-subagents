@@ -81,7 +81,11 @@ node "${CLAUDE_SKILL_DIR}/scripts/ingest-pensador.mjs" --root . [--slug <slug>]
    `result.warning`/`result.invalidHandoff`). O usuario fornece a especificacao via `@arquivo` ou
    texto no `/orquestrador`. `<nome>`/`<slug>` derivam do PRD.
 2. `result.mode === "ambiguous"`: varios `slug` distintos em `.pensador/` sem slug explicito —
-   confirme via `AskUserQuestion` usando `result.slugCandidates` e rode de novo com `--slug`.
+   confirme via `AskUserQuestion` usando `result.slugCandidates` e rode de novo com `--slug`. Para
+   apresentar mais do que o nome cru do slug (status, feature, deliverable, se ja foi consumido por
+   outra run), rode `brain-pensador.mjs` em vez de `AskUserQuestion` direto sobre
+   `slugCandidates` (ver Modo `brain-pensador` em `commands/orchestrator.md`) — e o mesmo caminho
+   que `/orquestrador brain-pensador` usa quando o usuario invoca o subcomando explicitamente.
 3. `result.mode === "joint"` (**Pensador → Orchestrador**): `result.slug`/`result.version` ja
    resolvem a maior versao `-vN` do slug escolhido.
    - `result.pensadorHandoff` presente: leia-o e trate os artefatos referenciados como fonte da
@@ -96,6 +100,15 @@ Assim que o slug estiver resolvido, crie `.orchestration/<slug>/` e inicialize o
 ```bash
 node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" init \
   --slug "<slug>" --dir ".orchestration/<slug>" --phase 1
+```
+
+Em **modo conjunto** (`result.mode === "joint"`), passe tambem a origem — e o que permite a fase 9.5 se auto-delegar ao Testador mais adiante (secao correspondente da Fase 9.5) e o que `/orquestrador brain-pensador` usa para marcar um slug como ja consumido (`consumedBy`):
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/orchestration-state.mjs" init \
+  --slug "<slug>" --dir ".orchestration/<slug>" --phase 1 \
+  --upstream-stage pensador --upstream-slug "<slug>" --upstream-version <result.version> \
+  --upstream-handoff-path ".pensador/<slug>-v<result.version>/handoff.json"
 ```
 
 ### 1.1 Ler a especificacao fornecida

@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 
 import { validateHandoff } from "./handoff-validator.mjs";
 
@@ -205,4 +205,117 @@ export function ingestPensadorHandoff(options = {}) {
     `Could not ingest .pensador/${chosen.dirName}/ (${reason}) — degrading to independent mode.`,
     { invalidHandoff: handoffRead ?? undefined },
   );
+}
+
+function toPosix(value) {
+  return String(value).split(sep).join("/");
+}
+
+/**
+ * Indice `handoffPath` posix-relativo-a-projectRoot -> `runId`, construido a
+ * partir de `state.upstream.handoffPath` de toda run em `.orchestration/`
+ * (Bloco 2.6 do plano de ajustes: `initRun` persiste `upstream` quando a run
+ * e modo conjunto). Leitura tolerante — `state.json` ausente, ilegivel ou sem
+ * `upstream` simplesmente nao entra no indice; nunca lanca.
+ *
+ * So le `.orchestration/`, nunca `.pensador/` — mantem a regra absoluta do
+ * modulo (`ingestPensadorHandoff` nunca escreve, e esta funcao tampouco lê
+ * nada dentro de `.pensador/`).
+ */
+function buildConsumedByIndex(projectRoot) {
+  const index = new Map();
+  const orchestrationDir = join(projectRoot, ".orchestration");
+  if (!existsSync(orchestrationDir)) return index;
+  let entries;
+  try {
+    entries = readdirSync(orchestrationDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+  } catch {
+    return index;
+  }
+  for (const entry of entries) {
+    const stateFile = join(orchestrationDir, entry.name, "state.json");
+    if (!existsSync(stateFile)) continue;
+    let state;
+    try {
+      state = JSON.parse(readFileSync(stateFile, "utf8"));
+    } catch {
+      continue;
+    }
+    const handoffPath = state?.upstream?.handoffPath;
+    if (handoffPath) index.set(toPosix(handoffPath), state.runId ?? entry.name);
+  }
+  return index;
+}
+
+/**
+ * Lista os handoffs do Pensador disponiveis em `.pensador/`, um por slug
+ * (a versao mais alta entre `<slug>-vN/`), ordenados por recencia (mtime do
+ * diretorio versionado escolhido) decrescente. Read-only, como o resto do
+ * modulo — nunca escreve em `.pensador/`.
+ *
+ * Fecha a lacuna que `ingestPensadorHandoff` deixa quando ha mais de um
+ * slug: hoje ela devolve `mode: "ambiguous"` com uma lista de nomes crus e
+ * para; isto lista o suficiente (status, feature, deliverable, se ja foi
+ * consumido) para o usuario escolher.
+ *
+ * @param {object} options
+ * @param {string} [options.projectRoot]
+ * @param {number} [options.limit=10]  Ignorado quando `options.all` e true.
+ * @param {boolean} [options.all=false]
+ */
+export function listPensadorHandoffs(options = {}) {
+  const projectRoot = resolve(options.projectRoot ?? process.cwd());
+  const limit = options.all ? Infinity : Number(options.limit ?? 10);
+  const dirs = discoverPensadorDirs(projectRoot);
+
+  const bySlug = new Map();
+  for (const entry of dirs) {
+    const list = bySlug.get(entry.slug) ?? [];
+    list.push(entry);
+    bySlug.set(entry.slug, list);
+  }
+
+  const consumedByIndex = buildConsumedByIndex(projectRoot);
+
+  const rows = [];
+  for (const [slug, versions] of bySlug) {
+    const sorted = [...versions].sort((a, b) => b.version - a.version);
+    const latest = sorted[0];
+    const versionedDir = join(projectRoot, ".pensador", latest.dirName);
+    const handoffPath = join(versionedDir, "handoff.json");
+    const handoffRead = readHandoffSafe(handoffPath);
+    const handoff = handoffRead?.valid ? handoffRead.handoff : null;
+
+    let mtimeMs = 0;
+    try {
+      mtimeMs = statSync(versionedDir).mtimeMs;
+    } catch {
+      mtimeMs = 0;
+    }
+
+    const relativeHandoffPath = toPosix(relative(projectRoot, handoffPath));
+    const hasDesignSystem = (handoff?.artifacts ?? []).some(
+      (artifact) => artifact?.role === "design-system-files",
+    );
+
+    rows.push({
+      slug,
+      latestVersion: latest.version,
+      versions: sorted.map((entry) => entry.version),
+      artifactRoot: handoff?.artifactRoot ?? toPosix(relative(projectRoot, versionedDir)),
+      handoffPath: relativeHandoffPath,
+      handoffValid: Boolean(handoff),
+      status: handoff?.status ?? null,
+      summary: handoff?.summary ?? null,
+      deliverable: handoff?.artifactMode ?? null,
+      hasDesignSystem,
+      updatedAt: handoff?.updatedAt ?? null,
+      consumedBy: consumedByIndex.get(relativeHandoffPath) ?? null,
+      mtimeMs,
+    });
+  }
+
+  rows.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const limited = Number.isFinite(limit) ? rows.slice(0, limit) : rows;
+  return limited.map(({ mtimeMs, ...rest }) => rest);
 }

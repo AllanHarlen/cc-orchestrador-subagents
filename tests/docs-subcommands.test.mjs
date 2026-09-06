@@ -44,6 +44,7 @@ test("project-config esta listado entre os subcomandos reservados do comando can
     "status",
     "resume",
     "config",
+    "brain-pensador",
     "knowledge status",
     "telemetry report",
   ];
@@ -98,6 +99,7 @@ test("todo subcomando reservado do canonico com argumento fixo tambem aparece no
     "help",
     "preflight",
     "project-config",
+    "brain-pensador",
     "status",
     "resume",
     "knowledge",
