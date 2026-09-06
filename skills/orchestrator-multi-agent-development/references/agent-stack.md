@@ -7,10 +7,11 @@
 | Papel | Modelo | Subagent type | Effort | Observacoes |
 |---|---|---|---|---|
 | Orquestrador | Claude Sonnet 4.6 | voce mesmo | Medium | coordena e consolida |
-| Back-end | Codex padrao da conta | `codex:codex-rescue` | Medium | implementacao |
+| Back-end | `gpt-5.6-terra` (papel implement) | `codex:codex-rescue` | derivado da task | implementacao |
 | Front-end | AGY por override, piso heuristico ou escalada adaptativa comprovada | `cc-antigravity-plugin:antigravity-coder` | - | `--mode accept-edits --format stream-json --model <agyModel>`; `adaptive` exige evidence; edita arquivos |
-| Review back-end pos-implementacao | Codex padrao da conta | `codex:codex-rescue` | High | read-only, apenas back-end |
+| Review back-end pos-implementacao | `gpt-5.6-sol` (papel review) | `codex:codex-rescue` | High | read-only, apenas back-end |
 | Review front-end pos-implementacao | AGY `pro-high` | `cc-antigravity-plugin:antigravity-agent` | - | `--read-only --format json --effort high`, apenas front-end — **nunca usar para implementar** |
+| Correcao pos-9.5/review reprovado | `gpt-5.6-luna` (papel fix) | `codex:codex-rescue` | derivado da task | correcao originada de achado, nao de plano novo |
 
 ## Invariante de roteamento
 
@@ -36,10 +37,13 @@ Codex so assume front-end como fallback operacional depois de `QUOTA_EXAUSTED`, 
 
 ## Regra para Codex
 
-Nao fixe `--model` nos prompts do Codex. Use apenas:
+Passe sempre `--model <papel>` — Codex tem **tres papeis fixos de modelo**, nunca o default da conta:
 
-- `--effort medium` para implementacao, ajustes pontuais e handoffs;
-- `--effort high` para review back-end pos-implementacao.
+- `gpt-5.6-sol` — **somente review** (Fases 8/9 e task `REVIEW_ONLY`);
+- `gpt-5.6-terra` — implementacao geral (`BACKEND_ONLY`, `DATABASE_ONLY`, `DOCS_ONLY`, fatia back-end de `FULLSTACK`);
+- `gpt-5.6-luna` — correcao originada da Fase 9.5 (browser-e2e) ou de review `REPROVADO`.
+
+`--effort <low|medium|high>` e sempre derivado da complexidade/risco da task na classificacao — tipicamente `medium` para implementacao/ajustes/handoffs, `high` para review. Nunca fixe `--effort` sem olhar a task, e nunca omita `--model`: sem ele o Codex cai no default de conta do usuario, que pode ser o modelo de review fazendo implementacao.
 
 Codex revisa apenas back-end. O review de front-end e sempre do AGY com `--read-only --format json --model pro-high --effort high`.
 
@@ -66,7 +70,7 @@ Quando o usuario passar `--subagent-model <modelo>` (alias legado: `--agy-subage
 
 Entregaveis dependentes ou que compartilham estado/arquivo central NAO devem usar `--parallel`; mantenha o subagente unico.
 
-### Codex com `--effort medium`
+### Codex `gpt-5.6-terra` (papel implement)
 
 Use para:
 
@@ -81,13 +85,19 @@ Use para:
 
 Bloqueie e escale ao usuario quando o Codex depender de rede externa indisponivel para pacotes/restore, de pacote ausente do cache local, ou quando nao puder escrever fora do working directory permitido. Exemplos: NuGet `NU1301` em `https://api.nuget.org/v3/index.json` e `UnauthorizedAccessException`.
 
-### Codex com `--effort high`
+### Codex `gpt-5.6-sol` (papel review)
 
 Use para:
 
 - review back-end pos-implementacao;
 - leitura critica de risco arquitetural no back-end;
 - analise de regressao e seguranca no back-end.
+
+Sempre com `--effort high`.
+
+### Codex `gpt-5.6-luna` (papel fix)
+
+Use exclusivamente para correcao originada de um achado — Fase 9.5 (browser-e2e) ou review `REPROVADO` — nunca para uma task de implementacao vinda do plano original. `--effort` derivado da severidade do achado.
 
 ### AGY `pro-high` (review front-end)
 

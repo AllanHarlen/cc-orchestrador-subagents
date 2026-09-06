@@ -38,6 +38,12 @@ import {
   readProjectConfig,
   resolveExecutorForCategory,
 } from "./lib/project-config.mjs";
+import {
+  CODEX_EFFORT_LEVELS,
+  CODEX_ROLE_BY_MODEL,
+  codexRoleForTask,
+  isKnownCodexModel,
+} from "./lib/codex-router.mjs";
 
 const CATEGORIES = [...TASK_CATEGORIES];
 
@@ -65,6 +71,14 @@ const AGY_PARALLEL_RE = /\bagyParallel\b/i;
 const AGY_EFFORT_RE = /(?:agyEffort|--agy-effort|--effort)\b\s*[:=]?\s*`?([^`\s|,]+)/i;
 const AGY_TIMEOUT_RE = /(?:agyTimeout|--agy-timeout|--timeout)\b\s*[:=]?\s*`?([^`\s|,]+)/i;
 const AGY_FORMAT_RE = /(?:agyFormat|--format)\b\s*[:=]?\s*`?([^`\s|,]+)/i;
+// Vocabulario de modelo do Codex, espelhando o vocabulario de AGY acima
+// (Achado 13 da run oficina-saas-20260905-001: o Codex nao tinha onde
+// expressar modelo/effort na classificacao, e 10 de 11 threads rodaram o
+// modelo de review fazendo implementacao). Campo dedicado `codexModel` — nao
+// `--model`, que colidiria com o vocabulario AGY no mesmo bloco FULLSTACK.
+const CODEX_MODEL_RE = /(?:^|[\s|,])(?:codexModel(?!Source)|--codex-model)\b\s*[:=]?\s*`?([a-z0-9.-]+(?:-[a-z0-9.-]+)*)`?/im;
+const CODEX_MODEL_SOURCE_RE = /codexModelSource\s*[:=]?\s*`?(user|heuristic|adaptive)`?/i;
+const CODEX_EFFORT_FIELD_RE = /(?:codexEffort|--codex-effort)\b\s*[:=]?\s*`?([^`\s|,]+)/i;
 // Identificadores de subagente externo. Task com executor `claude-code` nao pode
 // invocar Codex (direto via codex-companion.mjs, ou via o fallback `codex:codex-rescue`)
 // nem subagente do `cc-antigravity-plugin` (Req 7.11). Cobre os dois caminhos porque o
@@ -278,6 +292,22 @@ function extractAgySubagentModel(text) {
   return match?.[1] ?? null;
 }
 
+function extractCodexModel(text) {
+  return text.match(CODEX_MODEL_RE)?.[1] ?? null;
+}
+
+function hasCodexModelSource(text) {
+  return CODEX_MODEL_SOURCE_RE.test(text);
+}
+
+function extractCodexModelSource(text) {
+  return text.match(CODEX_MODEL_SOURCE_RE)?.[1]?.toLowerCase() ?? null;
+}
+
+function extractCodexEffort(text) {
+  return text.match(CODEX_EFFORT_FIELD_RE)?.[1] ?? null;
+}
+
 /**
  * Executores declarados no bloco, na ordem de aparicao e sem repeticao.
  *
@@ -471,6 +501,59 @@ function validateBlock(source, block, categoryByTask) {
       const claudeCodeSubagentModel = extractAgySubagentModel(block.text);
       if (claudeCodeSubagentModel) {
         errors.push(`${source}: ${id} tem executor \`claude-code\`, mas registra agySubagentModel (${claudeCodeSubagentModel}). Omita agyModel, agyParallel e agySubagentModel em task delegada ao Claude Code.`);
+      }
+    }
+
+    // Vocabulario de modelo do Codex (Achado 13). Espelha as regras de AGY
+    // acima: task apontando para Codex precisa registrar codexModel +
+    // codexModelSource; executor `claude-code` nao carrega parametro de Codex.
+    const codexModel = extractCodexModel(block.text);
+    const codexModelSource = extractCodexModelSource(block.text);
+    const codexEffort = extractCodexEffort(block.text);
+
+    if (claudeCode && !codex) {
+      if (codexModel) {
+        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas registra codexModel (${codexModel}). Omita codexModel e codexEffort em task delegada ao Claude Code.`);
+      }
+      if (codexEffort) {
+        errors.push(`${source}: ${id} tem executor \`claude-code\`, mas registra codexEffort (${codexEffort}). Omita codexModel e codexEffort em task delegada ao Claude Code.`);
+      }
+    }
+
+    if (codex) {
+      if (!codexModel) {
+        errors.push(`${source}: ${id} aponta para Codex, mas nao registra codexModel/--codex-model.`);
+      } else if (!validModelToken(codexModel)) {
+        errors.push(`${source}: ${id} usa codexModel invalido (${codexModel}). Use um dos slugs do vocabulario Codex (gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna).`);
+      }
+
+      if (!hasCodexModelSource(block.text)) {
+        errors.push(`${source}: ${id} aponta para Codex, mas nao registra codexModelSource=user|heuristic|adaptive.`);
+      }
+
+      if (codexEffort && !CODEX_EFFORT_LEVELS.includes(codexEffort)) {
+        errors.push(`${source}: ${id} usa codexEffort invalido (${codexEffort}). Valores aceitos: ${CODEX_EFFORT_LEVELS.join(", ")}.`);
+      }
+
+      if (codexModel && validModelToken(codexModel)) {
+        const isKnown = isKnownCodexModel(codexModel);
+        if (!isKnown && codexModelSource !== "user") {
+          errors.push(`${source}: ${id} usa codexModel ${codexModel} com source ${codexModelSource ?? "ausente"}. Routing heuristic/adaptive deve usar um dos slugs do vocabulario Codex (gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna); slug fora do vocabulario exige source user.`);
+        } else if (!isKnown && codexModelSource === "user") {
+          warnings.push(`${source}: ${id} usa codexModel ${codexModel} fora do vocabulario de papeis do Codex (gpt-5.6-sol/terra/luna) com source user; confirme que a escolha e intencional.`);
+        }
+
+        if (isKnown) {
+          const modelRole = CODEX_ROLE_BY_MODEL[codexModel];
+          const expectedRole = codexRoleForTask({ category: taskCategory });
+          if (expectedRole && modelRole !== expectedRole) {
+            if (taskCategory === "REVIEW_ONLY") {
+              errors.push(`${source}: ${id} e REVIEW_ONLY, mas usa codexModel ${codexModel} (papel ${modelRole}). Review usa o modelo de papel review (gpt-5.6-sol).`);
+            } else {
+              errors.push(`${source}: ${id} e ${taskCategory} (implementacao), mas usa codexModel ${codexModel} (papel ${modelRole}). Implementacao nunca usa o modelo de papel review; use o modelo de papel implement (gpt-5.6-terra).`);
+            }
+          }
+        }
       }
     }
 

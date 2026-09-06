@@ -145,12 +145,14 @@ test("REVIEW_ONLY com revisor codex so passa com --effort high", () => {
       "- executor: codex",
       "- executorSource: project-config",
       "- assignedAgent: `codex:codex-rescue` --effort high",
+      "- codexModel: `gpt-5.6-sol`",
+      "- codexModelSource: `heuristic`",
     ].join("\n"),
     "waves.md": [
       "# Waves",
       "",
       "## Wave 1",
-      "- REV-01 -> `codex:codex-rescue` --effort high",
+      "- REV-01 -> `codex:codex-rescue` --effort high codexModel: `gpt-5.6-sol` codexModelSource: `heuristic`",
     ].join("\n"),
   });
   writeProjectConfig(withHighEffort.root, config);

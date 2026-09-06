@@ -52,6 +52,8 @@ test("routing validation accepts the same task IDs the State Engine accepts", ()
       "## BE-01 - API de pedidos",
       "- categoria: BACKEND_ONLY",
       "- assignedAgent: `codex:codex-rescue` --effort medium",
+      "- codexModel: `gpt-5.6-terra`",
+      "- codexModelSource: `heuristic`",
       "",
       "## FE-01 - Vitrine",
       "- categoria: FRONTEND_ONLY",
@@ -63,7 +65,7 @@ test("routing validation accepts the same task IDs the State Engine accepts", ()
       "# Waves",
       "",
       "## Wave 1",
-      "- BE-01 -> `codex:codex-rescue` --effort medium (BACKEND_ONLY)",
+      "- BE-01 -> `codex:codex-rescue` --effort medium codexModel: `gpt-5.6-terra` codexModelSource: `heuristic` (BACKEND_ONLY)",
       "- FE-01 -> `cc-antigravity-plugin:antigravity-coder` --model `flash-high` --mode accept-edits --format stream-json agyModelSource: `heuristic` (FRONTEND_ONLY)",
     ].join("\n"),
   });
@@ -203,6 +205,116 @@ test("routing validates the public AGY effort, timeout and implementation format
   assert.match(result.output, /agyEffort invalido/);
   assert.match(result.output, /agyTimeout invalido/);
   assert.match(result.output, /implementacao AGY 4\.0 usa stream-json/);
+});
+
+test("Codex task without codexModel is rejected", () => {
+  const { artifactDir } = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## BE-05 - API de estoque", "- categoria: BACKEND_ONLY",
+      "- executor: codex", "- executorSource: project-config",
+      "- assignedAgent: `codex:codex-rescue` --effort medium",
+    ].join("\n"),
+    "waves.md": [
+      "# Waves", "", "## Wave 1",
+      "- BE-05 -> `codex:codex-rescue` --effort medium (BACKEND_ONLY)",
+    ].join("\n"),
+  });
+  const result = runValidator(artifactDir);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /aponta para Codex, mas nao registra codexModel/);
+  assert.match(result.output, /aponta para Codex, mas nao registra codexModelSource/);
+});
+
+test("an implementation task using the Codex review-role model is rejected", () => {
+  const { artifactDir } = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## BE-06 - API de pedidos", "- categoria: BACKEND_ONLY",
+      "- executor: codex", "- executorSource: project-config",
+      "- assignedAgent: `codex:codex-rescue` --effort medium",
+      "- codexModel: `gpt-5.6-sol`",
+      "- codexModelSource: `heuristic`",
+    ].join("\n"),
+    "waves.md": [
+      "# Waves", "", "## Wave 1",
+      "- BE-06 -> `codex:codex-rescue` --effort medium codexModel: `gpt-5.6-sol` codexModelSource: `heuristic` (BACKEND_ONLY)",
+    ].join("\n"),
+  });
+  const result = runValidator(artifactDir);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /implementacao\), mas usa codexModel gpt-5\.6-sol \(papel review\)/);
+  assert.match(result.output, /use o modelo de papel implement \(gpt-5\.6-terra\)/);
+});
+
+test("a REVIEW_ONLY task using a non-review Codex model is rejected", () => {
+  const { artifactDir } = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## REV-02 - Review final", "- categoria: REVIEW_ONLY",
+      "- executor: codex", "- executorSource: project-config",
+      "- assignedAgent: `codex:codex-rescue` --effort high",
+      "- codexModel: `gpt-5.6-terra`",
+      "- codexModelSource: `heuristic`",
+    ].join("\n"),
+    "waves.md": [
+      "# Waves", "", "## Wave 1",
+      "- REV-02 -> `codex:codex-rescue` --effort high codexModel: `gpt-5.6-terra` codexModelSource: `heuristic`",
+    ].join("\n"),
+  });
+  const result = runValidator(artifactDir);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /REV-02 e REVIEW_ONLY, mas usa codexModel gpt-5\.6-terra \(papel implement\)/);
+});
+
+test("a fully-formed Codex block (implement role, valid effort) passes", () => {
+  const { artifactDir } = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## BE-07 - API de faturamento", "- categoria: BACKEND_ONLY",
+      "- executor: codex", "- executorSource: project-config",
+      "- assignedAgent: `codex:codex-rescue` --effort high",
+      "- codexModel: `gpt-5.6-terra`",
+      "- codexModelSource: `heuristic`",
+      "- codexEffort: `high`",
+    ].join("\n"),
+    "waves.md": [
+      "# Waves", "", "## Wave 1",
+      "- BE-07 -> `codex:codex-rescue` --effort high codexModel: `gpt-5.6-terra` codexModelSource: `heuristic` codexEffort: `high` (BACKEND_ONLY)",
+    ].join("\n"),
+  });
+  const result = runValidator(artifactDir);
+  assert.equal(result.status, 0, result.output);
+});
+
+test("a claude-code task carrying a Codex model parameter is rejected", () => {
+  const { artifactDir } = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## BE-08 - API de relatorios", "- categoria: BACKEND_ONLY",
+      "- executor: claude-code", "- executorSource: project-config",
+      "- codexModel: `gpt-5.6-terra`",
+    ].join("\n"),
+    "waves.md": ["# Waves", "", "## Wave 1", "- BE-08"].join("\n"),
+  });
+  const result = runValidator(artifactDir);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /executor `claude-code`, mas registra codexModel/);
+});
+
+test("an invalid codexEffort value is rejected", () => {
+  const { artifactDir } = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## BE-09 - API de clientes", "- categoria: BACKEND_ONLY",
+      "- executor: codex", "- executorSource: project-config",
+      "- assignedAgent: `codex:codex-rescue` --effort medium",
+      "- codexModel: `gpt-5.6-terra`",
+      "- codexModelSource: `heuristic`",
+      "- codexEffort: `ultra`",
+    ].join("\n"),
+    "waves.md": [
+      "# Waves", "", "## Wave 1",
+      "- BE-09 -> `codex:codex-rescue` --effort medium codexModel: `gpt-5.6-terra` codexModelSource: `heuristic` codexEffort: `ultra` (BACKEND_ONLY)",
+    ].join("\n"),
+  });
+  const result = runValidator(artifactDir);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /codexEffort invalido \(ultra\)/);
 });
 
 test("legacy runs with versioned AGY slugs remain resumable without migration", () => {

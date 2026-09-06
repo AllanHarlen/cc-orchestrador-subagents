@@ -152,7 +152,8 @@ Para cada task extraida do PRD/spec, registre em `.orchestration/<nome>/plan/tas
 - `allowedPaths` para validar escopo e decidir isolamento;
 - `complexity`, `contractIds` e features de routing;
 - `requirementIds` — a lista de `RF-XX` do `requirements-index` do Pensador que esta task implementa (quando houver `requirements.json` no upstream; formato livre — `requirementIds: RF-01, RF-02` — o gate abaixo so precisa achar os IDs em algum lugar do texto da task);
-- para AGY, `agyModel`, `agyModelSource` e, quando adaptativo, `agyModelEvidence`.
+- para AGY, `agyModel`, `agyModelSource` e, quando adaptativo, `agyModelEvidence`;
+- para Codex, `codexModel`, `codexModelSource` e `codexEffort` — ver "Vocabulario de modelo do Codex" abaixo. Assim como no AGY, `codexModel` nao e escolha livre: e um dos tres papeis fixos (`gpt-5.6-sol` para review, `gpt-5.6-terra` para implementacao, `gpt-5.6-luna` para correcao), e `validate-routing.mjs` reprova task de implementacao usando o modelo de review ou vice-versa.
 
 Depois de escrever `plan/tasks-classification.md`, rode o gate de cobertura RF/CA (quando houver `requirements-index` no upstream) **antes** de montar as ondas — pegar um `RF` sem task aqui e mais barato do que descobrir na Fase 7:
 
@@ -166,11 +167,23 @@ O Executor de cada task vem da categoria combinada com a Project_Config (`refere
 
 | Categoria | Papel da Project_Config | Execucao sob os defaults (`codex`/`agy`) |
 |---|---|---|
-| `BACKEND_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --effort medium --write` (chamada direta; fallback `codex:codex-rescue`) |
-| `DATABASE_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --effort medium --write` (chamada direta; fallback `codex:codex-rescue`) |
-| `REVIEW_ONLY` | `backendReviewer` | Codex via `codex-companion.mjs task --effort high` **sem `--write`** (chamada direta; fallback `codex:codex-rescue`) |
+| `BACKEND_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --model <codexModel> --effort <codexEffort> --write` (chamada direta; fallback `codex:codex-rescue`) |
+| `DATABASE_ONLY` | `backendExecutor` | Codex via `codex-companion.mjs task --model <codexModel> --effort <codexEffort> --write` (chamada direta; fallback `codex:codex-rescue`) |
+| `REVIEW_ONLY` | `backendReviewer` | Codex via `codex-companion.mjs task --model gpt-5.6-sol --effort high` **sem `--write`** (chamada direta; fallback `codex:codex-rescue`) |
 | `FRONTEND_ONLY` | `frontendExecutor` | AGY (`cc-antigravity-plugin:antigravity-coder`) com `--mode accept-edits --format stream-json --model <agyModel>` |
-| `FULLSTACK` | `backendExecutor` + `frontendExecutor` | Codex para back-end; AGY com `--mode accept-edits --format stream-json --model <agyModel>` para front-end |
+| `FULLSTACK` | `backendExecutor` + `frontendExecutor` | Codex com `--model <codexModel> --effort <codexEffort>` para back-end; AGY com `--mode accept-edits --format stream-json --model <agyModel>` para front-end |
+
+#### Vocabulario de modelo do Codex
+
+Assim como o AGY tem uma escada de capacidade (ver "Roteamento por fidelidade de design" abaixo), o Codex tem **tres papeis fixos**, nunca escolha livre:
+
+| Papel | Modelo | Quando usar |
+|---|---|---|
+| `review` | `gpt-5.6-sol` | Fases 8/9 (review de codigo) e task `REVIEW_ONLY`. **Somente review** — nunca implementacao. |
+| `implement` | `gpt-5.6-terra` | `BACKEND_ONLY`, `DATABASE_ONLY`, `DOCS_ONLY`, fatia back-end de `FULLSTACK`. Desenvolvimento geral. |
+| `fix` | `gpt-5.6-luna` | Correcao originada da Fase 9.5 (browser-e2e) ou de review `REPROVADO`. |
+
+Registre `codexModel` e `codexModelSource: user\|heuristic\|adaptive` (mesma semantica de `agyModelSource`) em toda task cujo Executor efetivo seja `codex`. `codexEffort` (`low\|medium\|high`) e sempre derivado da complexidade/risco da task na classificacao — nunca um valor fixo, e nunca um rebaixamento silencioso do `model_reasoning_effort` que o usuario configurou em `~/.codex/config.toml`. `validate-routing.mjs` reprova: task de implementacao usando `gpt-5.6-sol`; task `REVIEW_ONLY` usando qualquer modelo que nao seja `gpt-5.6-sol`; `codexModel`/`codexEffort` ausentes numa task apontando para Codex; e `codexModel`/`codexEffort` presentes numa task `claude-code`.
 
 Quando o papel resolvido e `claude-code`, o `executor` da task e `claude-code`: delegue pela ferramenta `Agent` a um subagente do proprio Claude Code (implementacao) ou rode a task em modo read-only gravando em `review/review-final.md`/`review/review-frontend.md` (review). Uma task com `executor: claude-code` nunca registra `agyModel`, `agyModelSource`, `agyParallel` nem `agySubagentModel` — o validador reprova o bloco se algum desses campos aparecer. Artefato legado sem o campo `executor` continua validado pela heuristica antiga de mencao de agente (`assignedAgent`).
 
@@ -366,9 +379,9 @@ Se o prompt montado **exceder 28.000 chars**:
 
 Para Codex:
 
-- implementacao, handoff e ajuste -> `--effort medium`;
-- review -> `--effort high`;
-- nao fixe `--model`.
+- passe `--model <codexModel>` sempre — os tres papeis fixos sao `gpt-5.6-sol` (review), `gpt-5.6-terra` (implementacao) e `gpt-5.6-luna` (correcao), ver "Vocabulario de modelo do Codex" na Fase 2. Nunca omita `--model`: sem ele, o Codex cai no `model = "gpt-5.6-sol"` do `~/.codex/config.toml` do usuario, que e o modelo de review, para qualquer task;
+- `--effort <codexEffort>`, derivado de complexidade/risco na classificacao (nunca um valor fixo) — tipicamente `medium` para implementacao/handoff/ajuste, `high` para review e para task de risco alto de regressao;
+- registre `codexModelSource: user|heuristic|adaptive`, mesma semantica de `agyModelSource`;
 - antes de executar instalacao/restore de pacotes, verifique se a task depende de rede externa ou de cache local; se falhar por rede bloqueada ou pacote ausente, pare como `BLOCKED`.
 - se houver erro de permissao ao escrever fora do working directory permitido, pare como `BLOCKED` e reporte o caminho alvo.
 
