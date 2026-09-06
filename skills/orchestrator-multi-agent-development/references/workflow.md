@@ -482,6 +482,18 @@ node "${CLAUDE_SKILL_DIR}/scripts/orchestration-lifecycle.mjs" watch \
 
 O adapter recebe apenas placeholders allowlisted e roda sem shell. Cada probe bruto redigido e limitado e salvo em `run/executor-results/` antes de atualizar task, heartbeat, lease, history e telemetry. Para AGY, preserve `conversationId`, modelo resolvido, `usage`, duracao, turnos e a diretiva de retry validada. `interrupt`, `retry` e `cancel` exigem adapter ou `--external-confirmed`; nunca simule sucesso da acao externa. Retry confirmado usa exatamente `--conversation <id>` quando houver ID e `--continue` apenas quando nao houver. Veja `lifecycle-telemetry.md` e `assets/executor-control-config.schema.json`.
 
+**Ler de volta o que as CLIs ja publicaram.** AGY grava `conversationId`/modelo resolvido no log JSONL do bridge (`bridge.exit`, `%LOCALAPPDATA%/agy/cc-plugin-logs/` ou `CC_ANTIGRAVITY_LOG_PATH`); Codex grava o thread id no sidecar de job e o **modelo efetivamente resolvido** no rollout de sessao (`~/.codex/sessions/YYYY/MM/DD/*.jsonl`, evento `thread_settings_applied` — a unica fonte que revela quando o modelo pedido e o que de fato rodou divergem, ver Achado 13 da run oficina-saas-20260905-001). Depois de cada dispatch, ou em lote ao fechar a fase, rode:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/import-executor-telemetry.mjs" --dir ".orchestration/<nome>" --task <ID> --root "." \
+  --agy-log "<path do log do bridge>" --agy-pid <pid> \
+  --codex-job "<path do sidecar de job>" --codex-rollout "<path do rollout>"
+```
+
+Grava `conversationId`/`sessionId`, `resolvedModel`, `codexEffort` efetivo, `startedAt`/`completedAt` reais (corrigindo `durationMs` para o tempo real da task, nao do lote de dispatch — Achado 3) e `producedFiles` via `git diff --name-only` entre `commitBefore`/`commitAfter`. `--dry-run` mostra o que seria capturado sem gravar. So faz backfill de campo vazio — mudar `conversationId`/`sessionId`/`executor` que ja tinham valor exige `--new-attempt`, senao `updateTaskStatus` recusa com `ATTEMPT_NOT_DECLARED`.
+
+**Todo redispatch declara `--new-attempt`.** Um retorno AGY via `--conversation <id>` depois de truncamento, ou uma troca de executor por cota (Codex -> `claude-code`), e uma retentativa de verdade mesmo quando o status externo continua `RUNNING` de ponta a ponta. Sem `--new-attempt`, `task --status RUNNING` com `executor`/`sessionId`/`conversationId` diferente do que ja estava gravado e recusado (`ATTEMPT_NOT_DECLARED`) — a run analisada tinha 9 redispatches reais e registrou `attempt: 1` em 33/33 tasks porque nada distinguia "funcionou" de "funcionou na segunda". Use `orchestration-lifecycle.mjs retry` (que ja passa `newAttempt: true` internamente) ou `task --status RUNNING --new-attempt` diretamente.
+
 ### Politica de quota
 
 - `QUOTA_EXHAUSTED` no Antigravity/AGY:

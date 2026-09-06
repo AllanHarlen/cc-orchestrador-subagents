@@ -1466,6 +1466,11 @@ function initialTask(metadata, now) {
     sessionId: null,
     conversationId: null,
     resolvedModel: null,
+    // Effort de Codex efetivamente usado (Achado 13), distinto do `agyEffort`
+    // planejado que a Fase 2 grava em `plan/tasks-classification.md`. Espelha
+    // `resolvedModel` vs `model`: um e a decisao, o outro e o que a CLI de
+    // fato reportou ter usado.
+    codexEffort: null,
     retryDirective: null,
     usage: null,
     durationSeconds: null,
@@ -2191,6 +2196,7 @@ function mergeTaskFields(previous, status, options, now, git) {
   if (options.sessionId !== undefined) task.sessionId = options.sessionId || null;
   if (options.conversationId !== undefined) task.conversationId = options.conversationId || null;
   if (options.resolvedModel !== undefined) task.resolvedModel = options.resolvedModel || null;
+  if (options.codexEffort !== undefined) task.codexEffort = options.codexEffort || null;
   if (options.retryDirective !== undefined) task.retryDirective = options.retryDirective || null;
   if (options.usage !== undefined) task.usage = options.usage ? clone(options.usage) : null;
   if (options.durationSeconds !== undefined) task.durationSeconds = options.durationSeconds ?? null;
@@ -2214,9 +2220,52 @@ function mergeTaskFields(previous, status, options, now, git) {
 
   if (!Array.isArray(task.attemptHistory)) task.attemptHistory = [];
   if (status === "RUNNING") {
+    // Achado 4: um redispatch de verdade — retomada AGY via `--conversation`,
+    // troca de executor por cota — chegava como RUNNING -> RUNNING
+    // (`sameStatus`), que nunca incrementava `attempt` nem abria uma entrada
+    // nova em `attemptHistory`; a run analisada registrou `attempt: 1` em
+    // 33/33 tasks com 9 redispatches reais. Uma atualizacao RUNNING que muda
+    // executor, sessionId ou conversationId em relacao ao que ja estava
+    // gravado so e aceita com `--new-attempt` — sem isso, e um redispatch nao
+    // declarado.
+    if (sameStatus && options.newAttempt !== true) {
+      // So conta como mudanca quando o campo ja tinha um valor gravado e o
+      // novo valor diverge — preencher um campo que ainda estava vazio (o
+      // caso de `import-executor-telemetry.mjs`, que descobre depois do fato
+      // um conversationId/sessionId que o dispatch original nao capturou)
+      // e um backfill legitimo, nao um redispatch.
+      const executorChanged = options.executor !== undefined && previous.executor != null &&
+        options.executor !== previous.executor;
+      const sessionChanged = options.sessionId !== undefined && previous.sessionId != null &&
+        options.sessionId !== previous.sessionId;
+      const conversationChanged = options.conversationId !== undefined && previous.conversationId != null &&
+        options.conversationId !== previous.conversationId;
+      if (executorChanged || sessionChanged || conversationChanged) {
+        throw new OrchestrationStateError(
+          "ATTEMPT_NOT_DECLARED",
+          `Task ${task.id} received a RUNNING update with a different ${
+            executorChanged ? "executor" : sessionChanged ? "sessionId" : "conversationId"
+          } than the current attempt, without --new-attempt`,
+          {
+            taskId: task.id,
+            previousExecutor: previous.executor ?? null,
+            newExecutor: options.executor ?? null,
+            previousSessionId: previous.sessionId ?? null,
+            newSessionId: options.sessionId ?? null,
+            previousConversationId: previous.conversationId ?? null,
+            newConversationId: options.conversationId ?? null,
+          },
+        );
+      }
+    }
     const recoveringSameAttempt = ["STALLED", "UNKNOWN"].includes(previousStatus) &&
       Number(task.attempt ?? 0) > 0 && options.newAttempt !== true;
-    const newAttempt = !sameStatus && !recoveringSameAttempt;
+    // Um redispatch RUNNING -> RUNNING so incrementa quando declarado
+    // explicitamente com --new-attempt (a checagem ATTEMPT_NOT_DECLARED acima
+    // ja barra o caso nao declarado). Sem essa clausula, `!sameStatus` sempre
+    // seria falso aqui e o attempt nunca avancaria mesmo com --new-attempt.
+    const declaredSameStatusAttempt = sameStatus && options.newAttempt === true;
+    const newAttempt = declaredSameStatusAttempt || (!sameStatus && !recoveringSameAttempt);
     if (newAttempt) task.attempt = Number(task.attempt ?? 0) + 1;
     if (newAttempt) {
       if (options.resolvedModel === undefined) task.resolvedModel = null;
@@ -2224,7 +2273,12 @@ function mergeTaskFields(previous, status, options, now, git) {
       if (options.durationSeconds === undefined) task.durationSeconds = null;
       if (options.numTurns === undefined) task.numTurns = null;
     }
-    task.startedAt = sameStatus || recoveringSameAttempt ? task.startedAt ?? now : now;
+    // Achado 3: `--started-at` deixa o orquestrador corrigir o extremo
+    // inicial de `durationMs` para o timestamp real que a CLI (AGY/Codex)
+    // reportou, em vez do momento em que o orquestrador processou um lote de
+    // dispatches — que e o que produziu durationMs identicos (2-3 ms de
+    // diferenca) entre tasks distintas na run analisada.
+    task.startedAt = options.startedAt ?? (newAttempt ? now : task.startedAt ?? now);
     task.completedAt = null;
     task.lastActivityAt = now;
     task.commitBefore = options.commitBefore ?? task.commitBefore ?? git.head ?? null;
@@ -2250,6 +2304,7 @@ function mergeTaskFields(previous, status, options, now, git) {
       sessionId: task.sessionId ?? null,
       conversationId: task.conversationId ?? null,
       resolvedModel: task.resolvedModel ?? null,
+      codexEffort: task.codexEffort ?? null,
       retryDirective: task.retryDirective ?? null,
       usage: task.usage ? clone(task.usage) : null,
       durationSeconds: task.durationSeconds ?? null,
@@ -2260,7 +2315,7 @@ function mergeTaskFields(previous, status, options, now, git) {
     if (attemptIndex >= 0) task.attemptHistory[attemptIndex] = attemptRecord;
     else task.attemptHistory.push(attemptRecord);
   } else if (status === "DONE") {
-    task.completedAt = now;
+    task.completedAt = options.completedAt ?? now;
     task.lastActivityAt = now;
     task.commitAfter = options.commitAfter ?? git.head ?? task.commitAfter ?? null;
   } else if (status === "STALLED") {
@@ -2272,7 +2327,7 @@ function mergeTaskFields(previous, status, options, now, git) {
   } else if (status === "UNKNOWN") {
     task.unknownAt = now;
   } else if (["FAILED", "BLOCKED", "CANCELLED"].includes(status)) {
-    task.completedAt = status === "BLOCKED" ? null : now;
+    task.completedAt = status === "BLOCKED" ? null : (options.completedAt ?? now);
   }
 
   if (["DONE", "FAILED", "BLOCKED", "CANCELLED"].includes(status) && Number(task.attempt ?? 0) > 0) {
@@ -2292,6 +2347,7 @@ function mergeTaskFields(previous, status, options, now, git) {
       executorSource: task.executorSource ?? previousAttempt.executorSource ?? null,
       model: task.model ?? previousAttempt.model ?? null,
       resolvedModel: task.resolvedModel ?? previousAttempt.resolvedModel ?? null,
+      codexEffort: task.codexEffort ?? previousAttempt.codexEffort ?? null,
       status,
       completedAt,
       durationMs: Number.isFinite(startedMs) && Number.isFinite(completedMs)
@@ -2510,17 +2566,13 @@ export function sweepStalledTasks(artifactDir, options = {}) {
       }
     }
 
+    // Achado 2: o sweeper so persistia `lifecycle.lastSweepAt` quando algo
+    // mudava — o early-return abaixo (removido) deixava o campo `null` para
+    // sempre numa run onde nenhuma task chegou a estagnar, mascarando o fato
+    // de que o sweep nunca rodou de nenhuma stall real tambem nao ter
+    // acontecido. `lastSweepAt` agora e evidencia de que a Fase 6 de fato
+    // varreu tasks — commitEvent roda sempre, mudando task ou nao.
     const changed = stalled.length > 0 || graceExpired.length > 0;
-    if (!changed) {
-      return {
-        changed: false,
-        state,
-        stalled,
-        graceExpired,
-        summary: runSummary(state),
-      };
-    }
-
     const draft = { ...state, tasks };
     const runStatus = deriveRunStatus(tasks, state.status);
     const currentWave = computeCurrentWave(draft);
@@ -2538,7 +2590,7 @@ export function sweepStalledTasks(artifactDir, options = {}) {
       options,
     );
     return {
-      changed: true,
+      changed,
       state: committed.state,
       event: committed.event,
       stalled,
