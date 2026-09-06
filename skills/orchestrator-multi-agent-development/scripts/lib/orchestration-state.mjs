@@ -153,6 +153,14 @@ const CATEGORY_VALUES = [
 const TASK_ID_SOURCE = "(?:[A-Z]{1,8}-\\d{1,4}(?!\\.\\d)(?:-[A-Z0-9]+)?|T\\d+(?:-[A-Z0-9]+)?)";
 const TASK_ID_RE = new RegExp(`\\b${TASK_ID_SOURCE}\\b`, "gi");
 const TASK_ID_EXACT_RE = new RegExp(`^${TASK_ID_SOURCE}$`, "i");
+// Achado 11: `CT-08` (identificador de contrato, secao "Contratos" da Fase 4
+// — `contracts/CT-01.md` .. `CT-NN.md`) casa com a mesma gramatica de task ID
+// (`[A-Z]{1,8}-\d{1,4}`) e acabava virando entrada fantasma no namespace de
+// `tasks`, com `executor: "agy"` e status `CANCELLED`, reportada em
+// `sync.missingFromSource` a cada sync. Prefixos aqui nunca sao lidos como
+// task ID, mesmo quando aparecem em `tasks-classification.md`/`waves.md`
+// (ex.: numa tabela de rastreamento task -> contrato).
+const RESERVED_TASK_ID_PREFIXES = new Set(["CT"]);
 const PHASE_NAMES = Object.freeze({
   0: "preflight",
   1: "specification-ingestion",
@@ -1047,7 +1055,9 @@ function nextRunId(projectRoot, slug, now = new Date()) {
 }
 
 function uniqueTaskIds(text) {
-  return [...new Set((text.match(TASK_ID_RE) ?? []).map((id) => id.toUpperCase()))];
+  const ids = (text.match(TASK_ID_RE) ?? []).map((id) => id.toUpperCase());
+  const filtered = ids.filter((id) => !RESERVED_TASK_ID_PREFIXES.has(id.split("-")[0]));
+  return [...new Set(filtered)];
 }
 
 function extractTaskBlocks(content) {
@@ -1444,7 +1454,13 @@ export function parseTaskArtifacts(artifactDir) {
       if (!waveByTask.has(taskId)) waveByTask.set(taskId, wave.id);
     }
   }
-  for (const task of Object.values(tasks)) task.wave = waveByTask.get(task.id) ?? null;
+  // Achado 9: uma task descoberta depois que as ondas ja foram montadas (gap
+  // achado na Fase 7, endpoint faltando etc.) ficava com `wave: null` — igual
+  // a uma task legitimamente sem onda por falha de classificacao, quando na
+  // verdade e um caso bem distinto: ela existe, so nao foi prevista no plano
+  // original. `"adhoc"` torna essa origem visivel em vez de indistinguivel
+  // de uma lacuna de dados.
+  for (const task of Object.values(tasks)) task.wave = waveByTask.get(task.id) ?? "adhoc";
 
   return {
     tasks,

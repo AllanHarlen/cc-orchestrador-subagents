@@ -16,6 +16,7 @@ import {
   initRun,
   loadRun,
   sweepStalledTasks,
+  syncRunFromArtifacts,
   updateTaskStatus,
 } from "../skills/orchestrator-multi-agent-development/scripts/lib/orchestration-state.mjs";
 
@@ -183,6 +184,52 @@ test("durationMs is computed from --started-at/--completed-at, not from batch-pr
   assert.equal(attempt.completedAt, "2026-01-01T10:02:30.000Z");
   // 2m30s reais, nao os ~9 min entre os dois "now" de processamento do orquestrador.
   assert.equal(attempt.durationMs, 150_000);
+});
+
+/* -------------------------------------------------------------------------- */
+/* Achado 11 — CT-08 (id de contrato) nunca vira task fantasma                 */
+/* -------------------------------------------------------------------------- */
+
+test("a task discovered mid-run and not listed in any wave gets wave: \"adhoc\", not null", () => {
+  const { root, artifactDir } = fixture("ct-exclusion-run-2");
+  writeFileSync(
+    join(artifactDir, "tasks-classification.md"),
+    [
+      "# Tasks",
+      "",
+      "## BE-01 - Endpoint",
+      "- category: BACKEND_ONLY",
+      "",
+      "## BE-11 - Endpoint de login (gap descoberto durante a integracao)",
+      "- category: BACKEND_ONLY",
+    ].join("\n"),
+    "utf8",
+  );
+  // BE-11 nao aparece em nenhuma onda — exatamente o caso de uma task ad-hoc.
+  const synced = syncRunFromArtifacts(artifactDir, { projectRoot: root });
+  assert.equal(synced.state.tasks["BE-01"].wave, 1);
+  assert.equal(synced.state.tasks["BE-11"].wave, "adhoc");
+});
+
+test("a contract id (CT-NN) referenced in tasks-classification.md never becomes a phantom task", () => {
+  const { root, artifactDir } = fixture("ct-exclusion-run");
+  writeFileSync(
+    join(artifactDir, "tasks-classification.md"),
+    [
+      "# Tasks",
+      "",
+      "## BE-01 - Endpoint",
+      "- category: BACKEND_ONLY",
+      "- contractIds: CT-08",
+      "",
+      "## CT-08 - Contrato de pedidos",
+      "- descricao: schema do endpoint de pedidos",
+    ].join("\n"),
+    "utf8",
+  );
+  const synced = syncRunFromArtifacts(artifactDir, { projectRoot: root });
+  assert.deepEqual(Object.keys(synced.state.tasks), ["BE-01"]);
+  assert.equal(synced.state.tasks["CT-08"], undefined);
 });
 
 test("codexEffort is captured per attempt, distinct from the planned agyEffort/model field", () => {

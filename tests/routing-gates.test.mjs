@@ -317,6 +317,20 @@ test("an invalid codexEffort value is rejected", () => {
   assert.match(result.output, /codexEffort invalido \(ultra\)/);
 });
 
+test("Achado 10: rejection messages carry a worked example, not just the rule name", () => {
+  const { artifactDir } = fixture({
+    "tasks-classification.md": [
+      "# Classificacao", "", "## FE-05 - Vitrine", "- categoria: FRONTEND_ONLY",
+      "- executor: agy",
+    ].join("\n"),
+    "waves.md": ["# Waves", "", "## Wave 1", "- FE-05"].join("\n"),
+  });
+  const result = runValidator(artifactDir);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /nao registra executorSource.*Exemplo:.*executorSource: `project-config`/);
+  assert.match(result.output, /nao registra agyModel\/--model.*Exemplo:.*agyModel: `flash-high`/);
+});
+
 test("legacy runs with versioned AGY slugs remain resumable without migration", () => {
   const root = fixture({
     "tasks-classification.md": [

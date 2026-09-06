@@ -172,6 +172,10 @@ Para cada task extraida do PRD/spec, registre em `.orchestration/<nome>/plan/tas
 - para AGY, `agyModel`, `agyModelSource` e, quando adaptativo, `agyModelEvidence`;
 - para Codex, `codexModel`, `codexModelSource` e `codexEffort` — ver "Vocabulario de modelo do Codex" abaixo. Assim como no AGY, `codexModel` nao e escolha livre: e um dos tres papeis fixos (`gpt-5.6-sol` para review, `gpt-5.6-terra` para implementacao, `gpt-5.6-luna` para correcao), e `validate-routing.mjs` reprova task de implementacao usando o modelo de review ou vice-versa.
 
+**Cobertura de autenticacao.** Para cada area/rota declarada como autenticada na especificacao, confirme que existe uma task cobrindo o endpoint de autenticacao correspondente (`POST /api/auth/login` ou equivalente) — nao assuma que ele ja existe. Numa run real, uma aplicacao cuja area administrativa inteira era autenticada nao tinha task nenhuma para o endpoint de login; so foi descoberta por acaso, ao checar se o endpoint existia antes de despachar a tela de login, ja na Fase 5. Trate a lacuna como um gap bloqueante desta fase, nao como algo a descobrir mais adiante.
+
+**Titulo de task nunca cita numero de fase.** Uma task ad-hoc criada durante a execucao (gap descoberto, correcao da Fase 9.5) registra o motivo em prosa (`routingReason`), nunca "gap descoberto na Fase N" — a numeracao de fase da maquina de estados e do texto do artefato podem divergir (a fase que estava de fato `RUNNING` no `state.json` no momento da criacao da task raramente e a mesma que a prosa do artefato menciona, porque o registro em texto costuma ficar atrasado em relacao ao avanco real da state machine). Se precisar referenciar quando a task foi criada, cite o timestamp ou o evento (ex.: "gap descoberto ao validar contrato antes do dispatch da tela de login"), nunca "Fase N".
+
 Depois de escrever `plan/tasks-classification.md`, rode o gate de cobertura RF/CA (quando houver `requirements-index` no upstream) **antes** de montar as ondas — pegar um `RF` sem task aqui e mais barato do que descobrir na Fase 7:
 
 ```bash

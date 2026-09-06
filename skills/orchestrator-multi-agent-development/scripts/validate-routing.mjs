@@ -55,6 +55,10 @@ const CATEGORIES = [...TASK_CATEGORIES];
 // toda linha de roteamento seria lido como task e poderia virar o ID do bloco numa tabela.
 const TASK_ID_SOURCE = "(?:[A-Z]{1,8}-\\d{1,4}(?!\\.\\d)(?:-[A-Z0-9]+)?|T\\d+(?:-[A-Z0-9]+)?)";
 const TASK_RE = new RegExp(`\\b${TASK_ID_SOURCE}\\b`, "gi");
+// Achado 11: mesma exclusao de `orchestration-state.mjs` — `CT-08` (id de
+// contrato) casa com a gramatica de task ID e nao pode virar bloco fantasma
+// aqui tampouco. Os dois parsers precisam concordar sobre o que e task.
+const RESERVED_TASK_ID_PREFIXES = new Set(["CT"]);
 const FRONTEND_AGENT_RE = /\b(cc-antigravity-plugin:antigravity-coder|antigravity|agy)\b/i;
 // antigravity-agent e o subagente somente-leitura do plugin AGY (analise/review). Ele nunca
 // pode receber task de implementacao; quem cria e edita arquivo e o antigravity-coder.
@@ -251,7 +255,9 @@ function readRequired(file) {
 }
 
 function uniqueTaskIds(text) {
-  return [...new Set([...text.matchAll(TASK_RE)].map((match) => match[0].toUpperCase()))];
+  const ids = [...text.matchAll(TASK_RE)].map((match) => match[0].toUpperCase());
+  const filtered = ids.filter((id) => !RESERVED_TASK_ID_PREFIXES.has(id.split("-")[0]));
+  return [...new Set(filtered)];
 }
 
 function findCategory(text) {
@@ -459,7 +465,7 @@ function validateBlock(source, block, categoryByTask) {
     if (declaresExecutor) {
       const executorSource = extractExecutorSource(block.text);
       if (executorSource === null) {
-        errors.push(`${source}: ${id} declara executor, mas nao registra executorSource: ${EXECUTOR_SOURCE_PROJECT_CONFIG}.`);
+        errors.push(`${source}: ${id} declara executor, mas nao registra executorSource: ${EXECUTOR_SOURCE_PROJECT_CONFIG}. Exemplo: "- executor: \`agy\`" + "- executorSource: \`${EXECUTOR_SOURCE_PROJECT_CONFIG}\`".`);
       } else if (executorSource !== EXECUTOR_SOURCE_PROJECT_CONFIG) {
         errors.push(`${source}: ${id} registra executorSource invalido (${executorSource}). Valor aceito: ${EXECUTOR_SOURCE_PROJECT_CONFIG}.`);
       }
@@ -522,13 +528,13 @@ function validateBlock(source, block, categoryByTask) {
 
     if (codex) {
       if (!codexModel) {
-        errors.push(`${source}: ${id} aponta para Codex, mas nao registra codexModel/--codex-model.`);
+        errors.push(`${source}: ${id} aponta para Codex, mas nao registra codexModel/--codex-model. Exemplo: "- codexModel: \`gpt-5.6-terra\`" + "- codexModelSource: \`heuristic\`".`);
       } else if (!validModelToken(codexModel)) {
         errors.push(`${source}: ${id} usa codexModel invalido (${codexModel}). Use um dos slugs do vocabulario Codex (gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna).`);
       }
 
       if (!hasCodexModelSource(block.text)) {
-        errors.push(`${source}: ${id} aponta para Codex, mas nao registra codexModelSource=user|heuristic|adaptive.`);
+        errors.push(`${source}: ${id} aponta para Codex, mas nao registra codexModelSource=user|heuristic|adaptive. Exemplo: "- codexModel: \`gpt-5.6-terra\`" + "- codexModelSource: \`heuristic\`".`);
       }
 
       if (codexEffort && !CODEX_EFFORT_LEVELS.includes(codexEffort)) {
@@ -568,7 +574,7 @@ function validateBlock(source, block, categoryByTask) {
     }
 
     if (frontend && !agyModel) {
-      errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModel/--model (alias legado: --agy-model).`);
+      errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModel/--model (alias legado: --agy-model). Exemplo: "- agyModel: \`flash-high\`" + "- agyModelSource: \`heuristic\`".`);
     }
 
     if (frontend && agyModel && !validModelToken(agyModel)) {
@@ -607,7 +613,7 @@ function validateBlock(source, block, categoryByTask) {
     }
 
     if (frontend && !hasAgyModelSource(block.text)) {
-      errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModelSource=user|heuristic|adaptive.`);
+      errors.push(`${source}: ${id} aponta para AGY, mas nao registra agyModelSource=user|heuristic|adaptive. Exemplo: "- agyModel: \`flash-high\`" + "- agyModelSource: \`heuristic\`".`);
     }
 
     if (frontend && AGY_ADAPTIVE_SOURCE_RE.test(block.text) && !AGY_ADAPTIVE_EVIDENCE_RE.test(block.text)) {
